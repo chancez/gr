@@ -1,0 +1,70 @@
+[settings]
+lockfile = true
+
+[tools]
+go = "prefix:1.27"
+
+[env]
+GOBIN = "{{config_root}}/bin/tools"
+_.path = ["{{config_root}}/bin/tools"]
+
+# Task scripts are POSIX sh: mise runs them with `sh`, which is dash on Debian and Ubuntu.
+
+[tasks.build]
+description = "Build the gr binary"
+run = "go build -o bin/gr ./cmd/gr"
+
+[tasks.install]
+description = "Build and install gr into PREFIX (default ~/.local)"
+depends = ["build"]
+# Rename from a temp file in the same directory instead of cp. cp writes into the existing inode, which
+# on macOS can get later execs of a binary with a running process SIGKILLed. The rename is also atomic,
+# so a TUI or agent exec during install sees the old binary or the new one, never a partial write.
+run = """
+set -eu
+prefix="${PREFIX:-$HOME/.local}"
+bindir="$prefix/bin"
+mkdir -p "$bindir"
+tmp="$(mktemp "$bindir/.gr.XXXXXX")"
+trap 'rm -f "$tmp"' EXIT
+cp bin/gr "$tmp"
+chmod 755 "$tmp"
+mv -f "$tmp" "$bindir/gr"
+trap - EXIT
+"$bindir/gr" --help >/dev/null
+echo "installed $bindir/gr"
+"""
+
+[tasks.uninstall]
+description = "Remove gr from PREFIX (default ~/.local)"
+# Removes the binary only. The database is left alone.
+run = """
+set -eu
+target="${PREFIX:-$HOME/.local}/bin/gr"
+if [ -e "$target" ]; then
+  rm -f "$target"
+  echo "removed $target"
+else
+  echo "$target is not installed"
+fi
+"""
+
+[tasks.fmt]
+description = "Format Go code"
+run = "go fmt ./..."
+
+[tasks.vet]
+description = "Vet Go code"
+run = "go vet ./..."
+
+[tasks.test]
+description = "Run the tests"
+run = "go test ./..."
+
+[tasks.test-race]
+description = "Run the tests with the race detector"
+run = "go test -race ./..."
+
+[tasks.check]
+description = "Format, vet, and test"
+depends = ["fmt", "vet", "test"]
