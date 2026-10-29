@@ -342,3 +342,12 @@ func (r *Repo) MergeTree(ctx context.Context, base, ours, theirs string) (tree s
 	}
 	return strings.TrimSpace(tree), clean, nil
 }
+
+// Config returns a git config value, or "" if it is unset.
+func (r *Repo) Config(ctx context.Context, key string) (string, error) {
+	out, err := r.line(ctx, "config", "--get", key)
+	if err != nil && exitCode(err) == 1 {
+		return "", nil
+	}
+	return out, err
+}
