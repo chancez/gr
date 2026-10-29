@@ -1,6 +1,7 @@
 package store
 
 import (
+	"cmp"
 	"context"
 	"encoding/json/v2"
 	"fmt"
@@ -120,14 +121,20 @@ type ThreadFilter struct {
 	States []ThreadState
 	// Outdated, if set, selects threads by their outdated flag.
 	Outdated *bool
-	// Viewer sees their own draft threads. Other drafts are never listed.
+	// Viewer sees their own draft threads. Other drafts are not listed unless AllDrafts is set.
 	Viewer Author
+	// AllDrafts lists every author's drafts, for maintenance such as re-anchoring.
+	AllDrafts bool
 }
 
 // ListThreads lists threads ordered by change and seq.
 func (q queries) ListThreads(ctx context.Context, f ThreadFilter) ([]Thread, error) {
-	where := []string{`(r.state = 'submitted' OR (r.author_name = ? AND r.author_email = ?))`}
-	args := []any{f.Viewer.Name, f.Viewer.Email}
+	var where []string
+	var args []any
+	if !f.AllDrafts {
+		where = append(where, `(r.state = 'submitted' OR (r.author_name = ? AND r.author_email = ?))`)
+		args = append(args, f.Viewer.Name, f.Viewer.Email)
+	}
 	if f.ChangeID != "" {
 		where = append(where, `t.change_id = ?`)
 		args = append(args, f.ChangeID)
@@ -148,7 +155,7 @@ func (q queries) ListThreads(ctx context.Context, f ThreadFilter) ([]Thread, err
 	}
 	rows, err := q.q.QueryContext(ctx,
 		`SELECT `+prefixed("t", threadColumns)+` FROM threads t JOIN reviews r ON r.id = t.review_id
-		WHERE `+strings.Join(where, " AND ")+` ORDER BY t.change_id, t.seq`, args...)
+		WHERE `+cmp.Or(strings.Join(where, " AND "), "1")+` ORDER BY t.change_id, t.seq`, args...)
 	if err != nil {
 		return nil, err
 	}

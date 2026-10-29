@@ -325,3 +325,20 @@ func (r *Repo) CommitDiff(ctx context.Context, c Commit) ([]FileDiff, error) {
 	}
 	return r.Diff(ctx, parent, c.SHA)
 }
+
+// MergeTree merges theirs into ours with an explicit merge base, without touching the index or the
+// worktree, and returns the resulting tree. clean is false if there were conflicts, in which case
+// the tree contains conflict markers.
+func (r *Repo) MergeTree(ctx context.Context, base, ours, theirs string) (tree string, clean bool, err error) {
+	out, err := r.run(ctx, "merge-tree", "--write-tree", "--no-messages", "--merge-base="+base, ours, theirs)
+	clean = err == nil
+	if err != nil && exitCode(err) != 1 {
+		return "", false, err
+	}
+	// The first line is the tree. Conflicted file info follows it.
+	tree, _, _ = strings.Cut(string(out), "\n")
+	if err != nil && tree == "" {
+		return "", false, err
+	}
+	return strings.TrimSpace(tree), clean, nil
+}
