@@ -49,26 +49,28 @@ In priority order. Foundations come first because every feature built before the
 
 16. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
 17. Remappable keys, from the action registry.
-18. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
-    override individual elements' colors. gr draws its own diff colors, so git's `color.diff.*` do
-    not apply.
+18. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`), and
+    override roles, such as danger, or individual elements. gr draws its own diff colors, so git's
+    `color.diff.*` do not apply.
 19. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
 20. Configurable scrolloff and default sidebar width.
 21. Configurable default for auto-advance after marking reviewed, which `+` toggles per session.
 
 ## Features
 
-22. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
+22. Keep the header of the file at the top of the diff pinned, like GitHub's sticky file headers, so
+    the file being read is always named while scrolling through it.
+23. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
     skipping past them is obvious.
-23. Right-click menus with the actions for what was clicked, from the action registry.
-24. Comment on lines outside diff hunks, on context opened from a fold.
-25. Test mouse handling in a real terminal.
-26. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
+24. Right-click menus with the actions for what was clicked, from the action registry.
+25. Comment on lines outside diff hunks, on context opened from a fold.
+26. Test mouse handling in a real terminal.
+27. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
     text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 
-27. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+28. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
