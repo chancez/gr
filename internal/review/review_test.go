@@ -498,3 +498,72 @@ func TestParseTargetUsesOpenChangeBase(t *testing.T) {
 		t.Errorf("ParseTarget mismatch (-want +got):\n%s", diff)
 	}
 }
+
+func TestMarks(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.go", "a\n", "b.go", "b\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.go", "A\n", "b.go", "B\n")
+	commit := e.repo.Commit("change both")
+	h := e.service(human)
+	ctx := t.Context()
+	change, rev := e.ensure(h, "")
+	c, err := h.Git().ReadCommit(ctx, commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := h.CommitFiles(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, f := range files[:2] {
+		if err := h.SetReviewed(ctx, change, review.CommitFileMark(commit, f), true); err != nil {
+			t.Fatal(err)
+		}
+	}
+	marks, err := h.Marks(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marks.CommitReviewed(commit, files) {
+		t.Error("commit reviewed with one file left")
+	}
+	if err := h.SetReviewed(ctx, change, review.CommitFileMark(commit, files[2]), true); err != nil {
+		t.Fatal(err)
+	}
+	if marks, _ = h.Marks(ctx, change); !marks.CommitReviewed(commit, files) {
+		t.Error("commit not reviewed with every file marked")
+	}
+
+	// Unmarking the commit clears its files too.
+	if err := h.SetCommitReviewed(ctx, change, commit, files, false); err != nil {
+		t.Fatal(err)
+	}
+	if marks, _ = h.Marks(ctx, change); len(marks) != 0 {
+		t.Errorf("marks after unmarking the commit = %v", marks)
+	}
+
+	// A whole-diff mark lapses when the file changes.
+	diffFiles, err := h.RevisionFiles(ctx, rev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetReviewed(ctx, change, review.DiffFileMark(diffFiles[0]), true); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Write("a.go", "AA\n")
+	e.repo.Commit("again")
+	_, rev2, err := h.Sync(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	newFiles, err := h.RevisionFiles(ctx, rev2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if marks, _ = h.Marks(ctx, change); marks[review.DiffFileMark(newFiles[0])] {
+		t.Error("whole-diff mark survived a content change")
+	}
+}

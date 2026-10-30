@@ -42,5 +42,9 @@ is anchored and commented on like any other file.
 
 **Outdated**: a thread whose anchor could not be re-anchored onto the latest revision.
 
+**Reviewed mark**: an author's note that they reviewed a commit, a file in a commit, or a file of the
+change's whole diff. A commit counts as reviewed when it or all of its files are marked. A mark on
+the whole diff is tied to the file's content and lapses when it changes.
+
 **Suggestion**: a fenced ```` ```suggestion ```` block in a comment, holding replacement text for
 the anchored lines. Same syntax as GitHub.

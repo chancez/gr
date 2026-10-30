@@ -103,4 +103,20 @@ CREATE TABLE comments (
 
 CREATE INDEX comments_thread ON comments (thread_id);
 `,
+	`
+-- Files and commits an author has marked reviewed. A mark on a commit's file has commit_sha and
+-- path. A mark on a whole commit has commit_sha only. A mark on a file of the change's whole diff
+-- has path and blob_sha, so it lapses when the file's content changes.
+CREATE TABLE reviewed (
+	id           TEXT PRIMARY KEY,
+	change_id    TEXT NOT NULL REFERENCES changes(id) ON DELETE CASCADE,
+	author_name  TEXT NOT NULL,
+	author_email TEXT NOT NULL,
+	commit_sha   TEXT NOT NULL DEFAULT '',
+	path         TEXT NOT NULL DEFAULT '',
+	blob_sha     TEXT NOT NULL DEFAULT '',
+	created_at   TEXT NOT NULL,
+	UNIQUE (change_id, author_name, author_email, commit_sha, path, blob_sha)
+);
+`,
 }

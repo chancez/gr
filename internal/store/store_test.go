@@ -396,3 +396,32 @@ func TestReopenDoesNotWrite(t *testing.T) {
 		t.Error("a write from another connection did not move data_version")
 	}
 }
+
+func TestMarks(t *testing.T) {
+	s := open(t)
+	ctx := t.Context()
+	f := setup(t, s)
+	marks := []store.Mark{{Commit: "c1"}, {Commit: "c1", Path: "a.go"}, {Path: "a.go", Blob: "b1"}}
+	for _, m := range marks {
+		if err := s.AddMark(ctx, f.change.ID, alice, m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Marking twice is harmless, and other authors have their own marks.
+	if err := s.AddMark(ctx, f.change.ID, alice, marks[0]); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddMark(ctx, f.change.ID, agent, store.Mark{Commit: "c2"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.DeleteMark(ctx, f.change.ID, alice, marks[1]); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ListMarks(ctx, f.change.ID, alice)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]store.Mark{marks[0], marks[2]}, got); diff != "" {
+		t.Errorf("ListMarks mismatch (-want +got):\n%s", diff)
+	}
+}

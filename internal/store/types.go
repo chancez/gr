@@ -170,3 +170,11 @@ type Comment struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+// Mark identifies something an author marked reviewed: a commit (Commit only), a file in a commit
+// (Commit and Path), or a file's content in the change's whole diff (Path and Blob).
+type Mark struct {
+	Commit string
+	Path   string
+	Blob   string
+}
