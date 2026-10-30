@@ -100,6 +100,8 @@ type model struct {
 	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
 	returnView int
+	// segments holds where each overview row's items start, filled as rows render.
+	segments map[int][]int
 	// threadFolds overrides whether a thread is collapsed, by thread id. Resolved threads are
 	// collapsed by default.
 	threadFolds map[string]bool
@@ -339,6 +341,7 @@ func (m *model) applyData(d *changeData) {
 		}
 	}
 	prevY := m.main.cursorY()
+	prevSeg := m.main.itemSegment()
 	m.data = d
 	m.views = buildViews(d)
 	m.current = 0
@@ -352,7 +355,7 @@ func (m *model) applyData(d *changeData) {
 		files := m.views[m.current].files
 		for i, r := range m.main.rows {
 			if r.key(files) == prevRow {
-				m.main.placeAt(i, prevY)
+				m.main.placeAt(i, prevSeg, prevY)
 				break
 			}
 		}
@@ -406,8 +409,10 @@ func (m *model) rebuildMain() {
 		return
 	}
 	v := m.views[m.current]
-	m.main.lineMode = v.kind == viewOverview
-	m.main.lineMarker = m.r.hunkMarker(rowState{activeHunk: true})
+	m.main.reader = v.kind == viewOverview
+	m.main.marker = m.r.hunkMarker(rowState{activeHunk: true})
+	m.segments = map[int][]int{}
+	m.main.segments = func(i int) []int { return m.segments[i] }
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
@@ -433,11 +438,15 @@ func (m *model) rebuildMain() {
 func (m *model) renderMainRow(i int, state rowState) []string {
 	state.dim = m.focus != focusMain
 	width := m.main.width
-	if m.main.lineMode {
-		// One column is the line cursor's margin.
+	if m.main.reader {
+		// One column is the margin that marks the selected item.
 		width--
 	}
-	return m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], width, state)
+	lines := m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], width, state)
+	if m.r.segments != nil {
+		m.segments[i] = m.r.segments
+	}
+	return lines
 }
 
 func (m *model) setView(i int) {
@@ -660,31 +669,31 @@ func (m *model) sidebarComment() (tea.Model, tea.Cmd) {
 func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := m.keys
 	p := &m.main
-	if p.lineMode {
+	if p.reader {
 		switch {
 		case key.Matches(msg, k.Up):
-			p.moveLine(-1)
+			p.readerPrev()
 			return m, nil
 		case key.Matches(msg, k.Down):
-			p.moveLine(1)
+			p.readerNext()
 			return m, nil
 		case key.Matches(msg, k.HalfPageDown):
-			p.scrollLines(p.height / 2)
+			p.readerScroll(p.height / 2)
 			return m, nil
 		case key.Matches(msg, k.HalfPageUp):
-			p.scrollLines(-p.height / 2)
+			p.readerScroll(-p.height / 2)
 			return m, nil
 		case key.Matches(msg, k.PageDown):
-			p.scrollLines(p.height)
+			p.readerScroll(p.height)
 			return m, nil
 		case key.Matches(msg, k.PageUp):
-			p.scrollLines(-p.height)
+			p.readerScroll(-p.height)
 			return m, nil
 		case key.Matches(msg, k.Top):
-			p.moveLine(-p.total)
+			p.readerSelect(0)
 			return m, nil
 		case key.Matches(msg, k.Bottom):
-			p.moveLine(p.total)
+			p.readerSelect(len(p.items) - 1)
 			return m, nil
 		}
 	}
@@ -1079,6 +1088,10 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 		c.title = fmt.Sprintf("Reply to #%d", t.Seq)
 	case composeEdit:
 		own, ok := m.lastOwnComment(t)
+		// In the overview, edit the selected comment when it is yours.
+		if seg := m.main.itemSegment(); m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
+			own, ok = t.Comments[seg], true
+		}
 		if !ok {
 			m.setError(errors.New("no comment of yours in this thread"))
 			return m, nil
@@ -1252,8 +1265,8 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		l.top = max(l.top+delta, 0)
 		return m, nil
 	}
-	if m.main.lineMode {
-		m.main.scrollLines(delta)
+	if m.main.reader {
+		m.main.readerScroll(delta)
 	} else {
 		m.main.scroll(delta)
 	}
@@ -1293,7 +1306,9 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.main.cursor = i
-	m.main.line = m.main.offset + msg.Y - 1
+	if m.main.reader {
+		m.main.selectAt(m.main.offset + msg.Y - 1)
+	}
 	if m.split && m.main.rows[i].kind == rowLine {
 		if msg.X-nw-1 < mw/2 {
 			m.main.side = anchor.SideOld

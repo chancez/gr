@@ -918,54 +918,6 @@ func TestResolvingKeepsTheCursorStill(t *testing.T) {
 	}
 }
 
-func TestOverviewScrollsByLine(t *testing.T) {
-	e := newTUIEnv(t)
-	ctx := t.Context()
-	for _, body := range []string{"first\n\nmore\n\nlines", "second", "third"} {
-		if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body}); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
-		t.Fatal(err)
-	}
-	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
-	e.drain(e.m.loadCmd())
-	e.openNav("Overview")
-
-	p := &e.m.main
-	// j moves the line cursor without scrolling until it nears the bottom edge.
-	for range p.height - 1 - p.margin() {
-		e.press("j")
-	}
-	if p.offset != 0 {
-		t.Fatalf("view scrolled before the cursor reached the scrolloff margin: offset %d", p.offset)
-	}
-	for i := range 3 {
-		before := p.offset
-		e.press("j")
-		if p.offset != before+1 {
-			t.Fatalf("j %d at the margin moved the view from %d to %d, want one line", i, before, p.offset)
-		}
-	}
-	// Scrolling far enough selects later threads, in order.
-	var seen []int
-	for range 40 {
-		e.press("j")
-		if r := p.rows[p.cursor]; r.kind == rowThread && (len(seen) == 0 || seen[len(seen)-1] != r.thread.Seq) {
-			seen = append(seen, r.thread.Seq)
-		}
-	}
-	if len(seen) < 2 || seen[0] >= seen[len(seen)-1] {
-		t.Errorf("threads selected while scrolling = %v", seen)
-	}
-	// t still jumps between threads.
-	e.press("g", "t")
-	if r := p.rows[p.cursor]; r.kind != rowThread {
-		t.Errorf("t selected %+v", r)
-	}
-}
-
 func TestContextualHelp(t *testing.T) {
 	e := newTUIEnv(t)
 	e.m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
@@ -1020,57 +972,6 @@ func TestOverviewEnterExpandsResolved(t *testing.T) {
 	e.press("enter")
 	if e.m.main.rows[e.m.main.cursor].collapsed {
 		t.Error("enter did not expand the resolved thread in the overview")
-	}
-}
-
-func TestOverviewLineCursorSelectsThreads(t *testing.T) {
-	e := newTUIEnv(t)
-	ctx := t.Context()
-	var ids []string
-	for _, body := range []string{"first", "second", "third"} {
-		v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body})
-		if err != nil {
-			t.Fatal(err)
-		}
-		ids = append(ids, v.ID)
-	}
-	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
-		t.Fatal(err)
-	}
-	// Tall enough that nothing scrolls.
-	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
-	e.drain(e.m.loadCmd())
-	e.openNav("Overview")
-
-	p := &e.m.main
-	var selected []string
-	for range 40 {
-		e.press("j")
-		if p.offset != 0 {
-			t.Fatalf("view scrolled on a page that fits")
-		}
-		if r := p.rows[p.cursor]; r.kind == rowThread && (len(selected) == 0 || selected[len(selected)-1] != r.thread.ID) {
-			selected = append(selected, r.thread.ID)
-		}
-	}
-	if strings.Join(selected, ",") != strings.Join(ids, ",") {
-		t.Errorf("j selected %v, want each thread in order %v", selected, ids)
-	}
-	// The marker sits on the line cursor's line.
-	lines := strings.Split(e.m.render(), "\n")
-	marker := e.m.r.hunkMarker(rowState{activeHunk: true})
-	n := 0
-	for _, l := range lines {
-		if _, main, ok := strings.Cut(l, "|"); ok && strings.Contains(main, marker) {
-			n++
-		}
-	}
-	if n != 1 {
-		t.Errorf("line cursor marker on %d lines, want 1", n)
-	}
-	e.press("k")
-	if p.line != p.total-2 {
-		t.Errorf("line cursor = %d after reaching the end and a k, want %d", p.line, p.total-2)
 	}
 }
 
@@ -1133,5 +1034,119 @@ func TestCommentFromTheSidebar(t *testing.T) {
 	e.press("C")
 	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, review.CommitMsgPath) {
 		t.Errorf("C in the file list: mode %d, title %q, want the selected file", e.m.mode, e.m.compose.title)
+	}
+}
+
+// readerEnv has an overview with one thread of three comments, one with a long body, and a second
+// thread.
+func readerEnv(t *testing.T, height int) (*tuiEnv, review.ThreadView) {
+	t.Helper()
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	first, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "first comment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "second thread"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	long := strings.Repeat("long reply line\n\n", 30)
+	for _, body := range []string{"short reply", long} {
+		if _, err := e.svc.Reply(ctx, e.chg, first.ID, body, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: height})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	return e, first
+}
+
+func TestReaderStepsByComment(t *testing.T) {
+	e, first := readerEnv(t, 30)
+	p := &e.m.main
+	// The first thread's three comments are three items, then the second thread.
+	var rows []int
+	for _, it := range p.items {
+		rows = append(rows, it.row)
+	}
+	if len(p.items) != 4 || rows[0] != rows[1] || rows[1] != rows[2] || rows[2] == rows[3] {
+		t.Fatalf("items = %+v", p.items)
+	}
+
+	e.press("g")
+	sel := func() item { return p.items[p.item] }
+	e.press("j")
+	if p.item != 1 || p.rows[p.cursor].thread.ID != first.ID {
+		t.Fatalf("j selected item %d", p.item)
+	}
+	// The selected item sits at the reading position.
+	if got := sel().start - p.offset; got != p.margin() {
+		t.Errorf("selected item starts %d lines down, want %d", got, p.margin())
+	}
+
+	// The long comment is read in half pages before moving on.
+	e.press("j")
+	long := sel()
+	if p.item != 2 || long.end-long.start <= p.height {
+		t.Fatalf("item %d of %d lines, want the long reply", p.item, long.end-long.start)
+	}
+	steps := 0
+	for p.item == 2 && steps < 20 {
+		before := p.offset
+		e.press("j")
+		steps++
+		if p.item == 2 && p.offset <= before {
+			t.Fatalf("j inside the long comment did not scroll")
+		}
+	}
+	if steps < 2 || p.item != 3 {
+		t.Errorf("left the long comment after %d steps at item %d", steps, p.item)
+	}
+
+	// k reads back up through it, then to the short reply.
+	for p.item != 1 && steps < 40 {
+		e.press("k")
+		steps++
+	}
+	if p.item != 1 {
+		t.Errorf("k never returned to the short reply")
+	}
+}
+
+func TestReaderMarksAndEditsTheSelectedComment(t *testing.T) {
+	e, first := readerEnv(t, 30)
+	p := &e.m.main
+	e.press("g", "j")
+	// The margin bar spans the selected comment only.
+	marked := 0
+	marker := e.m.r.hunkMarker(rowState{activeHunk: true})
+	for _, l := range p.visible(e.m.renderMainRow) {
+		if strings.HasPrefix(l, marker) {
+			marked++
+		}
+	}
+	if want := p.items[p.item].end - p.items[p.item].start; marked != want {
+		t.Errorf("marked %d lines, want the selected item's %d", marked, want)
+	}
+	// e edits the selected comment, not the latest one.
+	e.press("e")
+	if e.m.mode != modeCompose || e.m.compose.area.Value() != "short reply" {
+		t.Errorf("e opened %q, want the selected comment", e.m.compose.area.Value())
+	}
+	_ = first
+}
+
+func TestReaderScrollSelectsAtReadingPosition(t *testing.T) {
+	e, _ := readerEnv(t, 30)
+	p := &e.m.main
+	e.press("g", "d")
+	line := p.offset + p.margin()
+	it := p.items[p.item]
+	if !(it.start <= line && line < it.end) && it.start < line {
+		t.Errorf("after d, item %+v does not cover or follow the reading line %d", it, line)
 	}
 }

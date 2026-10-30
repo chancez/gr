@@ -24,16 +24,28 @@ type pane struct {
 	side   anchor.Side
 	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
 	scrolloff int
-	// lineMode moves a line cursor instead of moving between rows, and selects the row it is in. The overview uses it, since its threads are many lines tall.
-	lineMode bool
-	// line is the line cursor in line mode, as an index into all display lines.
-	line int
-	// lineMarker is drawn in the left margin on the line cursor's line.
-	lineMarker string
+	// reader moves between items, the comments of the overview's threads, keeping the selected one
+	// at a reading position and scrolling through items taller than the pane. The overview uses it.
+	reader bool
+	// items are reader mode's stops, item the selected one.
+	items []item
+	item  int
+	// segments returns the line offsets where a row's items start, after the row is rendered, or
+	// nil for a row that is one item.
+	segments func(i int) []int
+	// marker is drawn in the left margin beside the selected item in reader mode.
+	marker string
 	// overscroll lets the view sit past the end of the content, showing blank lines, so content
 	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
 	// scrolls back up.
 	overscroll int
+}
+
+// item is one stop in reader mode: lines start to end, exclusive, of a row.
+type item struct {
+	row   int
+	start int
+	end   int
 }
 
 // defaultScrolloff is the scrolloff panes start with.
@@ -58,7 +70,36 @@ func (p *pane) layout(render func(i int, state rowState) []string) {
 		}
 	}
 	p.total = line
+	p.buildItems()
 	p.clamp()
+}
+
+func (p *pane) buildItems() {
+	p.items = nil
+	if !p.reader {
+		return
+	}
+	for i, r := range p.rows {
+		if !r.selectable() {
+			continue
+		}
+		end := p.starts[i] + p.rowHeight(i)
+		var segs []int
+		if p.segments != nil {
+			segs = p.segments(i)
+		}
+		if len(segs) == 0 {
+			segs = []int{0}
+		}
+		for k, s := range segs {
+			it := item{row: i, start: p.starts[i] + s, end: end}
+			if k+1 < len(segs) {
+				it.end = p.starts[i] + segs[k+1]
+			}
+			p.items = append(p.items, it)
+		}
+	}
+	p.item = min(max(p.item, 0), max(len(p.items)-1, 0))
 }
 
 func (p *pane) rowHeight(i int) int {
@@ -91,7 +132,6 @@ func (p *pane) clamp() {
 			p.cursor = prev
 		}
 	}
-	p.line = min(max(p.line, 0), max(p.total-1, 0))
 	maxOffset := max(0, p.total-p.height)
 	if p.offset <= maxOffset {
 		// Back within the content: the overscroll has drained.
@@ -222,57 +262,111 @@ func (p *pane) ensureVisible() {
 	p.clamp()
 }
 
-// moveLine moves the line cursor n lines in line mode, scrolling only to keep it scrolloff lines
-// from the edges, as in vim, and selects the row it is in.
-func (p *pane) moveLine(n int) {
-	if p.total == 0 {
+// readerNext reads on: through the selected item if its end is below the pane, else to the next
+// item, placed at the reading position.
+func (p *pane) readerNext() {
+	if len(p.items) == 0 {
 		return
 	}
-	p.line = min(max(p.line+n, 0), p.total-1)
-	so := p.margin()
-	if p.line-so < p.offset {
-		p.offset = p.line - so
-	} else if p.line+so >= p.offset+p.height {
-		p.offset = p.line + so - p.height + 1
+	cur := p.items[p.item]
+	if cur.end > p.offset+p.height {
+		// Scroll at most to where the item's end shows.
+		p.offset = min(p.offset+max(p.height/2, 1), cur.end-p.height)
+		p.clamp()
+		return
 	}
-	p.clamp()
-	p.selectLine()
+	if p.item+1 < len(p.items) {
+		p.item++
+		p.placeItem()
+	}
 }
 
-// scrollLines scrolls the view n lines in line mode, moving the line cursor with it, as paging does.
-func (p *pane) scrollLines(n int) {
+// readerPrev reads back: up through the selected item if its start is above the pane, else to the
+// previous item.
+func (p *pane) readerPrev() {
+	if len(p.items) == 0 {
+		return
+	}
+	cur := p.items[p.item]
+	if cur.start < p.offset {
+		p.offset = max(p.offset-max(p.height/2, 1), cur.start-p.margin())
+		p.clamp()
+		return
+	}
+	if p.item > 0 {
+		p.item--
+		p.placeItem()
+	}
+}
+
+// placeItem scrolls the selected item to the reading position, scrolloff lines from the top.
+func (p *pane) placeItem() {
+	it := p.items[p.item]
+	p.cursor = it.row
+	p.offset = it.start - p.margin()
+	p.clamp()
+}
+
+// readerSelect selects item i and places it.
+func (p *pane) readerSelect(i int) {
+	if i < 0 || i >= len(p.items) {
+		return
+	}
+	p.item = i
+	p.placeItem()
+}
+
+// readerScroll scrolls n lines and selects the item at the reading position.
+func (p *pane) readerScroll(n int) {
 	p.offset += n
 	p.clamp()
-	p.line = min(max(p.line+n, p.offset), min(p.offset+p.height, p.total)-1)
-	p.line = max(p.line, 0)
-	p.selectLine()
+	p.selectAt(p.offset + p.margin())
 }
 
-// selectLine selects the row the line cursor is in. On a line of static text, such as a review's
-// header, it selects the next row that can be, else the previous.
-func (p *pane) selectLine() {
-	i := sort.Search(len(p.starts), func(i int) bool { return p.starts[i] > p.line }) - 1
-	if i < 0 {
+// selectAt selects the item covering line, else the first one starting below it, else the last.
+func (p *pane) selectAt(line int) {
+	if len(p.items) == 0 {
 		return
 	}
-	if p.rows[i].selectable() {
-		p.cursor = i
-	} else if next := p.nextSelectable(i, 1); next >= 0 {
-		p.cursor = next
-	} else if prev := p.nextSelectable(i, -1); prev >= 0 {
-		p.cursor = prev
+	k := sort.Search(len(p.items), func(k int) bool { return p.items[k].end > line })
+	p.item = min(k, len(p.items)-1)
+	p.cursor = p.items[p.item].row
+}
+
+// itemSegment is the selected item's index within its row, for restoring it after a rebuild.
+func (p *pane) itemSegment() int {
+	if !p.reader || p.item >= len(p.items) {
+		return 0
+	}
+	seg := 0
+	for k := p.item - 1; k >= 0 && p.items[k].row == p.items[p.item].row; k-- {
+		seg++
+	}
+	return seg
+}
+
+// syncItem selects row i's item seg, after the cursor moved by row.
+func (p *pane) syncItem(i, seg int) {
+	if !p.reader {
+		return
+	}
+	for k, it := range p.items {
+		if it.row == i {
+			p.item = k
+			for seg > 0 && p.item+1 < len(p.items) && p.items[p.item+1].row == i {
+				p.item++
+				seg--
+			}
+			return
+		}
 	}
 }
 
-// syncLine puts the line cursor on the cursor row's first line, after the cursor moved by row.
-func (p *pane) syncLine() {
-	if p.cursor < len(p.starts) {
-		p.line = p.starts[p.cursor]
-	}
-}
-
-// cursorY is the screen line the cursor row starts on.
+// cursorY is the screen line the cursor row, or in reader mode the selected item, starts on.
 func (p *pane) cursorY() int {
+	if p.reader && p.item < len(p.items) {
+		return p.items[p.item].start - p.offset
+	}
 	if p.cursor >= len(p.starts) {
 		return 0
 	}
@@ -281,14 +375,20 @@ func (p *pane) cursorY() int {
 
 // placeAt puts the cursor on row i, scrolled so the row starts on screen line y. Rebuilds use it
 // to keep the cursor still while rows around it change height.
-func (p *pane) placeAt(i, y int) {
+func (p *pane) placeAt(i, seg, y int) {
 	p.cursor = i
-	want := p.starts[i] - y
+	p.syncItem(i, seg)
+	start := p.starts[i]
+	if p.reader && p.item < len(p.items) {
+		start = p.items[p.item].start
+	}
+	want := start - y
 	p.overscroll = max(want-max(0, p.total-p.height), 0)
 	p.offset = want
 	p.clamp()
-	p.ensureVisible()
-	p.syncLine()
+	if !p.reader {
+		p.ensureVisible()
+	}
 }
 
 // jump puts the cursor on row i and scrolls it near the top, scrolloff lines down.
@@ -300,7 +400,7 @@ func (p *pane) jump(i int) {
 	p.offset = p.starts[i] - p.margin()
 	p.clamp()
 	p.ensureVisible()
-	p.syncLine()
+	p.syncItem(i, 0)
 }
 
 // selection returns the selected row range, inclusive, or the cursor alone.
@@ -346,11 +446,11 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 			if len(out) == p.height {
 				break
 			}
-			if p.lineMode {
-				// The left margin marks the line cursor.
+			if p.reader {
+				// The left margin marks the selected item.
 				marker := " "
-				if p.starts[i]+skip+k == p.line {
-					marker = p.lineMarker
+				if line := p.starts[i] + skip + k; p.item < len(p.items) && line >= p.items[p.item].start && line < p.items[p.item].end {
+					marker = p.marker
 				}
 				l = marker + l
 			}

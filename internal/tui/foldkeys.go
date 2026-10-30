@@ -141,6 +141,7 @@ func (m *model) foldAll(open bool) {
 func (m *model) rebuildKeeping(r row) {
 	files := m.views[m.current].files
 	y := m.main.cursorY()
+	seg := m.main.itemSegment()
 	m.rebuildMain()
 	for i, nr := range m.main.rows {
 		same := nr.key(files) == r.key(files)
@@ -148,7 +149,7 @@ func (m *model) rebuildKeeping(r row) {
 			same = true
 		}
 		if same {
-			m.main.placeAt(i, y)
+			m.main.placeAt(i, seg, y)
 			return
 		}
 	}

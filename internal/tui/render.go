@@ -23,6 +23,9 @@ type renderer struct {
 	st       styles
 	hl       *highlighter
 	markdown map[int]*glamour.TermRenderer
+	// segments holds, after renderRow draws a thread, the line each of its comments starts on. The
+	// first comment's segment starts at the row's first line, so it includes the excerpt and title.
+	segments []int
 }
 
 func newRenderer(isDark bool) *renderer {
@@ -153,6 +156,7 @@ func fileLabel(f git.FileDiff) string {
 // renderRow draws one row at width. d supplies thread draft state.
 func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state rowState) []string {
 	st := r.st
+	r.segments = nil
 	switch rw.kind {
 	case rowText:
 		return rw.text(width)
@@ -198,9 +202,15 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if rw.collapsed {
 			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
 		}
-		lines := r.renderThread(d, *rw.thread, width, state.cursor)
+		lines, starts := r.renderThread(d, *rw.thread, width, state.cursor)
+		shift := 0
 		if rw.excerpt != nil {
-			lines = append(r.renderExcerpt(*rw.excerpt, rw.thread.Location, width), lines...)
+			excerpt := r.renderExcerpt(*rw.excerpt, rw.thread.Location, width)
+			lines, shift = append(excerpt, lines...), len(excerpt)
+		}
+		r.segments = []int{0}
+		for _, s := range starts[1:] {
+			r.segments = append(r.segments, s+shift)
 		}
 		return lines
 	case rowGap:
@@ -352,8 +362,8 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	return style.Render(fit(ansi.Truncate(text, width, "..."), width, nil))
 }
 
-// renderThread draws a thread as a bordered box, indented under the line it is on.
-func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, cursor bool) []string {
+// renderThread draws a thread as a bordered box, and returns the line each comment starts on.
+func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, cursor bool) ([]string, []int) {
 	st := r.st
 	const indent = 2
 	boxWidth := max(width-indent, 20)
@@ -365,7 +375,10 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		title += st.muted.Render("  " + loc)
 	}
 	lines := []string{ansi.Truncate(title, inner, "")}
+	var starts []int
 	for _, c := range t.Comments {
+		// The box's top border is the first output line.
+		starts = append(starts, len(lines)+1)
 		header := st.author.Render(c.Author.Name) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
 		if d.isDraft(c.ReviewID) {
 			header += st.badgeWarn.Render("  draft")
@@ -381,7 +394,10 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	for i := range out {
 		out[i] = strings.Repeat(" ", indent) + out[i]
 	}
-	return out
+	if len(starts) == 0 {
+		starts = []int{0}
+	}
+	return out, starts
 }
 
 // describeLocation is a short label for where a thread points.
