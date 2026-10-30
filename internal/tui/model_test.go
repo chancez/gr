@@ -855,3 +855,41 @@ func TestConversationView(t *testing.T) {
 		t.Errorf("enter opened %q at %+v", e.m.viewLabel(v), cur)
 	}
 }
+
+func TestResolvedThreadsCollapse(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+	e.press("c")
+	e.typeText("needs a test")
+	e.pressRun("ctrl+s")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	thread := func() row { return e.m.main.rows[e.m.main.cursor] }
+	if thread().collapsed {
+		t.Fatal("open thread starts collapsed")
+	}
+
+	e.pressRun("x")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	if !thread().collapsed || e.m.main.rowHeight(e.m.main.cursor) != 1 {
+		t.Fatalf("resolved thread is not one collapsed line")
+	}
+	if !strings.Contains(e.screen(), "> #1 resolved") {
+		t.Errorf("collapsed thread line missing:\n%s", e.screen())
+	}
+	e.press("enter")
+	if thread().kind != rowThread || thread().collapsed {
+		t.Error("enter did not expand the resolved thread")
+	}
+	e.press("z", "c")
+	if !thread().collapsed {
+		t.Error("zc did not collapse the thread")
+	}
+
+	// Reopening expands it again.
+	e.pressRun("x")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	if thread().collapsed {
+		t.Error("reopened thread is still collapsed")
+	}
+}

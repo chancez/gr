@@ -195,6 +195,9 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		}
 		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
 	case rowThread:
+		if rw.collapsed {
+			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
+		}
 		lines := r.renderThread(d, *rw.thread, width, state.cursor)
 		if rw.excerpt != nil {
 			lines = append(r.renderExcerpt(*rw.excerpt, rw.thread.Location, width), lines...)
@@ -329,6 +332,26 @@ func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int
 	return out
 }
 
+// renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
+func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
+	st := r.st
+	where := describeLocation(t.Location)
+	if t.Summary {
+		where = "review summary"
+	}
+	first := ""
+	if len(t.Comments) > 0 {
+		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
+	}
+	text := fmt.Sprintf("  > #%d %s  %s  %d comments  %s", t.Seq, ansi.Strip(stateBadge(st, t, d.isDraft(t.ReviewID))),
+		where, len(t.Comments), first)
+	style := st.muted
+	if state.cursor {
+		style = style.Background(r.cursorBg(state))
+	}
+	return style.Render(fit(ansi.Truncate(text, width, "..."), width, nil))
+}
+
 // renderThread draws a thread as a bordered box, indented under the line it is on.
 func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, cursor bool) []string {
 	st := r.st
@@ -342,12 +365,7 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		title += st.muted.Render("  " + loc)
 	}
 	lines := []string{ansi.Truncate(title, inner, "")}
-	resolved := t.State == store.ThreadResolved
-	for i, c := range t.Comments {
-		if resolved && i > 0 && !cursor {
-			lines = append(lines, st.muted.Render(fmt.Sprintf("%d more", len(t.Comments)-1)))
-			break
-		}
+	for _, c := range t.Comments {
 		header := st.author.Render(c.Author.Name) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
 		if d.isDraft(c.ReviewID) {
 			header += st.badgeWarn.Render("  draft")

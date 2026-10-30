@@ -100,6 +100,9 @@ type model struct {
 	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
 	returnView int
+	// threadFolds overrides whether a thread is collapsed, by thread id. Resolved threads are
+	// collapsed by default.
+	threadFolds map[string]bool
 	// openGaps holds the open folds of unchanged lines, keyed by gapKey.
 	openGaps map[string]bool
 	// contents caches files' lines by revision and path, for open folds.
@@ -158,7 +161,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, contents: map[string][]string{}, returnView: -1, lastSidebar: focusFiles,
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, threadFolds: map[string]bool{}, contents: map[string][]string{}, returnView: -1, lastSidebar: focusFiles,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -416,6 +419,11 @@ func (m *model) rebuildMain() {
 			gapOpen:   func(f, g int) bool { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
 			content:   func(f int) []string { return m.fileContent(v, f) },
 		})
+	}
+	for i := range m.main.rows {
+		if t := m.main.rows[i].thread; m.main.rows[i].kind == rowThread {
+			m.main.rows[i].collapsed = m.threadCollapsed(*t)
+		}
 	}
 	m.main.anchor = -1
 	_, mw, bh := m.layoutSizes()
@@ -686,6 +694,8 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
 			m.fold(foldOpen)
+		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+			m.fold(foldToggle)
 		}
 	case key.Matches(msg, k.Comment):
 		return m.startComment(false)
@@ -861,7 +871,17 @@ func (m *model) lastOwnComment(t review.ThreadView) (store.Comment, bool) {
 	return store.Comment{}, false
 }
 
+// threadCollapsed reports whether a thread shows as one line.
+func (m *model) threadCollapsed(t review.ThreadView) bool {
+	if collapsed, ok := m.threadFolds[t.ID]; ok {
+		return collapsed
+	}
+	return t.State == store.ThreadResolved
+}
+
 func (m *model) setThreadState(t review.ThreadView, state store.ThreadState) tea.Cmd {
+	// Back to the default, so resolving collapses a thread and reopening expands it.
+	delete(m.threadFolds, t.ID)
 	svc, ctx := m.svc, m.ctx
 	return func() tea.Msg {
 		return opMsg{status: fmt.Sprintf("thread #%d %s", t.Seq, state), err: svc.SetThreadState(ctx, t.ID, state)}

@@ -61,6 +61,20 @@ func (m *model) fold(op foldOp) {
 	}
 	v := m.views[m.current]
 	r := p.rows[p.cursor]
+	if r.kind == rowThread {
+		collapsed := m.threadCollapsed(*r.thread)
+		switch op {
+		case foldOpen:
+			collapsed = false
+		case foldClose:
+			collapsed = true
+		case foldToggle:
+			collapsed = !collapsed
+		}
+		m.threadFolds[r.thread.ID] = collapsed
+		m.rebuildKeeping(r)
+		return
+	}
 	if r.gap != nil {
 		k := gapKey(v, v.files[r.file].Path(), r.gap.index)
 		open := m.openGaps[k]
