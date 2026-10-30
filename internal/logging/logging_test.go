@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestOpenWritesAndRotates(t *testing.T) {
+func TestOpenWritesAtLevel(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gr", "gr.log")
 	logger, closer, err := Open(path, slog.LevelInfo)
 	if err != nil {
@@ -25,20 +25,34 @@ func TestOpenWritesAndRotates(t *testing.T) {
 		t.Errorf("log = %q", got)
 	}
 
-	// Past maxSize, the file moves aside on the next open.
-	if err := os.WriteFile(path, make([]byte, maxSize+1), 0o600); err != nil {
+}
+
+// TestRotatesDuringASession checks that the log rotates when a write would pass the limit, not
+// only when a process opens it.
+func TestRotatesDuringASession(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gr.log")
+	w := &rotatingFile{path: path, max: 100}
+	if err := w.open(); err != nil {
 		t.Fatal(err)
 	}
-	_, closer, err = Open(path, slog.LevelInfo)
+	defer w.Close()
+	line := []byte(strings.Repeat("x", 39) + "\n")
+	for range 3 {
+		if _, err := w.Write(line); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Two lines fit in 100 bytes; the third rotates them out.
+	old, err := os.ReadFile(path + ".1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	closer.Close()
-	if info, err := os.Stat(path + ".1"); err != nil || info.Size() != maxSize+1 {
-		t.Errorf("rotated copy: %v, %v", info, err)
+	cur, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if info, err := os.Stat(path); err != nil || info.Size() != 0 {
-		t.Errorf("new log: %v, %v", info, err)
+	if len(old) != 80 || len(cur) != 40 {
+		t.Errorf("after rotating: old %d bytes, current %d; want 80 and 40", len(old), len(cur))
 	}
 }
 
