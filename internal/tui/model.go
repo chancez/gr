@@ -64,8 +64,10 @@ const (
 )
 
 type composer struct {
-	kind      composeKind
-	title     string
+	kind  composeKind
+	title string
+	// warn shows the title as a warning.
+	warn      bool
 	area      textarea.Model
 	thread    review.NewThread
 	threadID  string
@@ -1101,6 +1103,11 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		c.title, c.commentID, initial = fmt.Sprintf("Edit your comment on %s", t.Label()), own.ID, own.Body
+		if t.State == store.ThreadResolved {
+			// Edits after resolving are easy to miss: nobody rereads a resolved thread.
+			c.title += " (resolved: the edit will not reopen it)"
+			c.warn = true
+		}
 	}
 	return m, m.openComposer(c, initial)
 }
@@ -1390,7 +1397,11 @@ func (m *model) render() string {
 	}
 	if m.mode == modeCompose {
 		hints := "  " + m.help.ShortHelpView([]key.Binding{m.keys.Save, m.keys.ExternalEdit, m.keys.Cancel})
-		title := m.r.st.heading.Render(m.compose.title) + hints
+		titleStyle := m.r.st.heading
+		if m.compose.warn {
+			titleStyle = m.r.st.badgeWarn.Bold(true)
+		}
+		title := titleStyle.Render(m.compose.title) + hints
 		box := m.r.st.composeBox.Width(m.width).Render(ansi.Truncate(title, m.width-4, "") + "\n" + m.compose.area.View())
 		b.WriteString(box)
 		b.WriteString("\n")

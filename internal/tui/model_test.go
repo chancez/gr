@@ -1270,3 +1270,25 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 		t.Error("enter not styled as a key in the file header")
 	}
 }
+
+func TestEditingAResolvedThreadWarns(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "mine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SetThreadState(ctx, v.ID, store.ThreadResolved); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	e.press("e")
+	if e.m.mode != modeCompose || !e.m.compose.warn || !strings.Contains(e.m.compose.title, "will not reopen") {
+		t.Errorf("editing a resolved thread: mode %d, title %q", e.m.mode, e.m.compose.title)
+	}
+}
