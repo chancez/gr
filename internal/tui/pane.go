@@ -299,11 +299,29 @@ func (p *pane) readerPrev() {
 	}
 }
 
-// placeItem scrolls the selected item to the reading position, scrolloff lines from the top.
+// placeItem scrolls to the selected item, keeping as much of its row, the thread with the code it
+// is on, in view as fits:
+//
+//   - the item and the row's top already in view: no scrolling
+//   - the whole row fits: show it from its top
+//   - the row's top through the item fits: show that, so the code stays above the comment
+//   - otherwise: the item at the reading position, scrolloff lines from the top
 func (p *pane) placeItem() {
 	it := p.items[p.item]
 	p.cursor = it.row
-	p.offset = it.start - p.margin()
+	so := p.margin()
+	top, bottom := p.starts[it.row], p.starts[it.row]+p.rowHeight(it.row)
+	room := p.height - so
+	switch {
+	case top >= p.offset && it.end <= p.offset+p.height:
+		return
+	case bottom-top <= room:
+		p.offset = top - so
+	case it.end-top <= room:
+		p.offset = top - so
+	default:
+		p.offset = it.start - so
+	}
 	p.clamp()
 }
 

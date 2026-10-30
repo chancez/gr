@@ -1083,9 +1083,9 @@ func TestReaderStepsByComment(t *testing.T) {
 	if p.item != 1 || p.rows[p.cursor].thread.ID != first.ID {
 		t.Fatalf("j selected item %d", p.item)
 	}
-	// The selected item sits at the reading position.
-	if got := sel().start - p.offset; got != p.margin() {
-		t.Errorf("selected item starts %d lines down, want %d", got, p.margin())
+	// The thread's top and the selected comment are both in view.
+	if top := p.starts[sel().row]; top < p.offset || sel().end > p.offset+p.height {
+		t.Errorf("thread top %d or comment end %d out of view at offset %d", top, sel().end, p.offset)
 	}
 
 	// The long comment is read in half pages before moving on.
@@ -1178,5 +1178,53 @@ func TestMatchSpans(t *testing.T) {
 	}
 	if got := matchSpans("Foo foo", "Foo"); len(got) != 1 {
 		t.Errorf("case-sensitive spans = %v", got)
+	}
+}
+
+// TestReaderKeepsTheThreadInView selects the last comment of a thread that fits on screen and
+// checks the thread's top, where its code is, stays in view.
+func TestReaderKeepsTheThreadInView(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	commit := e.m.data.commits[0].SHA
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{
+		Scope: store.ScopeCommit, Commit: commit, Path: "main.go", StartLine: 4, Body: "why?",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range []string{"some", "more", "replies"} {
+		if _, err := e.svc.Reply(ctx, e.chg, v.ID, b, false); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for range 6 {
+		if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "later\n\nthread\n\nfiller"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	p := &e.m.main
+	// Walk to the line thread's last comment.
+	for range 20 {
+		if it := p.items[p.item]; p.rows[it.row].thread.ID == v.ID && p.itemSegment() == 3 {
+			break
+		}
+		e.press("j")
+	}
+	it := p.items[p.item]
+	if p.itemSegment() != 3 {
+		t.Fatalf("never reached the last comment")
+	}
+	if top := p.starts[it.row]; top < p.offset {
+		t.Errorf("the thread's code scrolled out: top %d above offset %d", top, p.offset)
+	}
+	if !strings.Contains(e.screen(), `println("hello")`) {
+		t.Errorf("excerpt not on screen:\n%s", e.screen())
 	}
 }
