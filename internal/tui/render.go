@@ -282,7 +282,7 @@ func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []strin
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	return []string{r.th.draw(surf, width, sp(elSHA, "commit "+c.SHA), sp(elDefault, "  "),
+	return []string{r.th.draw(surf, width, sp(elSHA, "commit "+c.SHA, strong), sp(elDefault, "  "),
 		sp(elMuted, c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
 }
 
@@ -320,11 +320,11 @@ func commentHeader(d *changeData, c store.Comment) []span {
 
 // renderExcerpt draws the diff a thread is about, under a line naming where it is.
 func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
-	where := " " + describeLocation(loc)
+	where := append([]span{sp(elPath, " ")}, locationSpans(loc, elPath)...)
 	if !e.Exact {
-		where += "  (outdated: as it was)"
+		where = append(where, sp(elPath, "  (outdated: as it was)"))
 	}
-	out := []string{r.th.draw(surfHeading, width, sp(elPath, where))}
+	out := []string{r.th.draw(surfHeading, width, where...)}
 	// A one-hunk file sized to the excerpt's last line numbers, so the gutter is as wide as needed.
 	f := git.FileDiff{NewPath: e.Path}
 	if n := len(e.Lines); n > 0 {
@@ -369,21 +369,22 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
 func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
-	where := describeLocation(t.Location)
+	where := locationSpans(t.Location, elMuted)
 	if t.Summary {
-		where = "summary"
+		where = []span{sp(elMuted, "summary")}
 	}
 	first := ""
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	text := fmt.Sprintf("  > %s %s  %s  %d comments  %s", t.Label(), spanText(stateSpans(t, d.isDraft(t.ReviewID))),
-		where, len(t.Comments), first)
+	spans := []span{sp(elMuted, fmt.Sprintf("  > %s %s  ", t.Label(), spanText(stateSpans(t, d.isDraft(t.ReviewID)))))}
+	spans = append(spans, where...)
+	spans = append(spans, sp(elMuted, fmt.Sprintf("  %d comments  %s", len(t.Comments), first)))
 	surf := surfPlain
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	return r.th.drawCut(surf, width, sp(elMuted, text))
+	return r.th.drawCut(surf, width, spans...)
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
@@ -397,8 +398,8 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		title = []span{sp(elRef, "Summary"), sp(elMuted, " ("+t.Label()+")"), sp(elDefault, " ")}
 	}
 	title = append(title, stateSpans(t, d.isDraft(t.ReviewID))...)
-	if loc := describeLocation(t.Location); loc != "" && !t.Summary {
-		title = append(title, sp(elMuted, "  "+loc))
+	if loc := locationSpans(t.Location, elMuted); len(loc) > 0 && !t.Summary {
+		title = append(append(title, sp(elMuted, "  ")), loc...)
 	}
 	lines := []string{ansi.Truncate(r.th.render(surfPlain, title...), inner, "")}
 	var starts []int
@@ -418,14 +419,14 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	return out, starts
 }
 
-// describeLocation is a short label for where a thread points.
-func describeLocation(l store.Location) string {
-	var parts []string
-	switch l.Scope {
-	case store.ScopeChange:
-		return ""
-	case store.ScopeCommit:
-		parts = append(parts, "commit "+shortSHA(l.Commit))
+// locationSpans name where a thread points: the commit's sha, and the path and lines as el.
+func locationSpans(l store.Location, el element) []span {
+	var out []span
+	if l.Scope == store.ScopeChange {
+		return nil
+	}
+	if l.Scope == store.ScopeCommit {
+		out = append(out, sp(el, "commit "), sp(elSHA, shortSHA(l.Commit)))
 	}
 	if l.Path != "" {
 		loc := l.Path
@@ -438,9 +439,12 @@ func describeLocation(l store.Location) string {
 		if l.Side == anchor.SideOld {
 			loc += " (old)"
 		}
-		parts = append(parts, loc)
+		if len(out) > 0 {
+			loc = " " + loc
+		}
+		out = append(out, sp(el, loc))
 	}
-	return strings.Join(parts, " ")
+	return out
 }
 
 func shortSHA(sha string) string {

@@ -11,6 +11,8 @@ import (
 
 // navItem is one sidebar entry: a view, or a file within the current view.
 type navItem struct {
+	// sha is a commit's short sha, shown before label.
+	sha   string
 	label string
 	view  int
 	// file is the file index in the view, or -1 for the view itself.
@@ -164,7 +166,11 @@ func (it navItem) render(th *theme, width int, selected, focused bool) string {
 	if it.badge != "" {
 		room -= ansi.StringWidth(it.badge) + 1
 	}
-	label := ansi.Truncate(it.label, room, "...")
+	lead := 0
+	if it.sha != "" {
+		lead = ansi.StringWidth(it.sha) + 1
+	}
+	label := ansi.Truncate(it.label, room-lead, "...")
 	if it.prefix != "" {
 		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
 	}
@@ -181,7 +187,15 @@ func (it navItem) render(th *theme, width int, selected, focused bool) string {
 	case it.done:
 		p = dim
 	}
-	out := th.draw(surf, room, sp(el, label, p))
+	shaEl := elSHA
+	if surf != surfPlain {
+		shaEl = el
+	}
+	var spans []span
+	if it.sha != "" {
+		spans = append(spans, sp(shaEl, it.sha, p), sp(el, " ", p))
+	}
+	out := th.draw(surf, room, append(spans, sp(el, label, p))...)
 	if it.badge == "" {
 		return out
 	}
@@ -267,6 +281,9 @@ func (m *model) buildNav() {
 	m.viewsNav.items = nil
 	for vi, v := range m.views {
 		it := navItem{label: m.viewLabel(v), view: vi, file: -1, heading: v.kind != viewCommit}
+		if v.kind == viewCommit {
+			it.sha, it.label = shortSHA(v.commit.SHA)[:7], v.commit.Subject()
+		}
 		if v.kind == viewCommit || v.kind == viewDiff {
 			it.done = m.viewReviewed(v)
 			it.badge = marks(it.done, m.draftThreads(v, "") > 0)

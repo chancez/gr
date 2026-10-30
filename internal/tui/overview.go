@@ -79,9 +79,11 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	rows := []row{
 		plain(
 			[]span{sp(elHeading, fmt.Sprintf("#%d %s", c.Seq, c.Title))},
-			[]span{sp(elMuted, fmt.Sprintf("%s, %s, revision %d of %d (%s..%s), %d commits, %d files",
-				c.State, target, rev.Seq, len(d.revisions), shortSHA(rev.BaseSHA), shortSHA(rev.HeadSHA),
-				len(d.commits), len(d.diffFiles)))},
+			[]span{
+				sp(elMuted, fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
+				sp(elSHA, shortSHA(rev.BaseSHA)), sp(elMuted, ".."), sp(elSHA, shortSHA(rev.HeadSHA)),
+				sp(elMuted, fmt.Sprintf("), %d commits, %d files", len(d.commits), len(d.diffFiles))),
+			},
 			[]span{
 				sp(elDefault, "Threads: "),
 				sp(elStateOpen, fmt.Sprintf("%d open", counts[store.ThreadOpen])), sp(elDefault, ", "),

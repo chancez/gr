@@ -236,7 +236,7 @@ func newTheme(isDark bool, name string) *theme {
 		elMuted:                 fg(p.muted),
 		elHeading:               bold(p.text),
 		elAuthor:                bold(ld(purple, lavender)),
-		elSHA:                   bold(ld(amber, gold)),
+		elSHA:                   fg(ld(amber, gold)),
 		elPath:                  bold(p.text),
 		elRef:                   bold(p.text),
 		elGutter:                fg(p.muted),
