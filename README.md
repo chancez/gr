@@ -64,3 +64,4 @@ gr submit --request-changes -m "Summary."
 - [docs/architecture.md](docs/architecture.md): how the code is laid out
 - [docs/adr](docs/adr): decisions
 - [GLOSSARY.md](GLOSSARY.md): terms
+- [TODO.md](TODO.md): planned work
