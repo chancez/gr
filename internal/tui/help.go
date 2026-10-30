@@ -87,7 +87,7 @@ func (m *model) helpSections() []helpSection {
 	return []helpSection{
 		{title: "Everywhere", global: true, bindings: []key.Binding{
 			hint("tab/shift+tab", "next/previous pane"), hint("h/l", "sidebar/diff"), k.AllChanges,
-			hint("}/{", "next/prev commit"), k.Search, hint("n/N", "next/prev match"), k.Split, k.Reload,
+			hint("}/{", "next/prev commit"), k.Search, hint("n/N", "next/prev match"), hint("esc", "clear search or selection"), k.Split, k.Reload,
 			k.Submit, k.Discard, k.Help, k.Quit,
 		}},
 		{title: "Sidebar", context: contextSidebar, bindings: []key.Binding{

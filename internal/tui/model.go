@@ -1452,7 +1452,7 @@ func (m *model) renderStatus() string {
 		left += st.badgeWarn.Render(" selecting")
 	}
 	if label := m.searchLabel(); label != "" {
-		left += " " + st.searchMatch.Render(label)
+		left += " " + st.searchMatch.Render(label) + " " + st.helpKey.Render("esc") + st.helpDesc.Render(" clears")
 	}
 	// Fit the hints in what the left side leaves, keeping help and quit.
 	right := m.renderHints(m.shortHelp(), max(m.width-lipgloss.Width(left)-2, 10))

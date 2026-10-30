@@ -637,7 +637,7 @@ func TestSearch(t *testing.T) {
 	if r := e.m.main.rows[first]; r.line == nil || !strings.Contains(r.line.Text, "println") {
 		t.Fatalf("cursor after search on %+v", r)
 	}
-	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "/println 1/2") {
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "/println 1/2 esc clears") {
 		t.Errorf("status bar = %q, want the search and its position", ansi.Strip(e.m.renderStatus()))
 	}
 	e.press("n")
