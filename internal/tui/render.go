@@ -377,7 +377,9 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	spans := []span{sp(elMuted, fmt.Sprintf("  > %s %s  ", t.Label(), spanText(stateSpans(t, d.isDraft(t.ReviewID)))))}
+	spans := []span{sp(elMuted, "  > "+t.Label()+" ")}
+	spans = append(spans, stateSpans(t, d.isDraft(t.ReviewID))...)
+	spans = append(spans, sp(elMuted, "  "))
 	spans = append(spans, where...)
 	spans = append(spans, sp(elMuted, fmt.Sprintf("  %d comments  %s", len(t.Comments), first)))
 	surf := surfPlain

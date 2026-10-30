@@ -175,7 +175,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			{sp(elMuted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04")))},
 		}
 		if summary != nil {
-			parts = append(parts, []span{sp(elMuted, "summary"), sp(elDefault, " "+spanText(stateSpans(*summary, false)))})
+			parts = append(parts, append([]span{sp(elMuted, "summary"), sp(elDefault, " ")}, stateSpans(*summary, false)...))
 		}
 		// A summary the filter leaves out shows only in the bar's state.
 		shownSummary := summary

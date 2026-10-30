@@ -174,7 +174,6 @@ func (it navItem) render(th *theme, width int, selected, focused bool) string {
 	if it.prefix != "" {
 		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
 	}
-	// Selected and heading entries draw their badge in the line's own style.
 	surf, el := surfPlain, elDefault
 	var p props
 	switch {
@@ -187,23 +186,15 @@ func (it navItem) render(th *theme, width int, selected, focused bool) string {
 	case it.done:
 		p = dim
 	}
-	shaEl := elSHA
-	if surf != surfPlain {
-		shaEl = el
-	}
 	var spans []span
 	if it.sha != "" {
-		spans = append(spans, sp(shaEl, it.sha, p), sp(el, " ", p))
+		spans = append(spans, sp(elSHA, it.sha, p), sp(el, " ", p))
 	}
 	out := th.draw(surf, room, append(spans, sp(el, label, p))...)
 	if it.badge == "" {
 		return out
 	}
-	badge := []span{sp(el, " "+it.badge)}
-	if surf == surfPlain {
-		badge = append([]span{sp(elDefault, " ")}, badgeSpans(it.badge)...)
-	}
-	return out + th.draw(surf, width-room, badge...)
+	return out + th.draw(surf, width-room, append([]span{sp(el, " ")}, badgeSpans(it.badge)...)...)
 }
 
 func (m *model) viewLabel(v view) string {
