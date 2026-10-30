@@ -5,11 +5,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 
 	"github.com/spf13/cobra"
 
 	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/logging"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui"
@@ -25,6 +27,10 @@ type app struct {
 	author string
 	dir    string
 	json   bool
+	debug  bool
+	// logPath overrides the log file's location, for tests.
+	logPath string
+	logFile io.Closer
 
 	store *store.Store
 	svc   *review.Service
@@ -36,6 +42,9 @@ func Execute(ctx context.Context) int {
 	cmd := a.rootCommand()
 	cmd.SetArgs(os.Args[1:])
 	err := cmd.ExecuteContext(ctx)
+	if err != nil {
+		slog.Warn("command failed", "args", os.Args[1:], "err", err)
+	}
 	a.close()
 	if err != nil {
 		fmt.Fprintln(a.stderr, "gr:", err)
@@ -53,6 +62,8 @@ reviews: threads on the change, a commit, a file, or lines, batched into a revie
 
 Run without a command to review in the TUI. A target is a branch (default: the current one), a
 range A..B, or a commit. GR_THEME=colorblind uses blue and orange in place of green and red.
+
+Logs go to $XDG_STATE_HOME/gr/gr.log, by default ~/.local/state/gr/gr.log.
 
 Commands that act on a change take --change to pick one by number or id prefix. Without it, they
 use the change for the current branch, creating it if needed.`,
@@ -77,6 +88,8 @@ use the change for the current branch, creating it if needed.`,
 	flags.StringVar(&a.author, "author", os.Getenv("GR_AUTHOR"), `act as "Name <email>" or a bare name (default git config user.name, env GR_AUTHOR)`)
 	flags.StringVarP(&a.dir, "repo", "C", ".", "run as if started in this directory")
 	flags.BoolVar(&a.json, "json", false, "print JSON")
+	flags.BoolVar(&a.debug, "debug", false, "log at debug level, as GR_LOG=debug does")
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error { return a.setupLogging() }
 
 	root.AddCommand(
 		a.reviewCommand(),
@@ -96,7 +109,37 @@ use the change for the current branch, creating it if needed.`,
 	return root
 }
 
+// setupLogging sends logs to the log file, at the level from --debug or GR_LOG. A log file that
+// cannot be opened is reported once and logging is turned off, rather than failing the command.
+func (a *app) setupLogging() error {
+	level, err := logging.ParseLevel(os.Getenv("GR_LOG"))
+	if err != nil {
+		return err
+	}
+	if a.debug {
+		level = slog.LevelDebug
+	}
+	path := a.logPath
+	if path == "" {
+		if path, err = logging.DefaultPath(); err != nil {
+			return err
+		}
+	}
+	logger, f, err := logging.Open(path, level)
+	if err != nil {
+		fmt.Fprintf(a.stderr, "gr: not logging: %v\n", err)
+		logger = logging.Discard()
+	}
+	a.logFile = f
+	slog.SetDefault(logger)
+	slog.Debug("start", "args", os.Args[1:])
+	return nil
+}
+
 func (a *app) close() {
+	if a.logFile != nil {
+		a.logFile.Close()
+	}
 	if a.store != nil {
 		a.store.Close()
 	}

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -131,6 +132,7 @@ func (s *Store) migrate(ctx context.Context) error {
 				}
 			}
 		}
+		slog.Info("migrated database", "path", s.path, "from", version, "to", len(migrations))
 		// PRAGMA takes no bound parameters.
 		if _, err := tx.q.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations))); err != nil {
 			return fmt.Errorf("set schema version: %w", err)
@@ -145,7 +147,9 @@ type Tx struct {
 }
 
 // Tx runs fn in a transaction, committing if it returns nil.
-func (s *Store) Tx(ctx context.Context, fn func(*Tx) error) error {
+func (s *Store) Tx(ctx context.Context, fn func(*Tx) error) (err error) {
+	start := time.Now()
+	defer func() { slog.Debug("db tx", "duration", time.Since(start), "err", err) }()
 	sqlTx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin: %w", err)

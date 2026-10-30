@@ -2,6 +2,7 @@ package review
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -31,12 +32,17 @@ func (r *reanchorer) reanchorAll(ctx context.Context, tx *store.Tx, changeID str
 	if err != nil {
 		return err
 	}
+	outdated := 0
+	defer func() {
+		slog.Info("re-anchored threads", "revision", rev.Seq, "threads", len(threads), "outdated", outdated)
+	}()
 	for _, t := range threads {
 		loc, ok, err := r.locate(ctx, t.Location, rev.ID)
 		if err != nil {
 			return err
 		}
 		if !ok {
+			outdated++
 			// Outdated threads keep their last location for display, and are retried on the next
 			// revision.
 			loc = t.Location

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json/v2"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,17 +18,19 @@ type cliEnv struct {
 	t    *testing.T
 	repo *gittest.Repo
 	db   string
+	log  string
 }
 
 func newCLIEnv(t *testing.T) *cliEnv {
-	return &cliEnv{t: t, repo: gittest.New(t), db: filepath.Join(t.TempDir(), "gr.db")}
+	dir := t.TempDir()
+	return &cliEnv{t: t, repo: gittest.New(t), db: filepath.Join(dir, "gr.db"), log: filepath.Join(dir, "gr.log")}
 }
 
 // run runs gr as author and returns stdout.
 func (e *cliEnv) run(author string, args ...string) string {
 	e.t.Helper()
 	var stdout, stderr bytes.Buffer
-	a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr}
+	a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr, logPath: e.log}
 	defer a.close()
 	cmd := a.rootCommand()
 	cmd.SetArgs(append([]string{"--db", e.db, "-C", e.repo.Dir, "--author", author}, args...))
@@ -155,5 +158,20 @@ func TestChangeListAndMerged(t *testing.T) {
 	}
 	if got := e.run(human, "change", "list", "--all"); !strings.Contains(got, "#1\tmerged") {
 		t.Errorf("change list --all = %q", got)
+	}
+}
+
+func TestDebugLogsGitCommands(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	e.run("Human <h@example.com>", "--debug", "threads")
+	b, err := os.ReadFile(e.log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(b); !strings.Contains(got, "msg=git") || !strings.Contains(got, "duration=") {
+		t.Errorf("debug log lacks git commands:\n%s", got)
 	}
 }

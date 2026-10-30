@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"os/exec"
 	"slices"
@@ -232,7 +233,9 @@ func tick() tea.Cmd {
 func (m *model) loadCmd() tea.Cmd {
 	ctx, svc, id := m.ctx, m.svc, m.changeID
 	return func() tea.Msg {
+		start := time.Now()
 		d, err := load(ctx, svc, id)
+		slog.Debug("reload", "duration", time.Since(start), "err", err)
 		return dataMsg{data: d, err: err}
 	}
 }
@@ -271,6 +274,7 @@ func (m *model) setStatus(format string, args ...any) {
 }
 
 func (m *model) setError(err error) {
+	slog.Warn("tui error", "err", err)
 	m.status, m.statusErr, m.statusAt = err.Error(), true, time.Now()
 }
 

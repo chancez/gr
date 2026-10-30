@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -273,6 +274,7 @@ func (s *Service) Sync(ctx context.Context, change store.Change) (store.Change, 
 		if revision, err = tx.CreateRevision(ctx, change.ID, base, head); err != nil {
 			return err
 		}
+		slog.Info("new revision", "change", change.Seq, "revision", revision.Seq, "base", base, "head", head)
 		return r.reanchorAll(ctx, tx, change.ID, revision)
 	})
 	if err != nil {
@@ -286,6 +288,7 @@ func (s *Service) markMerged(ctx context.Context, change store.Change, latest st
 		return store.Change{}, store.Revision{}, err
 	}
 	change.State = store.ChangeMerged
+	slog.Info("change merged", "change", change.Seq)
 	return change, latest, nil
 }
 
