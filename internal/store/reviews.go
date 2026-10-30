@@ -92,6 +92,14 @@ func (q queries) SubmitReview(ctx context.Context, id, revisionID string, verdic
 		revisionID, verdict, body, now, now, id)
 }
 
+// CountReviewComments counts the comments written in a review, the threads it starts and its
+// replies alike.
+func (q queries) CountReviewComments(ctx context.Context, reviewID string) (int, error) {
+	var n int
+	err := q.q.QueryRowContext(ctx, `SELECT count(*) FROM comments WHERE review_id = ?`, reviewID).Scan(&n)
+	return n, err
+}
+
 // DeleteReview discards a draft review with its threads and comments.
 func (q queries) DeleteReview(ctx context.Context, id string) error {
 	return q.execOne(ctx, "draft review "+id, `DELETE FROM reviews WHERE id = ? AND state = 'draft'`, id)

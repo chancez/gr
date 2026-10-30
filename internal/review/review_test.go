@@ -1,6 +1,7 @@
 package review_test
 
 import (
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -605,5 +606,46 @@ func TestSummaryRef(t *testing.T) {
 	}
 	if _, err := h.ThreadByRef(ctx, change, "-1"); err == nil {
 		t.Error("a negative number found a thread")
+	}
+}
+
+func TestSubmitRefusesEmptyReviews(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	h := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(h, "")
+
+	for _, v := range []store.Verdict{store.VerdictComment, store.VerdictRequestChanges} {
+		if _, err := h.Submit(ctx, change, v, ""); !errors.Is(err, review.ErrEmptyReview) {
+			t.Errorf("empty %s review: err = %v, want ErrEmptyReview", v, err)
+		}
+	}
+	// The refused submit leaves no review behind.
+	if reviews, _ := h.Reviews(ctx, change); len(reviews) > 1 || (len(reviews) == 1 && reviews[0].State != store.ReviewDraft) {
+		t.Errorf("reviews after refused submits = %+v", reviews)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictComment, "a summary"); err != nil {
+		t.Errorf("review with a summary: %v", err)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictApprove, ""); err != nil {
+		t.Errorf("bare approval: %v", err)
+	}
+	// A reply in the draft counts as content.
+	other := e.service(agent)
+	v, err := other.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "q"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.Submit(ctx, change, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Reply(ctx, change, v.ID, "answer", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictRequestChanges, ""); err != nil {
+		t.Errorf("review with only a draft reply: %v", err)
 	}
 }

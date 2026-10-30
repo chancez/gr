@@ -285,8 +285,13 @@ func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 	})
 }
 
+// ErrEmptyReview is returned for a comment or request-changes review with neither a summary nor a
+// comment, which would tell the author nothing.
+var ErrEmptyReview = errors.New("the review is empty: add a summary or a comment, or approve")
+
 // Submit publishes the author's draft review with a verdict and summary. With no draft, a review
-// with only the summary is created and submitted.
+// with only the summary is created and submitted. An approval may be empty, since the verdict says
+// it all; other verdicts need a summary or a comment.
 func (s *Service) Submit(ctx context.Context, change store.Change, verdict store.Verdict, body string) (store.Review, error) {
 	switch verdict {
 	case store.VerdictComment, store.VerdictApprove, store.VerdictRequestChanges:
@@ -305,6 +310,15 @@ func (s *Service) Submit(ctx context.Context, change store.Change, verdict store
 		}
 		if body == "" {
 			body = draft.Body
+		}
+		if verdict != store.VerdictApprove && strings.TrimSpace(body) == "" {
+			n, err := tx.CountReviewComments(ctx, draft.ID)
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				return ErrEmptyReview
+			}
 		}
 		if err := tx.SubmitReview(ctx, draft.ID, rev.ID, verdict, body); err != nil {
 			return err
