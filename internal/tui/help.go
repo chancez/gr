@@ -120,6 +120,9 @@ func (m *model) helpSections() []helpSection {
 		{title: "Folds", context: contextDiff, bindings: []key.Binding{
 			hint("enter", "expand/collapse"), hint("zo/zc/za", "open/close/toggle"), hint("zR/zM", "open/close all"),
 		}},
+		{title: "Submitting", global: true, bindings: []key.Binding{
+			hint("S", "submit: then a/r/c for a verdict with a summary"), hint("S then A/R/C", "submit at once, no summary"),
+		}},
 		{title: "Writing a comment", global: true, bindings: []key.Binding{k.Save, k.ExternalEdit, k.Cancel}},
 	}
 }

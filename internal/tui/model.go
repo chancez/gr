@@ -1258,18 +1258,23 @@ func (m *model) saveCompose() (tea.Model, tea.Cmd) {
 	}
 }
 
+// verdictKey takes the verdict: a, r, or c open the summary editor, and A, R, or C submit straight
+// away with no new summary, keeping any already in the draft.
 func (m *model) verdictKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	var verdict store.Verdict
-	switch msg.String() {
-	case "a":
-		verdict = store.VerdictApprove
-	case "r":
-		verdict = store.VerdictRequestChanges
-	case "c":
-		verdict = store.VerdictComment
-	default:
+	verdicts := map[string]store.Verdict{"a": store.VerdictApprove, "r": store.VerdictRequestChanges, "c": store.VerdictComment}
+	key := msg.String()
+	verdict, ok := verdicts[strings.ToLower(key)]
+	if !ok || len(key) != 1 {
 		m.mode = modeNormal
 		return m, nil
+	}
+	if key != strings.ToLower(key) {
+		m.mode = modeNormal
+		svc, ctx, change := m.svc, m.ctx, m.data.change
+		return m, func() tea.Msg {
+			r, err := svc.Submit(ctx, change, verdict, "")
+			return opMsg{status: fmt.Sprintf("submitted review #%d: %s", r.Seq, r.Verdict), err: err}
+		}
 	}
 	initial := ""
 	if d, ok := m.data.draft(); ok {
@@ -1545,7 +1550,9 @@ func (m *model) renderStatus() string {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		return st.heading.Render("Submit review: ") + "[a]pprove  [r]equest changes  [c]omment  " + st.muted.Render("any other key cancels")
+		key := func(k, desc string) string { return st.helpKey.Render(k) + st.helpDesc.Render(desc) }
+		return st.heading.Render("Submit: ") + key("a", "pprove  ") + key("r", "equest changes  ") + key("c", "omment") +
+			st.muted.Render(" with a summary; ") + key("A R C", " without one; ") + st.muted.Render("other keys cancel")
 	case modeConfirm:
 		return st.statusErr.Render(m.confirm.prompt)
 	}

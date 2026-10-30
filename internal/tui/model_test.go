@@ -1590,3 +1590,29 @@ func TestOverviewKeyAndBack(t *testing.T) {
 		t.Errorf("A A went to %+v, want %+v", got, start)
 	}
 }
+
+func TestSubmitWithoutSummary(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.press("S")
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "A R C without one") {
+		t.Errorf("verdict prompt = %q", ansi.Strip(e.m.renderStatus()))
+	}
+	e.pressRun("A")
+	if e.m.mode != modeNormal {
+		t.Fatalf("mode after A = %d", e.m.mode)
+	}
+	reviews, err := e.svc.Reviews(t.Context(), e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reviews) != 1 || reviews[0].State != store.ReviewSubmitted || reviews[0].Verdict != store.VerdictApprove {
+		t.Fatalf("reviews after S A = %+v", reviews)
+	}
+	// An empty comment review is refused, as from the CLI.
+	e.press("S")
+	e.pressRun("C")
+	if !e.m.statusErr || !strings.Contains(e.m.status, "empty") {
+		t.Errorf("S C on an empty review: status %q", e.m.status)
+	}
+}
