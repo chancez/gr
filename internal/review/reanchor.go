@@ -58,7 +58,7 @@ func (r *reanchorer) files(ctx context.Context, c git.Commit) ([]git.FileDiff, e
 	if files, ok := r.commitFiles[c.SHA]; ok {
 		return files, nil
 	}
-	files, err := r.s.git.CommitDiff(ctx, c)
+	files, err := r.s.commitDiff(ctx, c)
 	if err != nil {
 		return nil, err
 	}
@@ -70,7 +70,7 @@ func (r *reanchorer) wholeDiff(ctx context.Context) ([]git.FileDiff, error) {
 	if r.rangeLoaded {
 		return r.rangeFiles, nil
 	}
-	files, err := r.s.git.Diff(ctx, r.base, r.head)
+	files, err := r.s.diff(ctx, r.base, r.head)
 	if err != nil {
 		return nil, err
 	}

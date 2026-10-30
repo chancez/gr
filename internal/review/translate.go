@@ -55,7 +55,7 @@ func (s *Service) TranslateLines(ctx context.Context, from, to, path string, sta
 	if from == to {
 		return start, end, nil
 	}
-	files, err := s.git.Diff(ctx, from, to, path)
+	files, err := s.diff(ctx, from, to, path)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -24,6 +24,9 @@ type Service struct {
 	git    *git.Repo
 	repo   store.Repo
 	author store.Author
+	// cache holds diffs, and lists the per-commit file lists of ranges, so each is read once.
+	cache *diffCache
+	lists fileLists
 }
 
 // Open identifies the repository and records where it was last seen.
@@ -39,7 +42,7 @@ func Open(ctx context.Context, st *store.Store, g *git.Repo, author store.Author
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: st, git: g, repo: repo, author: author}, nil
+	return &Service{store: st, git: g, repo: repo, author: author, cache: newDiffCache(DefaultCacheLines)}, nil
 }
 
 // Author is who the service acts as.

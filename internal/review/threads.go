@@ -126,7 +126,7 @@ func (s *Service) locationFor(ctx context.Context, rev store.Revision, nt NewThr
 			loc.Anchor = a
 			return loc, nil
 		}
-		if files, err = s.git.CommitDiff(ctx, c); err != nil {
+		if files, err = s.commitDiff(ctx, c); err != nil {
 			return store.Location{}, err
 		}
 		if len(c.Parents) > 0 {
