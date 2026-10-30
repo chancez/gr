@@ -40,6 +40,10 @@ type styles struct {
 	composeBox   lipgloss.Style
 	helpKey      lipgloss.Style
 	helpDesc     lipgloss.Style
+	// paneFocused and paneUnfocused title panes. The focused title is a solid accent bar, distinct
+	// from the softer cursor color.
+	paneFocused   lipgloss.Style
+	paneUnfocused lipgloss.Style
 }
 
 // newStyles picks colors for a dark or light terminal background.
@@ -88,5 +92,9 @@ func newStyles(isDark bool) styles {
 		composeBox:   lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).BorderForeground(blue).Padding(0, 1),
 		helpKey:      lipgloss.NewStyle().Bold(true).Foreground(blue),
 		helpDesc:     lipgloss.NewStyle().Foreground(fg),
+		paneFocused: lipgloss.NewStyle().Bold(true).Background(blue).
+			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
+		paneUnfocused: lipgloss.NewStyle().Bold(true).Foreground(muted).
+			Background(ld(lipgloss.Color("#eaeef2"), lipgloss.Color("#21262d"))),
 	}
 }

@@ -72,13 +72,7 @@ func (l *navList) render(st styles, title string, width, height int, focused boo
 	if height <= 0 {
 		return nil
 	}
-	header := st.navHeader.Render(fit(" "+title, width, nil))
-	if focused {
-		header = st.navFocused.Bold(true).Render(fit(" "+title, width, nil))
-	} else {
-		header = st.navSelected.Foreground(st.muted.GetForeground()).Bold(true).Render(fit(" "+title, width, nil))
-	}
-	out := []string{header}
+	out := []string{paneTitle(st, " "+title, width, focused)}
 	rows := height - 1
 	l.scrollTo(rows)
 	for i := l.top; i < len(l.items) && len(out) < height; i++ {
@@ -242,9 +236,14 @@ func (m *model) mainHeader(width int) string {
 			title += "  >  " + fileLabel(m.views[m.current].files[f])
 		}
 	}
-	title = ansi.Truncate(title, width, "...")
-	if m.focus == focusMain {
-		return st.navFocused.Bold(true).Render(fit(title, width, nil))
+	return paneTitle(st, title, width, m.focus == focusMain)
+}
+
+// paneTitle draws a pane's title bar.
+func paneTitle(st styles, title string, width int, focused bool) string {
+	style := st.paneUnfocused
+	if focused {
+		style = st.paneFocused
 	}
-	return st.navSelected.Foreground(st.muted.GetForeground()).Bold(true).Render(fit(title, width, nil))
+	return style.Render(fit(ansi.Truncate(title, width, "..."), width, nil))
 }
