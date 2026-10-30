@@ -430,6 +430,14 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.data == nil {
 		return m, nil
 	}
+	switch {
+	case key.Matches(msg, k.NextCommit):
+		m.stepCommit(1)
+		return m, nil
+	case key.Matches(msg, k.PrevCommit):
+		m.stepCommit(-1)
+		return m, nil
+	}
 	switch m.focus {
 	case focusViews:
 		return m.navKey(msg, &m.viewsNav, m.openView)
@@ -548,6 +556,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.jumpTo(1, func(r row) bool { return r.kind == rowFile })
 	case key.Matches(msg, k.PrevFile):
 		m.jumpTo(-1, func(r row) bool { return r.kind == rowFile })
+	case key.Matches(msg, k.NextHunk):
+		m.jumpTo(1, func(r row) bool { return r.kind == rowHunk })
+	case key.Matches(msg, k.PrevHunk):
+		m.jumpTo(-1, func(r row) bool { return r.kind == rowHunk })
 	case key.Matches(msg, k.NextThread):
 		m.jumpTo(1, func(r row) bool { return r.kind == rowThread })
 	case key.Matches(msg, k.PrevThread):
@@ -605,6 +617,19 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	m.syncNav()
 	return m, nil
+}
+
+// stepCommit opens the next or previous commit, starting from the first or last when the current
+// view is not a commit.
+func (m *model) stepCommit(dir int) bool {
+	for i := m.current + dir; i >= 0 && i < len(m.views); i += dir {
+		if m.views[i].kind == viewCommit {
+			m.viewsNav.pos = i
+			m.openView()
+			return true
+		}
+	}
+	return false
 }
 
 func (m *model) jumpTo(dir int, match func(row) bool) {

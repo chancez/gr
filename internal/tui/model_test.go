@@ -402,3 +402,44 @@ func TestFileLabelsKeepTheirEnd(t *testing.T) {
 		t.Errorf("file label = %q", got)
 	}
 }
+
+func TestCommitAndHunkNavigation(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(30)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	lines[1], lines[27] = "changed 2", "changed 28"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	second := e.repo.Commit("edit both ends")
+	e.drain(e.m.loadCmd())
+
+	e.press("}")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit || v.commit.Subject() != "say hello" {
+		t.Fatalf("} from the overview opened %q", e.m.viewLabel(v))
+	}
+	e.press("}", "}", "}")
+	if v := e.m.views[e.m.current]; v.commit.SHA != second {
+		t.Fatalf("} past the last commit opened %q, want the last commit", e.m.viewLabel(v))
+	}
+	e.press("{")
+	if v := e.m.views[e.m.current]; v.commit.Subject() != "add long file" {
+		t.Errorf("{ opened %q", e.m.viewLabel(v))
+	}
+	e.press("}")
+
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	var hunks []int
+	for range 3 {
+		e.press("J")
+		if r := e.m.main.rows[e.m.main.cursor]; r.kind == rowHunk {
+			hunks = append(hunks, r.hunk.NewStart)
+		}
+	}
+	if len(hunks) != 3 || hunks[0] == hunks[1] || hunks[1] != hunks[2] {
+		t.Errorf("hunk starts visited by J = %v, want two distinct hunks then a stop", hunks)
+	}
+	e.press("K")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowHunk || r.hunk.NewStart != hunks[0] {
+		t.Errorf("K did not go back to the first hunk")
+	}
+}

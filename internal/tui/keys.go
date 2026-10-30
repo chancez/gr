@@ -16,6 +16,10 @@ type keyMap struct {
 	Right        key.Binding
 	NextFile     key.Binding
 	PrevFile     key.Binding
+	NextCommit   key.Binding
+	PrevCommit   key.Binding
+	NextHunk     key.Binding
+	PrevHunk     key.Binding
 	NextThread   key.Binding
 	PrevThread   key.Binding
 	Focus        key.Binding
@@ -56,6 +60,10 @@ func defaultKeys() keyMap {
 		Right:        key.NewBinding(key.WithKeys("l", "right")),
 		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
 		PrevFile:     key.NewBinding(key.WithKeys("[")),
+		NextCommit:   key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
+		PrevCommit:   key.NewBinding(key.WithKeys("{")),
+		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
+		PrevHunk:     key.NewBinding(key.WithKeys("K")),
 		NextThread:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev thread")),
 		PrevThread:   key.NewBinding(key.WithKeys("N")),
 		Focus:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
@@ -90,7 +98,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.NextFile, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
+		{k.NextCommit, k.NextFile, k.NextHunk, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
 		{k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
