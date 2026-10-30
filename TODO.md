@@ -19,44 +19,46 @@ In priority order. Foundations come first because every feature built before the
 6. Next and previous unresolved thread, across views.
 7. Reviewed marks from the CLI, for agents that review.
 8. Run git outside the write transaction when re-anchoring, so other writers do not wait on it.
+9. Open the file under the cursor in `$EDITOR` at the cursor's line: as it was at the commit being
+   reviewed, a read-only copy from `git show`, or the working tree's file in the whole diff.
 
 ## State
 
-9. Remember where you were per change, the view, cursor, folds, and split mode, so reopening gr
+10. Remember where you were per change, the view, cursor, folds, and split mode, so reopening gr
    after an accidental q puts you back.
-10. Open the overview where you last were, or at its newest end, with the change's details and
+11. Open the overview where you last were, or at its newest end, with the change's details and
     thread counts fixed at the top like the title bar, so they stay put while scrolling.
 
 ## Tracking changes
 
-11. Track commits across rebases, for example from `post-rewrite` or by patch id, so threads and
+12. Track commits across rebases, for example from `post-rewrite` or by patch id, so threads and
     reviewed marks survive squashing fixups.
-12. Detect merges more widely: against the default branch as well as the base, with `git cherry`
+13. Detect merges more widely: against the default branch as well as the base, with `git cherry`
     to count commits that landed by patch id (cherry-picks, rebases) and show a partly merged change
     as "N of M commits landed", by content for squash merges, and from the last recorded head once
     the branch is deleted.
 
 ## Config
 
-13. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
-14. Remappable keys, from the action registry.
-15. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
+14. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
+15. Remappable keys, from the action registry.
+16. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
     override individual elements' colors. gr draws its own diff colors, so git's `color.diff.*` do
     not apply.
-16. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
-17. Configurable scrolloff and default sidebar width.
+17. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
+18. Configurable scrolloff and default sidebar width.
 
 ## Features
 
-18. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
+19. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
     skipping past them is obvious.
-19. Right-click menus with the actions for what was clicked, from the action registry.
-20. Comment on lines outside diff hunks, on context opened from a fold.
-21. Test mouse handling in a real terminal.
+20. Right-click menus with the actions for what was clicked, from the action registry.
+21. Comment on lines outside diff hunks, on context opened from a fold.
+22. Test mouse handling in a real terminal.
 
 ## Polish
 
-22. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+23. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
