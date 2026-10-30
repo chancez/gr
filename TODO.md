@@ -47,20 +47,21 @@ In priority order. Foundations come first because every feature built before the
     not apply.
 17. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
 18. Configurable scrolloff and default sidebar width.
+19. Configurable default for auto-advance after marking reviewed, which `+` toggles per session.
 
 ## Features
 
-19. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
+20. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
     skipping past them is obvious.
-20. Right-click menus with the actions for what was clicked, from the action registry.
-21. Comment on lines outside diff hunks, on context opened from a fold.
-22. Test mouse handling in a real terminal.
-23. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
+21. Right-click menus with the actions for what was clicked, from the action registry.
+22. Comment on lines outside diff hunks, on context opened from a fold.
+23. Test mouse handling in a real terminal.
+24. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
     text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 
-24. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+25. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
