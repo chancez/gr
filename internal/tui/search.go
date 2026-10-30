@@ -88,7 +88,7 @@ func (m *model) searchStep(dir int) {
 			next = len(hits) - 1
 		}
 	}
-	p.jump(hits[next])
+	m.jump(func() { p.jump(hits[next]) })
 	m.syncNav()
 	m.searchPos, m.searchHits = next+1, len(hits)
 	if wrapped {

@@ -17,6 +17,8 @@ type keyMap struct {
 	NextFile         key.Binding
 	PrevFile         key.Binding
 	AllChanges       key.Binding
+	JumpBack         key.Binding
+	JumpForward      key.Binding
 	NextCommit       key.Binding
 	PrevCommit       key.Binding
 	NextChange       key.Binding
@@ -63,19 +65,22 @@ type keyMap struct {
 
 func defaultKeys() keyMap {
 	return keyMap{
-		Up:               key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("k/up", "up")),
-		Down:             key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("j/down", "down")),
-		HalfPageUp:       key.NewBinding(key.WithKeys("ctrl+u", "u"), key.WithHelp("u", "half page up")),
-		HalfPageDown:     key.NewBinding(key.WithKeys("ctrl+d", "d"), key.WithHelp("d", "half page down")),
-		PageUp:           key.NewBinding(key.WithKeys("pgup", "ctrl+b", "b"), key.WithHelp("b/pgup", "page up")),
-		PageDown:         key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/space", "page down")),
-		Top:              key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		Bottom:           key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Left:             key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "sidebar/diff, or diff side")),
-		Right:            key.NewBinding(key.WithKeys("l", "right")),
-		NextFile:         key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
-		PrevFile:         key.NewBinding(key.WithKeys("[")),
-		AllChanges:       key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
+		Up:           key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("k/up", "up")),
+		Down:         key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("j/down", "down")),
+		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u", "u"), key.WithHelp("u", "half page up")),
+		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d", "d"), key.WithHelp("d", "half page down")),
+		PageUp:       key.NewBinding(key.WithKeys("pgup", "ctrl+b", "b"), key.WithHelp("b/pgup", "page up")),
+		PageDown:     key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/space", "page down")),
+		Top:          key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		Bottom:       key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+		Left:         key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "sidebar/diff, or diff side")),
+		Right:        key.NewBinding(key.WithKeys("l", "right")),
+		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
+		PrevFile:     key.NewBinding(key.WithKeys("[")),
+		AllChanges:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
+		JumpBack:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "back in the jump list")),
+		// Terminals without enhanced keyboard reporting send ctrl+i as tab, which switches panes.
+		JumpForward:      key.NewBinding(key.WithKeys("ctrl+i"), key.WithHelp("ctrl+i", "forward in the jump list")),
 		NextCommit:       key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
 		PrevCommit:       key.NewBinding(key.WithKeys("{")),
 		NextChange:       key.NewBinding(key.WithKeys(")"), key.WithHelp(")/(", "next/prev change")),

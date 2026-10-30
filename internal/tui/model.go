@@ -122,6 +122,11 @@ type model struct {
 	viewsHeight int
 	// draggingSplit is set while the divider between the sidebar lists is dragged.
 	draggingSplit bool
+	// jumps is the jump list and jumpAt the place in it, as in vim. restoring is set while going to
+	// a place in it, so that does not record a jump of its own.
+	jumps     []jumpPoint
+	jumpAt    int
+	restoring bool
 	// returnView is where the all-changes key goes back to.
 	returnView int
 	// segments holds where each overview row's items start, filled as rows render.
@@ -478,6 +483,9 @@ func (m *model) setView(i int) {
 	if i == m.current || i < 0 || i >= len(m.views) {
 		return
 	}
+	if m.data != nil && !m.restoring && m.current < len(m.views) {
+		m.pushJump(m.here())
+	}
 	m.current = i
 	m.main.cursor, m.main.offset = 0, 0
 	m.rebuildMain()
@@ -561,6 +569,16 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.SearchPrev):
 		if m.data != nil {
 			m.searchStep(-1)
+		}
+		return m, nil
+	case key.Matches(msg, k.JumpBack):
+		if m.data != nil {
+			m.jumpBack()
+		}
+		return m, nil
+	case key.Matches(msg, k.JumpForward):
+		if m.data != nil {
+			m.jumpForward()
 		}
 		return m, nil
 	case key.Matches(msg, k.AllChanges):
@@ -716,10 +734,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			p.readerScroll(-p.height)
 			return m, nil
 		case key.Matches(msg, k.Top):
-			p.readerSelect(0)
+			m.jump(func() { p.readerSelect(0) })
 			return m, nil
 		case key.Matches(msg, k.Bottom):
-			p.readerSelect(len(p.items) - 1)
+			m.jump(func() { p.readerSelect(len(p.items) - 1) })
 			return m, nil
 		}
 	}
@@ -737,9 +755,9 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.PageUp):
 		p.moveLines(-p.height)
 	case key.Matches(msg, k.Top):
-		p.top()
+		m.jump(p.top)
 	case key.Matches(msg, k.Bottom):
-		p.bottom()
+		m.jump(p.bottom)
 	case key.Matches(msg, k.Left):
 		// In split mode, left first moves to the old side, then to the sidebar.
 		if m.split && p.side == anchor.SideNew {
@@ -762,9 +780,9 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.PrevHunk):
 		m.jumpTo(-1, func(r row) bool { return r.kind == rowHunk })
 	case key.Matches(msg, k.NextThread):
-		m.jumpTo(1, func(r row) bool { return r.kind == rowThread })
+		m.jump(func() { m.jumpTo(1, func(r row) bool { return r.kind == rowThread }) })
 	case key.Matches(msg, k.PrevThread):
-		m.jumpTo(-1, func(r row) bool { return r.kind == rowThread })
+		m.jump(func() { m.jumpTo(-1, func(r row) bool { return r.kind == rowThread }) })
 	case key.Matches(msg, k.Select):
 		if p.anchor >= 0 {
 			p.anchor = -1

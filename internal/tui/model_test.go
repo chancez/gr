@@ -1439,3 +1439,29 @@ func TestCommitThreadsShowInTheWholeDiff(t *testing.T) {
 		t.Errorf("O opened %q, want the thread's commit", e.m.viewLabel(got))
 	}
 }
+
+func TestJumpList(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(addedLine)
+	start := e.m.here()
+	e.press("A")
+	if e.m.views[e.m.current].kind != viewDiff {
+		t.Fatal("A did not open the whole diff")
+	}
+	e.press("t")
+	e.press("ctrl+o")
+	if got := e.m.here(); got.view != start.view || got.row != start.row || got.y != start.y {
+		t.Errorf("ctrl+o went to %+v, want %+v", got, start)
+	}
+	e.press("ctrl+i")
+	if e.m.views[e.m.current].kind != viewDiff {
+		t.Errorf("ctrl+i did not return to the whole diff")
+	}
+	// A new jump from the middle of the list drops the places ahead.
+	e.press("ctrl+o", "A")
+	e.press("ctrl+i")
+	if !strings.Contains(e.m.status, "newest") {
+		t.Errorf("forward history survived a new jump: status %q", e.m.status)
+	}
+}
