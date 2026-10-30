@@ -55,10 +55,12 @@ In priority order. Foundations come first because every feature built before the
 20. Right-click menus with the actions for what was clicked, from the action registry.
 21. Comment on lines outside diff hunks, on context opened from a fold.
 22. Test mouse handling in a real terminal.
+23. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
+    text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 
-23. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+24. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
