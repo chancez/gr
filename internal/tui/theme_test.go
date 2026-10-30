@@ -1,7 +1,12 @@
 package tui
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
@@ -52,5 +57,39 @@ func TestEveryElementAndSurfaceIsNamed(t *testing.T) {
 		if n == "" {
 			t.Errorf("surface %d has no name", i)
 		}
+	}
+}
+
+// TestStylesComeFromTheRegistry enforces ADR 8: only the registry creates styles or sets colors.
+// Syntax highlighting is a foreign renderer, styled by its own theme.
+func TestStylesComeFromTheRegistry(t *testing.T) {
+	allowed := map[string]bool{"palette.go": true, "theme.go": true, "draw.go": true, "highlight.go": true}
+	// lipgloss functions that make styles and colors, and style methods that set colors.
+	constructors := map[string]bool{"NewStyle": true, "Color": true, "LightDark": true}
+	setters := map[string]bool{"Foreground": true, "Background": true, "BorderForeground": true, "BorderBackground": true}
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, name := range files {
+		if allowed[name] || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, _ := sel.X.(*ast.Ident)
+			if setters[sel.Sel.Name] || constructors[sel.Sel.Name] && pkg != nil && pkg.Name == "lipgloss" {
+				t.Errorf("%s: %s outside the registry; add an element or surface to theme.go", fset.Position(sel.Pos()), sel.Sel.Name)
+			}
+			return true
+		})
 	}
 }
