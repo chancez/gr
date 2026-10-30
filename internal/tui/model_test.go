@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -823,7 +824,7 @@ func TestConversationView(t *testing.T) {
 	e.openNav("Overview")
 
 	screen := e.screen()
-	for _, want := range []string{"requested changes", "Two things.", "Summary (r1)", "why hello?", `+     println("hello")`, "commit "} {
+	for _, want := range []string{"requested changes", "Two things.", "summary open", "why hello?", `+     println("hello")`, "commit "} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("conversation missing %q:\n%s", want, screen)
 		}
@@ -1066,23 +1067,39 @@ func readerEnv(t *testing.T, height int) (*tuiEnv, review.ThreadView) {
 	return e, first
 }
 
+// threadItem is the index of the first item of thread id in the overview.
+func threadItem(t *testing.T, p *pane, id string) int {
+	t.Helper()
+	for k, it := range p.items {
+		if r := p.rows[it.row]; r.kind == rowThread && r.thread.ID == id {
+			return k
+		}
+	}
+	t.Fatalf("thread %s has no item", id)
+	return 0
+}
+
 func TestReaderStepsByComment(t *testing.T) {
 	e, first := readerEnv(t, 30)
 	p := &e.m.main
-	// The first thread's three comments are three items, then the second thread.
+	b := threadItem(t, p, first.ID)
+	// The review is an item, then the first thread's three comments, then the second thread.
 	var rows []int
 	for _, it := range p.items {
 		rows = append(rows, it.row)
 	}
-	if len(p.items) != 4 || rows[0] != rows[1] || rows[1] != rows[2] || rows[2] == rows[3] {
+	if len(p.items) != 5 || p.rows[rows[0]].kind != rowReview || rows[b] != rows[b+1] || rows[b+1] != rows[b+2] || rows[b+2] == rows[b+3] {
 		t.Fatalf("items = %+v", p.items)
 	}
 
 	e.press("g")
+	if p.item != 0 || p.rows[p.cursor].kind != rowReview {
+		t.Fatalf("g selected item %d", p.item)
+	}
 	sel := func() item { return p.items[p.item] }
-	e.press("j")
-	if p.item != 1 || p.rows[p.cursor].thread.ID != first.ID {
-		t.Fatalf("j selected item %d", p.item)
+	e.press("j", "j")
+	if p.item != b+1 || p.rows[p.cursor].thread.ID != first.ID {
+		t.Fatalf("j j selected item %d, want the short reply", p.item)
 	}
 	// The thread's top and the selected comment are both in view.
 	if top := p.starts[sel().row]; top < p.offset || sel().end > p.offset+p.height {
@@ -1092,36 +1109,36 @@ func TestReaderStepsByComment(t *testing.T) {
 	// The long comment is read in half pages before moving on.
 	e.press("j")
 	long := sel()
-	if p.item != 2 || long.end-long.start <= p.height {
+	if p.item != b+2 || long.end-long.start <= p.height {
 		t.Fatalf("item %d of %d lines, want the long reply", p.item, long.end-long.start)
 	}
 	steps := 0
-	for p.item == 2 && steps < 20 {
+	for p.item == b+2 && steps < 20 {
 		before := p.offset
 		e.press("j")
 		steps++
-		if p.item == 2 && p.offset <= before {
+		if p.item == b+2 && p.offset <= before {
 			t.Fatalf("j inside the long comment did not scroll")
 		}
 	}
-	if steps < 2 || p.item != 3 {
+	if steps < 2 || p.item != b+3 {
 		t.Errorf("left the long comment after %d steps at item %d", steps, p.item)
 	}
 
 	// k reads back up through it, then to the short reply.
-	for p.item != 1 && steps < 40 {
+	for p.item != b+1 && steps < 40 {
 		e.press("k")
 		steps++
 	}
-	if p.item != 1 {
+	if p.item != b+1 {
 		t.Errorf("k never returned to the short reply")
 	}
 }
 
 func TestReaderMarksAndEditsTheSelectedComment(t *testing.T) {
-	e, first := readerEnv(t, 30)
+	e, _ := readerEnv(t, 30)
 	p := &e.m.main
-	e.press("g", "j")
+	e.press("g", "j", "j")
 	// The margin bar spans the selected comment only.
 	marked := 0
 	marker := e.m.r.hunkMarker(rowState{activeHunk: true})
@@ -1138,7 +1155,6 @@ func TestReaderMarksAndEditsTheSelectedComment(t *testing.T) {
 	if e.m.mode != modeCompose || e.m.compose.area.Value() != "short reply" {
 		t.Errorf("e opened %q, want the selected comment", e.m.compose.area.Value())
 	}
-	_ = first
 }
 
 func TestReaderScrollSelectsAtReadingPosition(t *testing.T) {
@@ -1213,7 +1229,7 @@ func TestReaderKeepsTheThreadInView(t *testing.T) {
 	p := &e.m.main
 	// Walk to the line thread's last comment.
 	for range 20 {
-		if it := p.items[p.item]; p.rows[it.row].thread.ID == v.ID && p.itemSegment() == 3 {
+		if it := p.items[p.item]; p.rows[it.row].thread != nil && p.rows[it.row].thread.ID == v.ID && p.itemSegment() == 3 {
 			break
 		}
 		e.press("j")
@@ -1464,4 +1480,93 @@ func TestJumpList(t *testing.T) {
 	if !strings.Contains(e.m.status, "newest") {
 		t.Errorf("forward history survived a new jump: status %q", e.m.status)
 	}
+}
+
+func TestReviewEntries(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "a thread"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, "the summary"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictApprove, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	// Both reviews are selectable entries, even the one with nothing in it.
+	var reviews []row
+	for _, r := range e.m.main.rows {
+		if r.kind == rowReview {
+			reviews = append(reviews, r)
+		}
+	}
+	if len(reviews) != 2 || reviews[0].thread == nil || reviews[1].thread != nil {
+		t.Fatalf("review entries = %+v", reviews)
+	}
+	// The summary is drawn with its review, not as a boxed thread.
+	if !strings.Contains(e.screen(), "the summary") || strings.Contains(e.screen(), "Summary (r1)") {
+		t.Errorf("summary not drawn with its review:\n%s", e.screen())
+	}
+	// enter collapses the summary from the review entry, x resolves it.
+	e.cursorTo(func(r row) bool { return r.kind == rowReview && r.thread != nil })
+	e.press("enter")
+	if !e.m.main.rows[e.m.main.cursor].collapsed {
+		t.Error("enter did not collapse the summary")
+	}
+	e.pressRun("x")
+	if v := mustThread(t, e, "r1"); v.State != store.ThreadResolved {
+		t.Errorf("x on the review left its summary %s", v.State)
+	}
+
+	// D on the empty approval deletes it, after y.
+	e.cursorTo(func(r row) bool { return r.kind == rowReview && r.review.Seq == 2 })
+	e.press("D")
+	if e.m.mode != modeConfirm || !strings.Contains(e.m.confirm.prompt, "review #2") {
+		t.Fatalf("D on review 2: mode %d prompt %q", e.m.mode, e.m.confirm.prompt)
+	}
+	e.pressRun("y")
+	if rs, _ := e.svc.Reviews(ctx, e.chg); len(rs) != 1 {
+		t.Errorf("reviews after deleting #2 = %d, want 1", len(rs))
+	}
+}
+
+func TestDeleteCommentAsks(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "oops"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	e.press("X")
+	if e.m.mode != modeConfirm || !strings.Contains(e.m.confirm.prompt, "Delete thread #1") {
+		t.Fatalf("X: mode %d prompt %q", e.m.mode, e.m.confirm.prompt)
+	}
+	e.press("n")
+	if _, err := e.svc.ThreadByRef(ctx, e.chg, strconv.Itoa(v.Seq)); err != nil {
+		t.Fatal("n deleted the thread")
+	}
+	e.press("X")
+	e.pressRun("y")
+	if _, err := e.svc.ThreadByRef(ctx, e.chg, strconv.Itoa(v.Seq)); err == nil {
+		t.Error("y did not delete the thread")
+	}
+}
+
+func mustThread(t *testing.T, e *tuiEnv, ref string) review.ThreadView {
+	t.Helper()
+	v, err := e.svc.ThreadByRef(t.Context(), e.chg, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }

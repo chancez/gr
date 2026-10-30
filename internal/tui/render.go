@@ -216,6 +216,8 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 			r.segments = append(r.segments, s+shift)
 		}
 		return lines
+	case rowReview:
+		return r.renderReview(d, rw, width, state)
 	case rowGap:
 		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
 		style := st.muted
@@ -343,6 +345,43 @@ func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int
 		out = append(out, " "+r.renderUnified(f, l, width-1, rowState{}))
 	}
 	return out
+}
+
+// renderReview draws a review's header bar and, unless collapsed, its summary and the replies to it
+// beneath, unboxed, so a summary reads as part of its review rather than as one more thread.
+func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState) []string {
+	st := r.st
+	lines := rw.text(width)
+	t := rw.thread
+	if t == nil {
+		return lines
+	}
+	if rw.collapsed {
+		first := ""
+		if len(t.Comments) > 0 {
+			first = strings.Join(strings.Fields(t.Comments[0].Body), " ")
+		}
+		line := fmt.Sprintf("    %d comments  %s", len(t.Comments), first)
+		return append(lines, st.muted.Render(fit(ansi.Truncate(line, width, "..."), width, nil)))
+	}
+	r.segments = []int{0}
+	for i, c := range t.Comments {
+		if i > 0 {
+			r.segments = append(r.segments, len(lines))
+			lines = append(lines, "")
+		}
+		header := st.author.Render(c.Author.Name) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
+		if d.isDraft(c.ReviewID) {
+			header += st.badgeWarn.Render("  draft")
+		}
+		if i > 0 {
+			lines = append(lines, fit("    "+header, width, nil))
+		}
+		for _, l := range r.renderMarkdown(c.Body, width-6) {
+			lines = append(lines, "    "+l)
+		}
+	}
+	return lines
 }
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.

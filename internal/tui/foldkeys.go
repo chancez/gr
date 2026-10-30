@@ -61,7 +61,7 @@ func (m *model) fold(op foldOp) {
 	}
 	v := m.views[m.current]
 	r := p.rows[p.cursor]
-	if r.kind == rowThread {
+	if (r.kind == rowThread || r.kind == rowReview) && r.thread != nil {
 		collapsed := m.threadCollapsed(*r.thread)
 		switch op {
 		case foldOpen:

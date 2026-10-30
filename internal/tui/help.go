@@ -50,6 +50,15 @@ func (m *model) shortHelp() []key.Binding {
 			hint("ctrl+j/k", "other list")}, tail...)
 	case contextOverview:
 		bindings := []key.Binding{hint("c", "comment"), k.Submit}
+		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].kind == rowReview {
+			r := m.main.rows[c]
+			if r.thread != nil {
+				bindings = append(bindings, hint("enter", "summary"), k.Reply, hint("x", "resolve summary"))
+			}
+			if r.review.Author == m.svc.Author() {
+				bindings = append(bindings, hint("D", "delete review"))
+			}
+		}
 		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].kind == rowThread {
 			bindings = append(bindings, k.Reply, hint("e", "edit"), k.Resolve, hint("enter", "expand"), hint("o", "open in diff"))
 		}
@@ -98,7 +107,7 @@ func (m *model) helpSections() []helpSection {
 			hint("j/k", "scroll"), hint("d/u, f/b", "half page, page"), hint("t/T", "next/prev thread"),
 			hint("enter", "expand/collapse thread"), hint("o", "open thread in the whole diff"),
 			hint("O", "open thread in its commit"), k.Filter,
-			hint("c", "comment on the change"),
+			hint("c", "comment on the change"), hint("D", "on your review: delete it"),
 		}},
 		{title: "Diff", context: contextDiff, bindings: []key.Binding{
 			hint("j/k", "move"), hint("d/u, f/b", "half page, page"), hint("]/[", "next/prev file"),
@@ -106,7 +115,7 @@ func (m *model) helpSections() []helpSection {
 			hint("h/l", "old/new side in split"), k.Select, k.Comment, k.FileComment, k.Reviewed, k.CommitDone,
 		}},
 		{title: "Threads", global: true, bindings: []key.Binding{
-			k.Reply, hint("x", "resolve/reopen"), k.Address, k.Edit, k.Delete,
+			k.Reply, hint("x", "resolve/reopen"), k.Address, k.Edit, hint("X", "delete my comment or thread"),
 		}},
 		{title: "Folds", context: contextDiff, bindings: []key.Binding{
 			hint("enter", "expand/collapse"), hint("zo/zc/za", "open/close/toggle"), hint("zR/zM", "open/close all"),

@@ -61,7 +61,7 @@ const (
 	modeNormal mode = iota
 	modeCompose
 	modeVerdict
-	modeConfirmDiscard
+	modeConfirm
 	modeHelp
 	modeSearch
 )
@@ -114,6 +114,8 @@ type model struct {
 	// theme is the built-in palette, and isDark whether the terminal's background is dark.
 	theme  string
 	isDark bool
+	// confirm is the action waiting on a y/n prompt.
+	confirm confirmation
 	// filter selects the threads the overview shows.
 	filter threadFilter
 	// lastSidebar is the sidebar section h returns to.
@@ -342,7 +344,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.composeKey(msg)
 		case modeVerdict:
 			return m.verdictKey(msg)
-		case modeConfirmDiscard:
+		case modeConfirm:
 			return m.confirmKey(msg)
 		case modeHelp:
 			m.mode = modeNormal
@@ -455,7 +457,7 @@ func (m *model) rebuildMain() {
 		})
 	}
 	for i := range m.main.rows {
-		if t := m.main.rows[i].thread; m.main.rows[i].kind == rowThread {
+		if t := m.main.rows[i].thread; t != nil && (m.main.rows[i].kind == rowThread || m.main.rows[i].kind == rowReview) {
 			m.main.rows[i].collapsed = m.threadCollapsed(*t)
 		}
 	}
@@ -539,12 +541,10 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.toggleReviewed(key.Matches(msg, k.CommitDone))
 	case key.Matches(msg, k.Discard):
-		if _, ok := m.data.draft(); !ok {
-			m.setError(errNoDraft)
+		if m.data == nil {
 			return m, nil
 		}
-		m.mode = modeConfirmDiscard
-		return m, nil
+		return m, m.deleteReviewAtCursor()
 	}
 	if m.data == nil {
 		return m, nil
@@ -804,7 +804,7 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
 			m.fold(foldOpen)
-		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+		} else if p.cursor < len(p.rows) && (p.rows[p.cursor].kind == rowThread || p.rows[p.cursor].kind == rowReview) {
 			m.fold(foldToggle)
 		}
 	case key.Matches(msg, k.Comment):
@@ -837,14 +837,25 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		c, ok := m.lastOwnComment(t)
+		// In the overview, delete the selected comment when it is yours.
+		if seg := m.main.itemSegment(); m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
+			c, ok = t.Comments[seg], true
+		}
 		if !ok {
 			m.setError(errors.New("no comment of yours in this thread"))
 			return m, nil
 		}
 		svc, ctx := m.svc, m.ctx
-		return m, func() tea.Msg {
-			return opMsg{status: "comment deleted", err: svc.DeleteComment(ctx, c.ID)}
+		prompt := fmt.Sprintf("Delete your comment on %s? y/n", t.Label())
+		status := "comment deleted"
+		if len(t.Comments) > 0 && t.Comments[0].ID == c.ID {
+			prompt = fmt.Sprintf("Delete thread %s? Its first comment is the thread. y/n", t.Label())
+			status = "thread " + t.Label() + " deleted"
 		}
+		m.ask(prompt, func() tea.Msg {
+			return opMsg{status: status, err: svc.DeleteComment(ctx, c.ID)}
+		})
+		return m, nil
 	default:
 		return m, nil
 	}
@@ -968,8 +979,13 @@ func (m *model) isChangeStart(i int) bool {
 
 func (m *model) cursorThread() (review.ThreadView, bool) {
 	p := &m.main
-	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+	if p.cursor < len(p.rows) && p.rows[p.cursor].thread != nil &&
+		(p.rows[p.cursor].kind == rowThread || p.rows[p.cursor].kind == rowReview) {
 		return *p.rows[p.cursor].thread, true
+	}
+	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowReview {
+		m.setError(errors.New("this review has no summary"))
+		return review.ThreadView{}, false
 	}
 	m.setError(errors.New("move the cursor to a thread first"))
 	return review.ThreadView{}, false
@@ -1252,15 +1268,52 @@ func (m *model) verdictKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, m.openComposer(composer{kind: composeSubmit, verdict: verdict, title: "Submit review: " + string(verdict) + " (summary is optional)"}, initial)
 }
 
+// confirmation is a destructive action waiting for y.
+type confirmation struct {
+	prompt string
+	run    func() tea.Msg
+}
+
+// ask puts a destructive action behind a y/n prompt.
+func (m *model) ask(prompt string, run func() tea.Msg) {
+	m.confirm = confirmation{prompt: prompt, run: run}
+	m.mode = modeConfirm
+}
+
 func (m *model) confirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.mode = modeNormal
-	if msg.String() != "y" {
+	c := m.confirm
+	m.confirm = confirmation{}
+	if msg.String() != "y" || c.run == nil {
 		return m, nil
 	}
+	return m, c.run
+}
+
+// deleteReviewAtCursor deletes the review whose entry the cursor is on, or discards the draft
+// when the cursor is elsewhere, after asking.
+func (m *model) deleteReviewAtCursor() tea.Cmd {
 	svc, ctx, change := m.svc, m.ctx, m.data.change
-	return m, func() tea.Msg {
-		return opMsg{status: "draft review discarded", err: svc.Discard(ctx, change)}
+	p := &m.main
+	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowReview && p.rows[p.cursor].review.State == store.ReviewSubmitted {
+		rv := *p.rows[p.cursor].review
+		if rv.Author != svc.Author() {
+			m.setError(fmt.Errorf("review #%d is by %s", rv.Seq, rv.Author.Name))
+			return nil
+		}
+		m.ask(fmt.Sprintf("Delete your review #%d with its summary and threads? y/n", rv.Seq), func() tea.Msg {
+			return opMsg{status: fmt.Sprintf("review #%d deleted", rv.Seq), err: svc.DeleteReview(ctx, change, rv.Seq)}
+		})
+		return nil
 	}
+	if _, ok := m.data.draft(); !ok {
+		m.setError(errors.New("no draft review; on a review of yours, D deletes it"))
+		return nil
+	}
+	m.ask("Discard your draft review and all its comments? y/n", func() tea.Msg {
+		return opMsg{status: "draft review discarded", err: svc.Discard(ctx, change)}
+	})
+	return nil
 }
 
 // editorCmd suspends the TUI and edits text in $VISUAL or $EDITOR.
@@ -1483,8 +1536,8 @@ func (m *model) renderStatus() string {
 		return m.searchInput.View()
 	case modeVerdict:
 		return st.heading.Render("Submit review: ") + "[a]pprove  [r]equest changes  [c]omment  " + st.muted.Render("any other key cancels")
-	case modeConfirmDiscard:
-		return st.statusErr.Render("Discard your draft review and all its comments? y/n")
+	case modeConfirm:
+		return st.statusErr.Render(m.confirm.prompt)
 	}
 	d := m.data
 	left := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)

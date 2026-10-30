@@ -65,6 +65,8 @@ const (
 	rowThread
 	// rowGap is a closed fold of unchanged lines.
 	rowGap
+	// rowReview is a review in the overview: its header bar, then its summary when it has one.
+	rowReview
 )
 
 // row is one selectable or static block of the main pane.
@@ -86,6 +88,8 @@ type row struct {
 	gap *gap
 	// excerpt is the diff shown above a thread in the overview.
 	excerpt *review.Excerpt
+	// review is set on a rowReview. Its summary thread, if any, is thread.
+	review *store.Review
 }
 
 func (r row) selectable() bool { return r.kind != rowText }
@@ -110,6 +114,8 @@ func (r row) key(files []git.FileDiff) string {
 		return fmt.Sprintf("line:%s:%d:%d", path, old, new)
 	case rowGap:
 		return fmt.Sprintf("gap:%s:%d", path, r.gap.index)
+	case rowReview:
+		return "review:" + r.review.ID
 	}
 	return ""
 }
@@ -340,7 +346,10 @@ func (r row) searchText(files []git.FileDiff) string {
 			}
 		}
 		return strings.Join(parts, "\n")
-	case rowThread:
+	case rowThread, rowReview:
+		if r.thread == nil {
+			return ""
+		}
 		var parts []string
 		for _, c := range r.thread.Comments {
 			parts = append(parts, c.Author.Name, c.Body)
