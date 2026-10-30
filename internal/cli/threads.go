@@ -72,7 +72,7 @@ func (a *app) threadsCommand() *cobra.Command {
 func (a *app) threadCommand() *cobra.Command {
 	var cf changeFlags
 	cmd := &cobra.Command{
-		Use:   "thread <number>",
+		Use:   "thread <ref>",
 		Short: "Show one thread",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -172,7 +172,7 @@ func printExcerpt(w io.Writer, e review.Excerpt) {
 
 func threadHeader(t review.ThreadView, draft bool, reviewSeq int) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "#%d [%s", t.Seq, t.State)
+	fmt.Fprintf(&b, "%s [%s", t.Label(), t.State)
 	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
 		fmt.Fprintf(&b, " by %s", t.StateBy.Name)
 	}
@@ -300,7 +300,7 @@ func (a *app) replyCommand() *cobra.Command {
 	var bf bodyFlags
 	var draft bool
 	cmd := &cobra.Command{
-		Use:   "reply <thread>",
+		Use:   "reply <ref>",
 		Short: "Reply to a thread",
 		Long:  "Reply to a thread. The reply is published immediately unless --draft adds it to your draft review.",
 		Args:  cobra.ExactArgs(1),
@@ -345,7 +345,7 @@ func (a *app) stateCommand(use string, state store.ThreadState, short string) *c
 	var cf changeFlags
 	var bf bodyFlags
 	cmd := &cobra.Command{
-		Use:   use + " <thread>...",
+		Use:   use + " <ref>...",
 		Short: short,
 		Long:  short + ". With -m, also reply.",
 		Args:  cobra.MinimumNArgs(1),
@@ -372,7 +372,7 @@ func (a *app) stateCommand(use string, state store.ThreadState, short string) *c
 				if err := svc.SetThreadState(ctx, t.ID, state); err != nil {
 					return err
 				}
-				fmt.Fprintf(a.stderr, "thread #%d is %s\n", t.Seq, state)
+				fmt.Fprintf(a.stderr, "thread %s is %s\n", t.Label(), state)
 			}
 			return nil
 		},

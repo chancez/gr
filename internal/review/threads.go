@@ -366,7 +366,11 @@ func (s *Service) ThreadByRef(ctx context.Context, change store.Change, ref stri
 	ref = strings.TrimPrefix(ref, "#")
 	var t store.Thread
 	var err error
-	if seq, convErr := strconv.Atoi(ref); convErr == nil {
+	if n, isSummary := strings.CutPrefix(ref, "r"); isSummary && isNumber(n) {
+		// A review's summary: r1 is review #1's.
+		reviewSeq, _ := strconv.Atoi(n)
+		t, err = s.store.ThreadBySeq(ctx, change.ID, store.SummarySeq(reviewSeq))
+	} else if seq, convErr := strconv.Atoi(ref); convErr == nil && seq > 0 {
 		t, err = s.store.ThreadBySeq(ctx, change.ID, seq)
 	} else {
 		t, err = s.store.ResolveThreadPrefix(ctx, change.ID, ref)
@@ -438,4 +442,9 @@ func (s *Service) withComments(ctx context.Context, threads []store.Thread) ([]T
 		views = append(views, ThreadView{Thread: t, Comments: comments})
 	}
 	return views, nil
+}
+
+func isNumber(s string) bool {
+	_, err := strconv.Atoi(s)
+	return err == nil && s != "" && s[0] != '-' && s[0] != '+'
 }

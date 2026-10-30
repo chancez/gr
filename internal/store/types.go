@@ -1,6 +1,7 @@
 package store
 
 import (
+	"strconv"
 	"time"
 
 	"github.com/chancez/gr/internal/anchor"
@@ -179,4 +180,21 @@ type Mark struct {
 	Commit string
 	Path   string
 	Blob   string
+}
+
+// Ref is how a thread is referred to: its number, or for a summary thread "r" and its review's
+// number.
+func (t Thread) Ref() string {
+	if t.Summary {
+		return "r" + strconv.Itoa(-t.Seq)
+	}
+	return strconv.Itoa(t.Seq)
+}
+
+// Label is Ref as shown to people: "#5" or "r1".
+func (t Thread) Label() string {
+	if t.Summary {
+		return t.Ref()
+	}
+	return "#" + t.Ref()
 }

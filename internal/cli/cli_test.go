@@ -53,6 +53,7 @@ func TestReviewRoundTrip(t *testing.T) {
 	}
 	e.run(human, "submit", "--request-changes", "-m", "fix it")
 	e.run(agent, "address", "1", "-m", "done")
+	e.run(agent, "reply", "r1", "-m", "on it")
 	e.run(agent, "resolve", "2")
 
 	var got []threadJSON
@@ -60,7 +61,15 @@ func TestReviewRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []threadJSON{{
-		Seq: 1, Change: 1, Review: 1, State: "addressed", StateBy: &authorJSON{Name: "agent"},
+		// The review's summary, open for a reply, numbered by its review.
+		Ref: "r1", Change: 1, Review: 1, State: "open", Summary: true,
+		Location: locationJSON{Scope: "change", Revision: 1},
+		Comments: []commentJSON{
+			{Author: authorJSON{Name: "Human", Email: "h@example.com"}, Body: "fix it"},
+			{Author: authorJSON{Name: "agent"}, Body: "on it"},
+		},
+	}, {
+		Ref: "1", Seq: 1, Change: 1, Review: 1, State: "addressed", StateBy: &authorJSON{Name: "agent"},
 		Location: locationJSON{
 			Scope: "commit", Revision: 1, Commit: commit, Path: "f.txt", Side: "new", StartLine: 2, EndLine: 2, Lines: []string{"B"},
 		},
@@ -76,11 +85,6 @@ func TestReviewRoundTrip(t *testing.T) {
 			{Author: authorJSON{Name: "Human", Email: "h@example.com"}, Body: "why?"},
 			{Author: authorJSON{Name: "agent"}, Body: "done"},
 		},
-	}, {
-		// The review's summary, open for a reply.
-		Seq: 3, Change: 1, Review: 1, State: "open", Summary: true,
-		Location: locationJSON{Scope: "change", Revision: 1},
-		Comments: []commentJSON{{Author: authorJSON{Name: "Human", Email: "h@example.com"}, Body: "fix it"}},
 	}}
 	ignore := cmp.Options{
 		cmpopts.IgnoreFields(threadJSON{}, "ID"),
@@ -94,7 +98,7 @@ func TestReviewRoundTrip(t *testing.T) {
 	if err := json.Unmarshal([]byte(e.run(agent, "threads", "--json", "--commit", commit)), &byCommit); err != nil {
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(want[:1], byCommit, ignore); diff != "" {
+	if diff := cmp.Diff(want[1:], byCommit, ignore); diff != "" {
 		t.Errorf("threads --commit mismatch (-want +got):\n%s", diff)
 	}
 }

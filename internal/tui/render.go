@@ -347,13 +347,13 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	st := r.st
 	where := describeLocation(t.Location)
 	if t.Summary {
-		where = "review summary"
+		where = "summary"
 	}
 	first := ""
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	text := fmt.Sprintf("  > #%d %s  %s  %d comments  %s", t.Seq, ansi.Strip(stateBadge(st, t, d.isDraft(t.ReviewID))),
+	text := fmt.Sprintf("  > %s %s  %s  %d comments  %s", t.Label(), ansi.Strip(stateBadge(st, t, d.isDraft(t.ReviewID))),
 		where, len(t.Comments), first)
 	style := st.muted
 	if state.cursor {
@@ -368,9 +368,10 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	const indent = 2
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
-	title := st.threadTitle.Render(fmt.Sprintf("#%d", t.Seq)) + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
+	title := st.threadTitle.Render(t.Label()) + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
 	if t.Summary {
-		title += st.muted.Render("  review summary")
+		// A summary belongs to its review, so it is titled as the review's rather than numbered.
+		title = st.threadTitle.Render("Summary") + st.muted.Render(" ("+t.Label()+")") + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
 	} else if loc := describeLocation(t.Location); loc != "" {
 		title += st.muted.Render("  " + loc)
 	}

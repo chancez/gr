@@ -70,7 +70,7 @@ func TestBackfillSummaryThreads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(threads) != 1 || !threads[0].Summary || threads[0].ReviewID != "rv" || threads[0].Location.Scope != ScopeChange {
+	if len(threads) != 1 || !threads[0].Summary || threads[0].ReviewID != "rv" || threads[0].Location.Scope != ScopeChange || threads[0].Ref() != "r1" {
 		t.Fatalf("threads after backfill = %+v, want one summary thread for the review with a body", threads)
 	}
 	comments, err := s.ListComments(t.Context(), threads[0].ID, Author{})

@@ -67,13 +67,17 @@ func locationArgs(l Location) ([]any, error) {
 }
 
 // CreateThread inserts a thread, assigning its id, seq, and timestamps.
+// A Thread with a Seq keeps it, as summary threads do; otherwise the next number is allocated.
 func (q queries) CreateThread(ctx context.Context, t Thread) (Thread, error) {
-	seq, err := q.nextSeq(ctx, "threads", "change_id", t.ChangeID)
-	if err != nil {
-		return Thread{}, err
+	if t.Seq == 0 {
+		seq, err := q.nextSeq(ctx, "threads", "change_id", t.ChangeID)
+		if err != nil {
+			return Thread{}, err
+		}
+		t.Seq = seq
 	}
 	now := q.now()
-	t.ID, t.Seq, t.CreatedAt, t.UpdatedAt = newID(), seq, now, now
+	t.ID, t.CreatedAt, t.UpdatedAt = newID(), now, now
 	if t.State == "" {
 		t.State = ThreadOpen
 	}
@@ -91,11 +95,15 @@ func (q queries) CreateThread(ctx context.Context, t Thread) (Thread, error) {
 	return t, nil
 }
 
+// SummarySeq is the seq a review's summary thread is stored under: the negative of the review's
+// number, keeping summaries out of the thread numbers and one per review.
+func SummarySeq(reviewSeq int) int { return -reviewSeq }
+
 // CreateSummaryThread starts the thread holding a submitted review's summary, with the summary as
 // its first comment.
 func (q queries) CreateSummaryThread(ctx context.Context, r Review) (Thread, error) {
 	t, err := q.CreateThread(ctx, Thread{
-		ChangeID: r.ChangeID, RevisionID: r.RevisionID, ReviewID: r.ID, Summary: true,
+		ChangeID: r.ChangeID, RevisionID: r.RevisionID, ReviewID: r.ID, Summary: true, Seq: SummarySeq(r.Seq),
 		Location: Location{Scope: ScopeChange, RevisionID: r.RevisionID},
 	})
 	if err != nil {
@@ -171,7 +179,7 @@ func (q queries) ListThreads(ctx context.Context, f ThreadFilter) ([]Thread, err
 	}
 	rows, err := q.q.QueryContext(ctx,
 		`SELECT `+prefixed("t", threadColumns)+` FROM threads t JOIN reviews r ON r.id = t.review_id
-		WHERE `+cmp.Or(strings.Join(where, " AND "), "1")+` ORDER BY t.change_id, t.seq`, args...)
+		WHERE `+cmp.Or(strings.Join(where, " AND "), "1")+` ORDER BY t.change_id, t.summary DESC, abs(t.seq)`, args...)
 	if err != nil {
 		return nil, err
 	}

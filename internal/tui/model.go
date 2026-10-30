@@ -954,7 +954,7 @@ func (m *model) setThreadState(t review.ThreadView, state store.ThreadState) tea
 	delete(m.threadFolds, t.ID)
 	svc, ctx := m.svc, m.ctx
 	return func() tea.Msg {
-		return opMsg{status: fmt.Sprintf("thread #%d %s", t.Seq, state), err: svc.SetThreadState(ctx, t.ID, state)}
+		return opMsg{status: fmt.Sprintf("thread %s %s", t.Label(), state), err: svc.SetThreadState(ctx, t.ID, state)}
 	}
 }
 
@@ -1089,7 +1089,7 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 	initial := ""
 	switch kind {
 	case composeReply:
-		c.title = fmt.Sprintf("Reply to #%d", t.Seq)
+		c.title = fmt.Sprintf("Reply to %s", t.Label())
 	case composeEdit:
 		own, ok := m.lastOwnComment(t)
 		// In the overview, edit the selected comment when it is yours.
@@ -1100,7 +1100,7 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 			m.setError(errors.New("no comment of yours in this thread"))
 			return m, nil
 		}
-		c.title, c.commentID, initial = fmt.Sprintf("Edit your comment on #%d", t.Seq), own.ID, own.Body
+		c.title, c.commentID, initial = fmt.Sprintf("Edit your comment on %s", t.Label()), own.ID, own.Body
 	}
 	return m, m.openComposer(c, initial)
 }

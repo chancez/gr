@@ -822,7 +822,7 @@ func TestConversationView(t *testing.T) {
 	e.openNav("Overview")
 
 	screen := e.screen()
-	for _, want := range []string{"requested changes", "Two things.", "review summary", "why hello?", `+     println("hello")`, "commit "} {
+	for _, want := range []string{"requested changes", "Two things.", "Summary (r1)", "why hello?", `+     println("hello")`, "commit "} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("conversation missing %q:\n%s", want, screen)
 		}

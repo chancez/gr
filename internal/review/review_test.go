@@ -231,11 +231,12 @@ func TestThreadsAndDrafts(t *testing.T) {
 			Thread:   store.Thread{Seq: 3, State: store.ThreadOpen, Location: store.Location{Scope: store.ScopeChange}},
 			Comments: []store.Comment{{Author: human, Body: "overall"}},
 		},
-		{
-			Thread:   store.Thread{Seq: 4, State: store.ThreadOpen, Summary: true, Location: store.Location{Scope: store.ScopeChange}},
-			Comments: []store.Comment{{Author: human, Body: "please fix"}},
-		},
 	}
+	// The summary is numbered by its review, outside the thread numbers, and lists first.
+	want = append([]review.ThreadView{{
+		Thread:   store.Thread{Seq: store.SummarySeq(1), State: store.ThreadOpen, Summary: true, Location: store.Location{Scope: store.ScopeChange}},
+		Comments: []store.Comment{{Author: human, Body: "please fix"}},
+	}}, want...)
 	if diff := cmp.Diff(want, got, ignoreGenerated); diff != "" {
 		t.Errorf("Threads mismatch (-want +got):\n%s", diff)
 	}
@@ -244,7 +245,7 @@ func TestThreadsAndDrafts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if diff := cmp.Diff(want[:2], byCommit, ignoreGenerated); diff != "" {
+	if diff := cmp.Diff(want[1:3], byCommit, ignoreGenerated); diff != "" {
 		t.Errorf("CommitThreads mismatch (-want +got):\n%s", diff)
 	}
 
@@ -569,5 +570,40 @@ func TestMarks(t *testing.T) {
 	}
 	if marks, _ = h.Marks(ctx, change); marks[review.DiffFileMark(newFiles[0])] {
 		t.Error("whole-diff mark survived a content change")
+	}
+}
+
+func TestSummaryRef(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	h := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(h, "")
+	line, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "x"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictComment, "summary"); err != nil {
+		t.Fatal(err)
+	}
+	next, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "y"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The summary took no thread number.
+	if line.Seq != 1 || next.Seq != 2 {
+		t.Errorf("thread numbers = %d, %d; want 1, 2", line.Seq, next.Seq)
+	}
+	got, err := h.ThreadByRef(ctx, change, "r1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !got.Summary || got.Ref() != "r1" || got.Label() != "r1" || got.Comments[0].Body != "summary" {
+		t.Errorf("r1 = %+v", got)
+	}
+	if _, err := h.ThreadByRef(ctx, change, "-1"); err == nil {
+		t.Error("a negative number found a thread")
 	}
 }

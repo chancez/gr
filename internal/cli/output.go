@@ -89,8 +89,11 @@ type excerptJSON struct {
 }
 
 type threadJSON struct {
-	ID       string      `json:"id"`
-	Seq      int         `json:"seq"`
+	ID string `json:"id"`
+	// Ref is what commands take to name the thread: its number, or "r1" for review #1's summary.
+	Ref string `json:"ref"`
+	// Seq is the thread's number, 0 for a summary, which is numbered by its review instead.
+	Seq      int         `json:"seq,omitzero"`
 	Change   int         `json:"change"`
 	State    string      `json:"state"`
 	StateBy  *authorJSON `json:"state_by,omitzero"`
@@ -247,7 +250,7 @@ func (l *lookups) thread(ctx context.Context, v review.ThreadView) (threadJSON, 
 	}
 	loc := v.Location
 	out := threadJSON{
-		ID: v.ID, Seq: v.Seq, Change: changeSeq, State: string(v.State), Outdated: v.Outdated, Draft: draft,
+		ID: v.ID, Ref: v.Ref(), Seq: max(v.Seq, 0), Change: changeSeq, State: string(v.State), Outdated: v.Outdated, Draft: draft,
 		Review: started.Seq, Summary: v.Summary,
 		Location: locationJSON{
 			Scope: string(loc.Scope), Revision: revSeq, Commit: loc.Commit, Path: loc.Path, Side: string(loc.Side),

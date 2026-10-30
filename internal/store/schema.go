@@ -135,6 +135,10 @@ UPDATE comments SET created_at = (SELECT submitted_at FROM reviews WHERE reviews
 	updated_at = (SELECT submitted_at FROM reviews WHERE reviews.id = comments.review_id)
 	WHERE review_id IS NOT NULL AND thread_id IN (SELECT id FROM threads WHERE summary = 1);
 `,
+	`
+-- A summary is one per review, so it is numbered by its review rather than taking a thread number.
+UPDATE threads SET seq = -(SELECT seq FROM reviews WHERE reviews.id = threads.review_id) WHERE summary = 1;
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.
