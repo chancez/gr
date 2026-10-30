@@ -125,6 +125,11 @@ func (s *Store) migrate(ctx context.Context) error {
 			if _, err := tx.q.ExecContext(ctx, migrations[i]); err != nil {
 				return fmt.Errorf("apply migration %d: %w", i+1, err)
 			}
+			if backfill, ok := backfills[i]; ok {
+				if err := backfill(ctx, tx); err != nil {
+					return fmt.Errorf("backfill migration %d: %w", i+1, err)
+				}
+			}
 		}
 		// PRAGMA takes no bound parameters.
 		if _, err := tx.q.ExecContext(ctx, fmt.Sprintf(`PRAGMA user_version = %d`, len(migrations))); err != nil {

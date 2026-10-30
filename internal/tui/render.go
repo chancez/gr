@@ -312,7 +312,9 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
 	title := st.threadTitle.Render(fmt.Sprintf("#%d", t.Seq)) + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
-	if loc := describeLocation(t.Location); loc != "" {
+	if t.Summary {
+		title += st.muted.Render("  review summary")
+	} else if loc := describeLocation(t.Location); loc != "" {
 		title += st.muted.Render("  " + loc)
 	}
 	lines := []string{ansi.Truncate(title, inner, "")}

@@ -52,10 +52,23 @@ func buildOverview(d *changeData, r *renderer) []row {
 			submitted++
 		}
 	}
+	summaries := map[string]int{}
+	for i, t := range d.threads {
+		if t.Summary {
+			summaries[t.ReviewID] = i
+		}
+	}
 	if submitted > 0 {
 		rows = append(rows, plain(st.heading.Render("Reviews")))
 		for _, rv := range d.reviews {
 			if rv.State != store.ReviewSubmitted {
+				continue
+			}
+			if i, ok := summaries[rv.ID]; ok {
+				// The summary thread carries the body, its replies, and its state.
+				rows = append(rows, plain("  "+st.author.Render(rv.Author.Name)+" "+verdictLabel(st, rv.Verdict)+"  "+
+					st.muted.Render(rv.SubmittedAt.Local().Format("2006-01-02 15:04"))))
+				rows = append(rows, row{kind: rowThread, file: -1, thread: &d.threads[i]})
 				continue
 			}
 			rows = append(rows, text(func(width int) []string {
@@ -77,7 +90,7 @@ func buildOverview(d *changeData, r *renderer) []row {
 		switch {
 		case t.Outdated:
 			outdated = append(outdated, i)
-		case t.Location.Scope == store.ScopeChange:
+		case t.Location.Scope == store.ScopeChange && !t.Summary:
 			changeThreads = append(changeThreads, i)
 		}
 	}

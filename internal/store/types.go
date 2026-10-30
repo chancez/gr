@@ -151,9 +151,11 @@ type Thread struct {
 	ReviewID string
 	State    ThreadState
 	// StateBy and StateAt record who last changed State, and when.
-	StateBy   Author
-	StateAt   time.Time
-	Outdated  bool
+	StateBy  Author
+	StateAt  time.Time
+	Outdated bool
+	// Summary marks the thread holding its review's summary.
+	Summary   bool
 	Location  Location
 	CreatedAt time.Time
 	UpdatedAt time.Time

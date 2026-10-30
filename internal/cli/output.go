@@ -89,13 +89,17 @@ type excerptJSON struct {
 }
 
 type threadJSON struct {
-	ID       string        `json:"id"`
-	Seq      int           `json:"seq"`
-	Change   int           `json:"change"`
-	State    string        `json:"state"`
-	StateBy  *authorJSON   `json:"state_by,omitzero"`
-	Outdated bool          `json:"outdated"`
-	Draft    bool          `json:"draft"`
+	ID       string      `json:"id"`
+	Seq      int         `json:"seq"`
+	Change   int         `json:"change"`
+	State    string      `json:"state"`
+	StateBy  *authorJSON `json:"state_by,omitzero"`
+	Outdated bool        `json:"outdated"`
+	Draft    bool        `json:"draft"`
+	// Review is the number of the review the thread was started in.
+	Review int `json:"review"`
+	// Summary is set on the thread holding a review's summary.
+	Summary  bool          `json:"summary"`
 	Location locationJSON  `json:"location"`
 	Context  *excerptJSON  `json:"context,omitzero"`
 	Comments []commentJSON `json:"comments"`
@@ -131,7 +135,7 @@ type lookups struct {
 	svc       *review.Service
 	revisions map[string]int
 	changes   map[string]int
-	reviews   map[string]store.ReviewState
+	reviews   map[string]store.Review
 	// excerpts holds loaded thread excerpts by thread id. A loaded thread without lines has no entry.
 	excerpts map[string]review.Excerpt
 	loaded   map[string]bool
@@ -164,7 +168,7 @@ func (l *lookups) excerpt(ctx context.Context, v review.ThreadView) (review.Exce
 
 func newLookups(svc *review.Service) *lookups {
 	return &lookups{
-		svc: svc, revisions: map[string]int{}, changes: map[string]int{}, reviews: map[string]store.ReviewState{},
+		svc: svc, revisions: map[string]int{}, changes: map[string]int{}, reviews: map[string]store.Review{},
 		excerpts: map[string]review.Excerpt{}, loaded: map[string]bool{},
 	}
 }
@@ -193,20 +197,24 @@ func (l *lookups) change(ctx context.Context, id string) (int, error) {
 	return c.Seq, nil
 }
 
+func (l *lookups) reviewByID(ctx context.Context, reviewID string) (store.Review, error) {
+	if r, ok := l.reviews[reviewID]; ok {
+		return r, nil
+	}
+	r, err := l.svc.Store().GetReview(ctx, reviewID)
+	if err != nil {
+		return store.Review{}, err
+	}
+	l.reviews[reviewID] = r
+	return r, nil
+}
+
 func (l *lookups) draft(ctx context.Context, reviewID string) (bool, error) {
 	if reviewID == "" {
 		return false, nil
 	}
-	state, ok := l.reviews[reviewID]
-	if !ok {
-		r, err := l.svc.Store().GetReview(ctx, reviewID)
-		if err != nil {
-			return false, err
-		}
-		state = r.State
-		l.reviews[reviewID] = state
-	}
-	return state == store.ReviewDraft, nil
+	r, err := l.reviewByID(ctx, reviewID)
+	return r.State == store.ReviewDraft, err
 }
 
 func (l *lookups) review(ctx context.Context, r store.Review) (reviewJSON, error) {
@@ -233,9 +241,14 @@ func (l *lookups) thread(ctx context.Context, v review.ThreadView) (threadJSON, 
 	if err != nil {
 		return threadJSON{}, err
 	}
+	started, err := l.reviewByID(ctx, v.ReviewID)
+	if err != nil {
+		return threadJSON{}, err
+	}
 	loc := v.Location
 	out := threadJSON{
 		ID: v.ID, Seq: v.Seq, Change: changeSeq, State: string(v.State), Outdated: v.Outdated, Draft: draft,
+		Review: started.Seq, Summary: v.Summary,
 		Location: locationJSON{
 			Scope: string(loc.Scope), Revision: revSeq, Commit: loc.Commit, Path: loc.Path, Side: string(loc.Side),
 			StartLine: loc.StartLine, EndLine: loc.EndLine, Lines: loc.Lines,

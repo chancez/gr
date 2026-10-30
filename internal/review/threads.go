@@ -309,7 +309,12 @@ func (s *Service) Submit(ctx context.Context, change store.Change, verdict store
 		if err := tx.SubmitReview(ctx, draft.ID, rev.ID, verdict, body); err != nil {
 			return err
 		}
-		review, err = tx.GetReview(ctx, draft.ID)
+		if review, err = tx.GetReview(ctx, draft.ID); err != nil {
+			return err
+		}
+		if strings.TrimSpace(body) != "" {
+			_, err = tx.CreateSummaryThread(ctx, review)
+		}
 		return err
 	})
 	return review, err

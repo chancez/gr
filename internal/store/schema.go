@@ -1,5 +1,7 @@
 package store
 
+import "context"
+
 // migrations build the schema one step at a time. The schema version, kept in PRAGMA user_version,
 // is the number applied. Never edit a migration that has shipped: append a new one.
 var migrations = []string{
@@ -119,4 +121,41 @@ CREATE TABLE reviewed (
 	UNIQUE (change_id, author_name, author_email, commit_sha, path, blob_sha)
 );
 `,
+	`
+-- A summary thread holds a submitted review's summary, so it can be replied to and resolved.
+ALTER TABLE threads ADD COLUMN summary INTEGER NOT NULL DEFAULT 0;
+`,
+}
+
+// backfills run Go code after the migration with the same index, inside its transaction.
+var backfills = map[int]func(context.Context, *Tx) error{
+	2: backfillSummaryThreads,
+}
+
+// backfillSummaryThreads gives reviews submitted before summary threads existed a summary thread.
+func backfillSummaryThreads(ctx context.Context, tx *Tx) error {
+	rows, err := tx.q.QueryContext(ctx,
+		`SELECT `+reviewColumns+` FROM reviews WHERE state = 'submitted' AND body != '' ORDER BY change_id, seq`)
+	if err != nil {
+		return err
+	}
+	var reviews []Review
+	for rows.Next() {
+		r, err := scanReview(rows)
+		if err != nil {
+			rows.Close()
+			return err
+		}
+		reviews = append(reviews, r)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for _, r := range reviews {
+		if _, err := tx.CreateSummaryThread(ctx, r); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -123,7 +123,11 @@ func (a *app) printThreads(ctx context.Context, svc *review.Service, threads []r
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(a.stdout, threadHeader(t, draft))
+		started, err := l.reviewByID(ctx, t.ReviewID)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(a.stdout, threadHeader(t, draft, started.Seq))
 		if e, ok, err := l.excerpt(ctx, t); err != nil {
 			return err
 		} else if ok {
@@ -166,7 +170,7 @@ func printExcerpt(w io.Writer, e review.Excerpt) {
 	}
 }
 
-func threadHeader(t review.ThreadView, draft bool) string {
+func threadHeader(t review.ThreadView, draft bool, reviewSeq int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "#%d [%s", t.Seq, t.State)
 	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
@@ -179,7 +183,11 @@ func threadHeader(t review.ThreadView, draft bool) string {
 		b.WriteString(", draft")
 	}
 	b.WriteString("] ")
-	b.WriteString(describeLocation(t.Location))
+	if t.Summary {
+		fmt.Fprintf(&b, "summary of review #%d", reviewSeq)
+	} else {
+		b.WriteString(describeLocation(t.Location))
+	}
 	return b.String()
 }
 

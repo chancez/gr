@@ -10,7 +10,7 @@ import (
 
 const threadColumns = `id, change_id, seq, revision_id, review_id, state, state_by_name, state_by_email, state_at, outdated,
 	scope, anchor_revision_id, commit_sha, path, blob_sha, side, start_line, end_line, lines, before_lines, after_lines,
-	created_at, updated_at`
+	created_at, updated_at, summary`
 
 // jsonLines stores a []string as a JSON array.
 type jsonLines struct{ s *[]string }
@@ -46,7 +46,7 @@ func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 		&t.StateBy.Email, scanTime(&t.StateAt), &t.Outdated,
 		&l.Scope, &l.RevisionID, &l.Commit, &l.Path, &l.BlobSHA, &l.Side, &l.StartLine, &l.EndLine,
 		jsonLines{&l.Lines}, jsonLines{&l.Before}, jsonLines{&l.After},
-		scanTime(&t.CreatedAt), scanTime(&t.UpdatedAt))
+		scanTime(&t.CreatedAt), scanTime(&t.UpdatedAt), &t.Summary)
 	return t, err
 }
 
@@ -83,10 +83,26 @@ func (q queries) CreateThread(ctx context.Context, t Thread) (Thread, error) {
 	}
 	args := append([]any{t.ID, t.ChangeID, t.Seq, t.RevisionID, t.ReviewID, t.State, t.StateBy.Name,
 		t.StateBy.Email, formatNullTime(t.StateAt), t.Outdated}, loc...)
-	args = append(args, formatTime(now), formatTime(now))
+	args = append(args, formatTime(now), formatTime(now), t.Summary)
 	_, err = q.q.ExecContext(ctx, `INSERT INTO threads (`+threadColumns+`) VALUES (`+placeholders(len(args))+`)`, args...)
 	if err != nil {
 		return Thread{}, fmt.Errorf("create thread: %w", err)
+	}
+	return t, nil
+}
+
+// CreateSummaryThread starts the thread holding a submitted review's summary, with the summary as
+// its first comment.
+func (q queries) CreateSummaryThread(ctx context.Context, r Review) (Thread, error) {
+	t, err := q.CreateThread(ctx, Thread{
+		ChangeID: r.ChangeID, RevisionID: r.RevisionID, ReviewID: r.ID, Summary: true,
+		Location: Location{Scope: ScopeChange, RevisionID: r.RevisionID},
+	})
+	if err != nil {
+		return Thread{}, err
+	}
+	if _, err := q.AddComment(ctx, Comment{ThreadID: t.ID, ReviewID: r.ID, Author: r.Author, Body: r.Body}); err != nil {
+		return Thread{}, err
 	}
 	return t, nil
 }

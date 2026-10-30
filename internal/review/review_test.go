@@ -231,6 +231,10 @@ func TestThreadsAndDrafts(t *testing.T) {
 			Thread:   store.Thread{Seq: 3, State: store.ThreadOpen, Location: store.Location{Scope: store.ScopeChange}},
 			Comments: []store.Comment{{Author: human, Body: "overall"}},
 		},
+		{
+			Thread:   store.Thread{Seq: 4, State: store.ThreadOpen, Summary: true, Location: store.Location{Scope: store.ScopeChange}},
+			Comments: []store.Comment{{Author: human, Body: "please fix"}},
+		},
 	}
 	if diff := cmp.Diff(want, got, ignoreGenerated); diff != "" {
 		t.Errorf("Threads mismatch (-want +got):\n%s", diff)
