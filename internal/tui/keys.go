@@ -53,6 +53,7 @@ type keyMap struct {
 	Delete           key.Binding
 	Reviewed         key.Binding
 	CommitDone       key.Binding
+	AutoAdvance      key.Binding
 	Submit           key.Binding
 	Discard          key.Binding
 	Split            key.Binding
@@ -119,6 +120,7 @@ func defaultKeys() keyMap {
 		Delete:       key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "delete my comment")),
 		Reviewed:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mark reviewed")),
 		CommitDone:   key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mark commit reviewed")),
+		AutoAdvance:  key.NewBinding(key.WithKeys("+"), key.WithHelp("+", "toggle auto-advance after marking")),
 		Submit:       key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "submit")),
 		Discard:      key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "discard draft")),
 		Split:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "split/unified")),

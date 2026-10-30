@@ -112,7 +112,7 @@ func (m *model) helpSections() []helpSection {
 		{title: "Diff", context: contextDiff, bindings: []key.Binding{
 			hint("j/k", "move"), hint("d/u, f/b", "half page, page"), hint("]/[", "next/prev file"),
 			hint("J/K", "next/prev hunk"), hint(")/(", "next/prev change"), hint("t/T", "next/prev thread"),
-			hint("h/l", "old/new side in split"), k.Select, k.Comment, k.FileComment, k.Reviewed, k.CommitDone,
+			hint("h/l", "old/new side in split"), k.Select, k.Comment, k.FileComment, k.Reviewed, k.CommitDone, k.AutoAdvance,
 		}},
 		{title: "Threads", global: true, bindings: []key.Binding{
 			k.Reply, hint("x", "resolve/reopen"), k.Address, k.Edit, hint("X", "delete my comment or thread"),

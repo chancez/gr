@@ -115,6 +115,9 @@ type model struct {
 	// theme is the built-in palette, and isDark whether the terminal's background is dark.
 	theme  string
 	isDark bool
+	// autoAdvance moves on to the next unreviewed file or commit after marking one reviewed. It is
+	// off by default and toggled for the session.
+	autoAdvance bool
 	// confirm is the action waiting on a y/n prompt.
 	confirm confirmation
 	// filter selects the threads the overview shows.
@@ -656,6 +659,14 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.mode = modeVerdict
+		return m, nil
+	case key.Matches(msg, k.AutoAdvance):
+		m.autoAdvance = !m.autoAdvance
+		if m.autoAdvance {
+			m.setStatus("auto-advance on: marking reviewed moves to the next unreviewed file")
+		} else {
+			m.setStatus("auto-advance off: marking reviewed stays put")
+		}
 		return m, nil
 	case key.Matches(msg, k.Reviewed), key.Matches(msg, k.CommitDone):
 		if m.data == nil {
@@ -1727,6 +1738,9 @@ func (m *model) renderStatus() string {
 		left += st.badgeWarn.Render(" draft")
 	}
 	left += " " + m.reviewProgress()
+	if m.autoAdvance {
+		left += st.badgeWarn.Render(" auto-advance")
+	}
 	if m.split {
 		left += " split"
 	}

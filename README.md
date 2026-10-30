@@ -38,7 +38,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `v` | start or end a line selection |
 | `C` | comment on the whole file or commit |
 | `r` `x` `a` | reply, resolve or reopen, mark addressed |
-| `m` `M` | mark the file or commit reviewed |
+| `m` `M`, `+` | mark the file or commit reviewed; toggle moving on to the next unreviewed |
 | `F` | filter the overview's threads by state |
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |

@@ -465,6 +465,10 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	e.repo.Commit("add other")
 	e.drain(e.m.loadCmd())
 	e.openNav("say hello")
+	e.press("+")
+	if !e.m.autoAdvance {
+		t.Fatal("+ did not turn auto-advance on")
+	}
 
 	// Mark the message, then main.go: the commit is done and the next one opens.
 	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 })
@@ -504,6 +508,8 @@ func TestMarkReviewedAdvances(t *testing.T) {
 		t.Errorf("stored marks = %v, want the two files and one commit", marks)
 	}
 
+	// Turned off, marking stays put.
+	e.press("+")
 	// Unmarking one file of a fully reviewed commit keeps the others.
 	e.openNav("say hello")
 	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
@@ -1760,5 +1766,39 @@ func TestBranchMovingKeepsTheDiff(t *testing.T) {
 	}
 	if got := e.m.here(); got != before {
 		t.Errorf("cursor moved from %+v to %+v", before, got)
+	}
+}
+
+func TestMarkingStaysPutByDefault(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("other.go", "package main\n")
+	e.repo.Commit("add other")
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+	// Marking every file of the commit leaves you on it, on the file just marked.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	e.pressRun("m")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 })
+	e.pressRun("m")
+	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" {
+		t.Fatalf("marking moved to %q", e.m.viewLabel(v))
+	}
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 0 {
+		t.Errorf("cursor on %+v, want the file just marked", r)
+	}
+}
+
+func TestAutoAdvanceOnlyMovesForward(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.press("+")
+	// Mark main.go, the last file, while the message above it is unreviewed: stay, and say so.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	e.pressRun("m")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
+		t.Errorf("cursor moved to %+v, want it kept on main.go", r)
+	}
+	if !strings.Contains(e.m.status, "1 earlier file is still unreviewed") {
+		t.Errorf("status = %q", e.m.status)
 	}
 }

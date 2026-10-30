@@ -83,13 +83,14 @@ func (m *model) toggleReviewed(wholeCommit bool) tea.Cmd {
 	if v.kind == viewCommit && (wholeCommit || m.focus == focusViews || f < 0) {
 		reviewed := !m.viewReviewed(v)
 		m.applyCommitMark(v, reviewed)
-		if reviewed {
-			m.nextUnreviewedCommit()
+		note := ""
+		if reviewed && m.autoAdvance {
+			note = m.advance(m.nextUnreviewedCommit)
 		}
 		svc, ctx, change, sha, files := m.svc, m.ctx, m.data.change, v.commit.SHA, v.files
 		return func() tea.Msg {
 			err := svc.SetCommitReviewed(ctx, change, sha, files, reviewed)
-			return opMsg{status: reviewedStatus("commit "+shortSHA(sha), reviewed), err: err}
+			return opMsg{status: reviewedStatus("commit "+shortSHA(sha), reviewed) + note, err: err}
 		}
 	}
 	if wholeCommit {
@@ -130,10 +131,10 @@ func (m *model) toggleReviewed(wholeCommit bool) tea.Cmd {
 	delete(m.expanded, v.key()+"\x00"+v.files[f].Path())
 	m.rebuildMain()
 	m.buildNav()
-	if reviewed {
-		m.nextUnreviewedFile(f)
-	} else {
-		m.focusFile(f)
+	m.focusFile(f)
+	note := ""
+	if reviewed && m.autoAdvance {
+		note = m.advance(func() { m.nextUnreviewedFile(f) })
 	}
 	label := v.files[f].Path()
 	return func() tea.Msg {
@@ -141,7 +142,7 @@ func (m *model) toggleReviewed(wholeCommit bool) tea.Cmd {
 		for _, c := range cmds {
 			errs = append(errs, c())
 		}
-		return opMsg{status: reviewedStatus(label, reviewed), err: errors.Join(errs...)}
+		return opMsg{status: reviewedStatus(label, reviewed) + note, err: errors.Join(errs...)}
 	}
 }
 
@@ -182,32 +183,52 @@ func (m *model) focusFile(f int) {
 	}
 }
 
-// nextUnreviewedFile moves to the first unreviewed file after f, wrapping around. When the view has
-// none left and is a commit, it moves on to the next unreviewed commit.
+// advance runs an auto-advance move as a jump, so ctrl+o returns to what was marked, and returns
+// what to add to the mark's status: where it went, or why it stayed.
+func (m *model) advance(move func()) string {
+	before := m.status
+	from := m.here()
+	m.jump(move)
+	switch {
+	case m.status != before:
+		return "; " + m.status
+	case m.here() != from:
+		return "; ctrl+o goes back"
+	}
+	return ""
+}
+
+// nextUnreviewedFile moves forward to the first unreviewed file after f, never back. With none
+// after it, it moves on to the next unreviewed commit when this one is done, and otherwise stays,
+// saying how many earlier files are left.
 func (m *model) nextUnreviewedFile(f int) {
 	v := m.views[m.current]
-	n := len(v.files)
-	for i := 1; i < n; i++ {
-		next := (f + i) % n
+	for next := f + 1; next < len(v.files); next++ {
 		if !m.fileReviewed(v, next) {
 			m.focusFile(next)
 			return
 		}
 	}
-	if v.kind == viewCommit {
-		m.nextUnreviewedCommit()
-		return
+	left := 0
+	for i := range f {
+		if !m.fileReviewed(v, i) {
+			left++
+		}
 	}
-	m.focusFile(f)
-	m.setStatus("every file is reviewed")
+	switch {
+	case left > 0:
+		m.setStatus("%d earlier %s still unreviewed", left, map[bool]string{true: "file is", false: "files are"}[left == 1])
+	case v.kind == viewCommit:
+		m.nextUnreviewedCommit()
+	default:
+		m.setStatus("every file is reviewed")
+	}
 }
 
-// nextUnreviewedCommit opens the next commit not yet reviewed, wrapping around, at its first
-// unreviewed file.
+// nextUnreviewedCommit opens the next commit after this one not yet reviewed, at its first
+// unreviewed file. It does not wrap back to earlier commits.
 func (m *model) nextUnreviewedCommit() {
-	n := len(m.views)
-	for i := 1; i < n; i++ {
-		vi := (m.current + i) % n
+	for vi := m.current + 1; vi < len(m.views); vi++ {
 		v := m.views[vi]
 		if v.kind != viewCommit || m.viewReviewed(v) {
 			continue
@@ -222,7 +243,7 @@ func (m *model) nextUnreviewedCommit() {
 		}
 		return
 	}
-	m.setStatus("every commit is reviewed; S to submit")
+	m.setStatus("no unreviewed commit after this one; S to submit")
 }
 
 // reviewProgress counts reviewed commits.
