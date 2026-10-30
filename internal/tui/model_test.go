@@ -1616,3 +1616,28 @@ func TestSubmitWithoutSummary(t *testing.T) {
 		t.Errorf("S C on an empty review: status %q", e.m.status)
 	}
 }
+
+func TestStepUnreviewed(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("b.go", "package main\n")
+	e.repo.Commit("second")
+	e.repo.Write("c.go", "package main\n")
+	third := e.repo.Commit("third")
+	e.drain(e.m.loadCmd())
+	// Mark the second commit reviewed: > from the first skips it.
+	e.openNav("second")
+	e.pressRun("M")
+	e.openNav("say hello")
+	e.press(">")
+	if v := e.m.views[e.m.current]; v.commit.SHA != third {
+		t.Fatalf("> opened %q, want the third commit", e.m.viewLabel(v))
+	}
+	e.press(">")
+	if !strings.Contains(e.m.status, "no unreviewed commit after") {
+		t.Errorf("> at the last unreviewed commit: status %q", e.m.status)
+	}
+	e.press("<")
+	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" {
+		t.Errorf("< opened %q, want the first commit", e.m.viewLabel(v))
+	}
+}

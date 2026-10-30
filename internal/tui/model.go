@@ -588,6 +588,12 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.Overview):
 		m.toggleView(viewOverview)
 		return m, nil
+	case key.Matches(msg, k.NextUnreviewed):
+		m.stepUnreviewed(1)
+		return m, nil
+	case key.Matches(msg, k.PrevUnreviewed):
+		m.stepUnreviewed(-1)
+		return m, nil
 	case key.Matches(msg, k.NextCommit):
 		m.stepCommit(1)
 		return m, nil
@@ -935,8 +941,24 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 // stepCommit opens the next or previous commit, starting from the first or last when the current
 // view is not a commit.
 func (m *model) stepCommit(dir int) bool {
+	return m.stepCommitWhere(dir, func(view) bool { return true })
+}
+
+// stepUnreviewed opens the next or previous commit not yet marked reviewed.
+func (m *model) stepUnreviewed(dir int) {
+	if !m.stepCommitWhere(dir, func(v view) bool { return !m.viewReviewed(v) }) {
+		way := "after"
+		if dir < 0 {
+			way = "before"
+		}
+		m.setStatus("no unreviewed commit %s this one", way)
+	}
+}
+
+// stepCommitWhere opens the next or previous commit that match accepts.
+func (m *model) stepCommitWhere(dir int, match func(view) bool) bool {
 	for i := m.current + dir; i >= 0 && i < len(m.views); i += dir {
-		if m.views[i].kind == viewCommit {
+		if m.views[i].kind == viewCommit && match(m.views[i]) {
 			m.viewsNav.pos = i
 			m.openView()
 			return true

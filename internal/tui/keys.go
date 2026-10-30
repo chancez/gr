@@ -21,6 +21,8 @@ type keyMap struct {
 	JumpBack         key.Binding
 	JumpForward      key.Binding
 	NextCommit       key.Binding
+	NextUnreviewed   key.Binding
+	PrevUnreviewed   key.Binding
 	PrevCommit       key.Binding
 	NextChange       key.Binding
 	PrevChange       key.Binding
@@ -84,6 +86,8 @@ func defaultKeys() keyMap {
 		// Terminals without enhanced keyboard reporting send ctrl+i as tab, which switches panes.
 		JumpForward:      key.NewBinding(key.WithKeys("ctrl+i"), key.WithHelp("ctrl+i", "forward in the jump list")),
 		NextCommit:       key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
+		NextUnreviewed:   key.NewBinding(key.WithKeys(">"), key.WithHelp(">/<", "next/prev unreviewed commit")),
+		PrevUnreviewed:   key.NewBinding(key.WithKeys("<")),
 		PrevCommit:       key.NewBinding(key.WithKeys("{")),
 		NextChange:       key.NewBinding(key.WithKeys(")"), key.WithHelp(")/(", "next/prev change")),
 		PrevChange:       key.NewBinding(key.WithKeys("(")),
