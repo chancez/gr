@@ -203,28 +203,55 @@ func (d *changeData) apply(msg viewLoadedMsg) {
 	d.loaded[msg.key] = true
 }
 
-// carryLoaded keeps diffs old had loaded when d is the same revision, so a reload does not drop them.
+// carryLoaded keeps the diffs old had loaded that are still valid in d, so a reload does not drop
+// them and redraw the view without its hunks. A commit's diff never changes, so it carries over as
+// long as the commit is still in the change. The whole diff and the interdiff depend on the
+// revision, so they carry over only within one.
 func (d *changeData) carryLoaded(old *changeData) {
-	if old == nil || old.revision.ID != d.revision.ID {
+	if old == nil {
 		return
 	}
+	sameRevision := old.revision.ID == d.revision.ID
 	for key := range old.loaded {
 		switch {
 		case key == view{kind: viewDiff}.key():
+			if !sameRevision {
+				continue
+			}
 			d.diffFiles, d.diffPlacements = old.diffFiles, old.diffPlacements
 		case key == view{kind: viewInterdiff}.key():
-			if old.interdiffFrom.ID != d.interdiffFrom.ID {
+			if !sameRevision || old.interdiffFrom.ID != d.interdiffFrom.ID {
 				continue
 			}
 			d.interdiff, d.interdiffExact = old.interdiff, old.interdiffExact
 		default:
 			sha := strings.TrimPrefix(key, "commit:")
-			if files, ok := old.commitFiles[sha]; ok {
-				d.commitFiles[sha] = files
+			files, ok := old.commitFiles[sha]
+			if _, inChange := d.commitFiles[sha]; !ok || !inChange {
+				continue
 			}
+			d.commitFiles[sha] = files
 		}
 		d.loaded[key] = true
 	}
+}
+
+// preload loads the view keyed current, so a full reload shows it with its diff rather than
+// redrawing it without hunks while the diff loads.
+func (d *changeData) preload(ctx context.Context, svc *review.Service, current string) error {
+	if current == "" || d.loaded[current] {
+		return nil
+	}
+	for _, v := range buildViews(d) {
+		if v.key() == current && v.kind != viewOverview {
+			msg := loadView(ctx, svc, d, v)
+			if msg.err != nil {
+				return msg.err
+			}
+			d.apply(msg)
+		}
+	}
+	return nil
 }
 
 // placeInDiff maps current line threads on commits to the whole diff, given as files: their

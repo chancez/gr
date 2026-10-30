@@ -317,10 +317,19 @@ func (m *model) applyView(msg viewLoadedMsg) {
 }
 
 func (m *model) loadCmd() tea.Cmd {
-	ctx, svc, id := m.ctx, m.svc, m.changeID
+	ctx, svc, id, old := m.ctx, m.svc, m.changeID, m.data
+	current := ""
+	if m.data != nil && m.current < len(m.views) {
+		current = m.views[m.current].key()
+	}
 	return func() tea.Msg {
 		start := time.Now()
 		d, err := load(ctx, svc, id)
+		if err == nil {
+			// Keep what is still valid, and load the view on screen, before showing anything.
+			d.carryLoaded(old)
+			err = d.preload(ctx, svc, current)
+		}
 		slog.Debug("reload", "duration", time.Since(start), "err", err)
 		return dataMsg{data: d, err: err}
 	}
@@ -485,7 +494,6 @@ func (m *model) applyData(d *changeData) {
 	}
 	prevY := m.main.cursorY()
 	prevSeg := m.main.itemSegment()
-	d.carryLoaded(m.data)
 	m.data = d
 	m.views = buildViews(d)
 	m.current = 0

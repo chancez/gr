@@ -1732,3 +1732,33 @@ func runViewLoads(e *tuiEnv, cmd tea.Cmd) {
 		e.m.Update(msg)
 	}
 }
+
+// TestBranchMovingKeepsTheDiff moves the branch while an older commit is open, as an agent committing
+// a fix does, and checks the commit's diff stays on screen with the cursor where it was.
+func TestBranchMovingKeepsTheDiff(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.syncLoads = false
+	e.openNav("say hello")
+	runViewLoads(e, e.m.loadViewCmd(e.m.pendingLoads[0]))
+	e.m.pendingLoads = nil
+	e.cursorTo(addedLine)
+	before := e.m.here()
+
+	e.repo.Write("fix.go", "package main\n")
+	e.repo.Commit("fix")
+	msg := e.m.refreshCmd()().(refreshMsg)
+	if !msg.headMoved {
+		t.Fatal("the branch moving went unnoticed")
+	}
+	_, cmd := e.m.Update(msg)
+	e.drain(cmd)
+	if e.m.data.revision.Seq != 2 {
+		t.Fatalf("revision = %d, want 2", e.m.data.revision.Seq)
+	}
+	if e.m.needsLoad(e.m.views[e.m.current]) {
+		t.Error("the open commit lost its diff when the branch moved")
+	}
+	if got := e.m.here(); got != before {
+		t.Errorf("cursor moved from %+v to %+v", before, got)
+	}
+}
