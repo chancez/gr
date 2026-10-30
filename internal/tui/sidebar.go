@@ -83,13 +83,44 @@ func (l *navList) set(i int) bool {
 	return l.move(i - l.pos)
 }
 
+// covers reports whether the first and last of height rows, starting at top, are covered by an
+// indicator of entries scrolled out of view.
+func (l *navList) covers(top, height int) (first, last bool) {
+	return top > 0, top+height < len(l.items)
+}
+
+// scrollTo scrolls so the selection shows within height rows, clear of the indicator lines.
 func (l *navList) scrollTo(height int) {
-	if l.pos < l.top {
-		l.top = l.pos
-	} else if l.pos >= l.top+height {
-		l.top = l.pos - height + 1
+	for range 3 {
+		first, last := l.covers(l.top, height)
+		switch {
+		case first && l.pos <= l.top:
+			// Leave the indicator a row above the selection, or none at the very top.
+			l.top = max(l.pos-1, 0)
+		case !first && l.pos < l.top:
+			l.top = l.pos
+		case last && l.pos >= l.top+height-1:
+			l.top = l.pos - height + 2
+		case !last && l.pos >= l.top+height:
+			l.top = l.pos - height + 1
+		default:
+			l.top = min(max(l.top, 0), max(len(l.items)-height, 0))
+			return
+		}
+		l.top = min(max(l.top, 0), max(len(l.items)-height, 0))
 	}
-	l.top = min(max(l.top, 0), max(len(l.items)-height, 0))
+}
+
+// indicatorAt reports whether line y of the list is an indicator: -1 for the one above, 1 below.
+func (l *navList) indicatorAt(y, height int) int {
+	first, last := l.covers(l.top, height)
+	switch {
+	case first && y == 0:
+		return -1
+	case last && y == height-1:
+		return 1
+	}
+	return 0
 }
 
 // at returns the item index on line y of the list, or -1.
@@ -106,11 +137,22 @@ func (l *navList) render(st styles, title string, width, height int, focused boo
 	if height <= 0 {
 		return nil
 	}
-	out := []string{paneTitle(st, " "+title, width, focused)}
 	rows := height - 1
 	l.scrollTo(rows)
-	for i := l.top; i < len(l.items) && len(out) < height; i++ {
-		out = append(out, l.items[i].render(st, width, i == l.pos, focused))
+	out := []string{paneTitle(st, " "+title, width, focused)}
+	first, last := l.covers(l.top, rows)
+	for y := range rows {
+		i := l.top + y
+		switch {
+		case i >= len(l.items):
+		case first && y == 0:
+			// The indicator covers this entry, so it counts as hidden too.
+			out = append(out, st.muted.Render(fit(fmt.Sprintf("^ %d more", l.top+1), width, nil)))
+		case last && y == rows-1:
+			out = append(out, st.muted.Render(fit(fmt.Sprintf("v %d more", len(l.items)-i), width, nil)))
+		default:
+			out = append(out, l.items[i].render(st, width, i == l.pos, focused))
+		}
 	}
 	for len(out) < height {
 		out = append(out, "")

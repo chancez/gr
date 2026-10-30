@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -1303,5 +1304,50 @@ func TestColorblindTheme(t *testing.T) {
 		if cb.badgeOpen.GetForeground() != cb.accent {
 			t.Errorf("dark %v: colorblind good color is not blue", dark)
 		}
+	}
+}
+
+func TestSidebarShowsMoreAboveAndBelow(t *testing.T) {
+	var items []navItem
+	for i := range 10 {
+		items = append(items, navItem{label: fmt.Sprintf("item %d", i)})
+	}
+	st := newStyles(true, ThemeDefault)
+	render := func(l *navList) []string {
+		var out []string
+		for _, line := range l.render(st, "List", 30, 6, false)[1:] {
+			out = append(out, strings.TrimSpace(ansi.Strip(line)))
+		}
+		return out
+	}
+
+	l := navList{items: items, pos: 0}
+	// Five rows at the top: four entries, then the indicator over the fifth.
+	want := []string{"item 0", "item 1", "item 2", "item 3", "v 6 more"}
+	if got := render(&l); strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Errorf("at the top = %q, want %q", got, want)
+	}
+	l.pos = 5
+	got := render(&l)
+	if got[0] != "^ 3 more" || got[len(got)-1] != "v 4 more" {
+		t.Errorf("in the middle = %q", got)
+	}
+	// The selection is never under an indicator.
+	for y, line := range got {
+		if strings.Contains(line, "item 5") && (y == 0 || y == len(got)-1) {
+			t.Errorf("selection drawn under an indicator: %q", got)
+		}
+	}
+	if !strings.Contains(strings.Join(got, "|"), "item 5") {
+		t.Errorf("selection not shown: %q", got)
+	}
+	l.pos = 9
+	if got := render(&l); got[0] != "^ 6 more" || got[len(got)-1] != "item 9" {
+		t.Errorf("at the bottom = %q", got)
+	}
+	// A list that fits has no indicators.
+	short := navList{items: items[:3]}
+	if got := render(&short); strings.Contains(strings.Join(got, "|"), "more") {
+		t.Errorf("a list that fits = %q", got)
 	}
 }

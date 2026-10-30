@@ -1316,6 +1316,22 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.X < nw {
 		l, f, i := m.sidebarAt(msg.Y)
+		vh, fh := m.sidebarHeights(bh)
+		rows, y := vh-1, msg.Y-1
+		if f == focusFiles {
+			rows, y = fh-1, msg.Y-vh-sidebarGap-1
+		}
+		if dir := l.indicatorAt(y, rows); dir != 0 {
+			// An indicator of more entries: move the selection a page that way.
+			m.setFocus(f)
+			l.move(dir * max(rows-2, 1))
+			if f == focusViews {
+				m.openView()
+			} else {
+				m.openFile()
+			}
+			return m, nil
+		}
 		m.setFocus(f)
 		if i >= 0 {
 			l.pos = i
