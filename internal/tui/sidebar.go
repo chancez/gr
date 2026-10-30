@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // navItem is one sidebar entry: a view, or a file within the current view.
@@ -203,7 +204,7 @@ func (m *model) viewLabel(v view) string {
 		}
 		return fmt.Sprintf("All changes (%d files)", len(v.files))
 	case viewCommit:
-		return shortSHA(v.commit.SHA)[:7] + " " + v.commit.Subject()
+		return shortSHA(v.commit.SHA)[:7] + " " + termtext.Line(v.commit.Subject())
 	case viewInterdiff:
 		if m.data.interdiffFromReview {
 			return fmt.Sprintf("Since your review (rev %d)", m.data.interdiffFrom.Seq)

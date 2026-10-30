@@ -24,6 +24,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // Options configure the TUI.
@@ -368,12 +369,12 @@ const (
 )
 
 func (m *model) setStatus(format string, args ...any) {
-	m.status, m.statusErr, m.statusAt = fmt.Sprintf(format, args...), false, time.Now()
+	m.status, m.statusErr, m.statusAt = termtext.Line(fmt.Sprintf(format, args...)), false, time.Now()
 }
 
 func (m *model) setError(err error) {
 	slog.Warn("tui error", "err", err)
-	m.status, m.statusErr, m.statusAt = err.Error(), true, time.Now()
+	m.status, m.statusErr, m.statusAt = termtext.Line(err.Error()), true, time.Now()
 }
 
 // expireStatus clears a message once it has been shown long enough. A pending two-key command
@@ -1653,7 +1654,7 @@ func (m *model) View() tea.View {
 	v.MouseMode = tea.MouseModeCellMotion
 	v.WindowTitle = "gr"
 	if m.data != nil {
-		v.WindowTitle = fmt.Sprintf("gr #%d %s", m.data.change.Seq, m.data.change.Title)
+		v.WindowTitle = fmt.Sprintf("gr #%d %s", m.data.change.Seq, termtext.Line(m.data.change.Title))
 	}
 	return v
 }

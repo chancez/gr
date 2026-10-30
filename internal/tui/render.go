@@ -16,6 +16,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // renderer draws rows. It caches what depends only on width.
@@ -63,6 +64,7 @@ func (r *renderer) cursorBg(state rowState) color.Color {
 // renderMarkdown renders a comment body, falling back to plain text.
 func (r *renderer) renderMarkdown(body string, width int) []string {
 	width = max(width, 10)
+	body = termtext.Block(body)
 	md, ok := r.markdown[width]
 	if !ok {
 		var err error
@@ -148,9 +150,9 @@ func statusLetter(s git.FileStatus) string {
 
 func fileLabel(f git.FileDiff) string {
 	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
-		return f.OldPath + " -> " + f.NewPath
+		return termtext.Line(f.OldPath) + " -> " + termtext.Line(f.NewPath)
 	}
-	return f.Path()
+	return termtext.Line(f.Path())
 }
 
 // renderRow draws one row at width. d supplies thread draft state.
@@ -296,7 +298,7 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 
 func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []string {
 	st := r.st
-	head := st.commitHeader.Render("commit "+c.SHA) + "  " + st.muted.Render(c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04"))
+	head := st.commitHeader.Render("commit "+c.SHA) + "  " + st.muted.Render(termtext.Line(c.AuthorName+" <"+c.AuthorEmail+">")+"  "+c.AuthorTime.Format("2006-01-02 15:04"))
 	lines := []string{fit(head, width, nil)}
 	if state.cursor {
 		bg := r.cursorBg(state)
@@ -316,7 +318,7 @@ func stateBadge(st styles, t review.ThreadView, draft bool) string {
 		parts = append(parts, st.badgeDone.Render("resolved"))
 	}
 	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
-		parts[0] += st.muted.Render(" by " + t.StateBy.Name)
+		parts[0] += st.muted.Render(" by " + termtext.Line(t.StateBy.Name))
 	}
 	if t.Outdated {
 		parts = append(parts, st.badgeWarn.Render("outdated"))
@@ -359,7 +361,7 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 	if rw.collapsed {
 		first := ""
 		if len(t.Comments) > 0 {
-			first = strings.Join(strings.Fields(t.Comments[0].Body), " ")
+			first = termtext.Line(strings.Join(strings.Fields(t.Comments[0].Body), " "))
 		}
 		line := fmt.Sprintf("    %d comments  %s", len(t.Comments), first)
 		return append(lines, st.muted.Render(fit(ansi.Truncate(line, width, "..."), width, nil)))
@@ -370,7 +372,7 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 			r.segments = append(r.segments, len(lines))
 			lines = append(lines, "")
 		}
-		header := st.author.Render(c.Author.Name) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
+		header := st.author.Render(termtext.Line(c.Author.Name)) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
 		if d.isDraft(c.ReviewID) {
 			header += st.badgeWarn.Render("  draft")
 		}
@@ -393,7 +395,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	}
 	first := ""
 	if len(t.Comments) > 0 {
-		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
+		first = termtext.Line(t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " "))
 	}
 	text := fmt.Sprintf("  > %s %s  %s  %d comments  %s", t.Label(), ansi.Strip(stateBadge(st, t, d.isDraft(t.ReviewID))),
 		where, len(t.Comments), first)
@@ -422,7 +424,7 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	for _, c := range t.Comments {
 		// The box's top border is the first output line.
 		starts = append(starts, len(lines)+1)
-		header := st.author.Render(c.Author.Name) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
+		header := st.author.Render(termtext.Line(c.Author.Name)) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
 		if d.isDraft(c.ReviewID) {
 			header += st.badgeWarn.Render("  draft")
 		}
@@ -453,7 +455,7 @@ func describeLocation(l store.Location) string {
 		parts = append(parts, "commit "+shortSHA(l.Commit))
 	}
 	if l.Path != "" {
-		loc := l.Path
+		loc := termtext.Line(l.Path)
 		if l.StartLine > 0 {
 			loc += ":" + strconv.Itoa(l.StartLine)
 			if l.EndLine != l.StartLine {

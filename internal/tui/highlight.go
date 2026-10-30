@@ -8,6 +8,8 @@ import (
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	chromastyles "github.com/alecthomas/chroma/v2/styles"
+
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // highlighter colors source lines with chroma, leaving the background to the caller so diff colors
@@ -41,6 +43,7 @@ func (h *highlighter) lexer(path string) chroma.Lexer {
 // line renders one line of path with syntax colors on bg. Lines are highlighted independently, so a
 // construct spanning lines, like a block comment, may be colored only on its first line.
 func (h *highlighter) line(path, text string, bg color.Color) string {
+	text = termtext.Line(text)
 	base := lipgloss.NewStyle()
 	if bg != nil {
 		base = base.Background(bg)

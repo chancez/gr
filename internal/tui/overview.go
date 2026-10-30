@@ -10,6 +10,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // threadFilter selects which threads the overview shows.
@@ -71,7 +72,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	c, rev := d.change, d.revision
 	target := string(c.Kind)
 	if c.Kind == store.KindBranch {
-		target = c.Branch + " onto " + c.BaseBranch
+		target = termtext.Line(c.Branch) + " onto " + termtext.Line(c.BaseBranch)
 	}
 	counts := map[store.ThreadState]int{}
 	for _, t := range d.threads {
@@ -79,7 +80,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	rows := []row{
 		plain(
-			st.heading.Render(fmt.Sprintf("#%d %s", c.Seq, c.Title)),
+			st.heading.Render(fmt.Sprintf("#%d %s", c.Seq, termtext.Line(c.Title))),
 			st.muted.Render(fmt.Sprintf("%s, %s, revision %d of %d (%s..%s), %d commits, %d files",
 				c.State, target, rev.Seq, len(d.revisions), shortSHA(rev.BaseSHA), shortSHA(rev.HeadSHA),
 				len(d.commits), len(d.diffFiles))),
@@ -162,7 +163,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		lastRev = seq
 		parts := []string{
 			on(st.heading, fmt.Sprintf("Review #%d", rv.Seq)),
-			on(st.author, rv.Author.Name),
+			on(st.author, termtext.Line(rv.Author.Name)),
 			on(verdictStyle(st, rv.Verdict), verdictText(rv.Verdict)),
 			on(st.muted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04"))),
 		}
