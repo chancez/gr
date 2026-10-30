@@ -89,6 +89,8 @@ type model struct {
 	// navWidth is the sidebar width once dragged, or 0 for the default.
 	navWidth int
 	dragging bool
+	// expanded overrides whether a file is collapsed, keyed by view and path.
+	expanded map[string]bool
 	main     pane
 	split    bool
 	focus    focus
@@ -138,7 +140,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew},
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew}, expanded: map[string]bool{},
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -365,7 +367,11 @@ func (m *model) rebuildMain() {
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r)
 	} else {
-		m.main.rows = buildRows(m.data, v, m.split)
+		m.main.rows = buildRows(m.data, v, rowOptions{
+			split:     m.split,
+			collapsed: func(f int) bool { return m.collapsed(v, f) },
+			reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
+		})
 	}
 	m.main.anchor = -1
 	_, mw, bh := m.layoutSizes()
@@ -419,6 +425,11 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.mode = modeVerdict
 		return m, nil
+	case key.Matches(msg, k.Reviewed), key.Matches(msg, k.CommitDone):
+		if m.data == nil {
+			return m, nil
+		}
+		return m, m.toggleReviewed(key.Matches(msg, k.CommitDone))
 	case key.Matches(msg, k.Discard):
 		if _, ok := m.data.draft(); !ok {
 			m.setError(errNoDraft)
@@ -573,6 +584,8 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.Open):
 		if m.views[m.current].kind == viewOverview {
 			m.focus = focusViews
+		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
+			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		}
 	case key.Matches(msg, k.Comment):
 		return m.startComment(false)
@@ -1086,6 +1099,7 @@ func (m *model) renderStatus() string {
 	if _, ok := d.draft(); ok {
 		left += st.badgeWarn.Render(" draft")
 	}
+	left += " " + m.reviewProgress()
 	if m.split {
 		left += " split"
 	}

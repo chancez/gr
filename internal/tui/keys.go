@@ -33,6 +33,8 @@ type keyMap struct {
 	Address      key.Binding
 	Edit         key.Binding
 	Delete       key.Binding
+	Reviewed     key.Binding
+	CommitDone   key.Binding
 	Submit       key.Binding
 	Discard      key.Binding
 	Split        key.Binding
@@ -77,6 +79,8 @@ func defaultKeys() keyMap {
 		Address:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "mark addressed")),
 		Edit:         key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit my comment")),
 		Delete:       key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "delete my comment")),
+		Reviewed:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mark file/commit reviewed")),
+		CommitDone:   key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mark commit reviewed")),
 		Submit:       key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "submit review")),
 		Discard:      key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "discard draft")),
 		Split:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "split/unified")),
@@ -91,7 +95,7 @@ func defaultKeys() keyMap {
 
 // ShortHelp is shown in the status bar.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Comment, k.Reply, k.Resolve, k.Submit, k.Focus, k.Help, k.Quit}
+	return []key.Binding{k.Comment, k.Reply, k.Resolve, k.Reviewed, k.Submit, k.Focus, k.Help, k.Quit}
 }
 
 // FullHelp is shown with ?.
@@ -100,6 +104,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
 		{k.NextCommit, k.NextFile, k.NextHunk, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
-		{k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
+		{k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
 }

@@ -73,6 +73,9 @@ type row struct {
 	line        *git.Line
 	left, right *git.Line
 	thread      *review.ThreadView
+	// reviewed and collapsed describe a rowFile.
+	reviewed  bool
+	collapsed bool
 }
 
 func (r row) selectable() bool { return r.kind != rowText }
@@ -119,8 +122,18 @@ type threadKey struct {
 	line int
 }
 
+// rowOptions control how a file view is laid out.
+type rowOptions struct {
+	split bool
+	// collapsed reports whether a file shows only its header.
+	collapsed func(file int) bool
+	// reviewed reports whether a file is marked reviewed.
+	reviewed func(file int) bool
+}
+
 // buildRows lays out a file view, placing each thread after the line it ends on.
-func buildRows(d *changeData, v view, split bool) []row {
+func buildRows(d *changeData, v view, opts rowOptions) []row {
+	split := opts.split
 	var rows []row
 	byLine := map[threadKey][]*review.ThreadView{}
 	byFile := map[string][]*review.ThreadView{}
@@ -154,7 +167,14 @@ func buildRows(d *changeData, v view, split bool) []row {
 	}
 	for fi := range v.files {
 		f := &v.files[fi]
-		rows = append(rows, row{kind: rowFile, file: fi})
+		collapsed := opts.collapsed != nil && opts.collapsed(fi)
+		rows = append(rows, row{
+			kind: rowFile, file: fi, collapsed: collapsed,
+			reviewed: opts.reviewed != nil && opts.reviewed(fi),
+		})
+		if collapsed {
+			continue
+		}
 		placed := map[*review.ThreadView]bool{}
 		threadRows(fi, byFile[f.NewPath])
 		if f.OldPath != f.NewPath {

@@ -139,7 +139,14 @@ func (m *model) buildNav() {
 	}
 	m.viewsNav.items = nil
 	for vi, v := range m.views {
-		m.viewsNav.items = append(m.viewsNav.items, navItem{label: m.viewLabel(v), view: vi, file: -1})
+		prefix := ""
+		if v.kind == viewCommit || v.kind == viewDiff {
+			prefix = "  "
+			if m.viewReviewed(v) {
+				prefix = "x "
+			}
+		}
+		m.viewsNav.items = append(m.viewsNav.items, navItem{label: prefix + m.viewLabel(v), view: vi, file: -1})
 	}
 	m.viewsNav.pos = m.current
 
@@ -151,7 +158,11 @@ func (m *model) buildNav() {
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
 	for fi, f := range v.files {
-		prefix := statusLetter(f.Status) + " "
+		mark := "  "
+		if m.fileReviewed(v, fi) {
+			mark = "x "
+		}
+		prefix := mark + statusLetter(f.Status) + " "
 		if n := counts[f.Path()]; n > 0 {
 			prefix += fmt.Sprintf("(%d) ", n)
 		}

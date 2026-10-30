@@ -443,3 +443,73 @@ func TestCommitAndHunkNavigation(t *testing.T) {
 		t.Errorf("K did not go back to the first hunk")
 	}
 }
+
+func TestMarkReviewedAdvances(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("other.go", "package main\n")
+	e.repo.Commit("add other")
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+
+	// Mark the message, then main.go: the commit is done and the next one opens.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 })
+	e.pressRun("m")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
+		t.Fatalf("after marking the message, cursor on %+v, want main.go's header", r)
+	}
+	if e.m.main.rows[0].kind != rowCommit || !e.m.main.rows[1].collapsed {
+		t.Errorf("reviewed file is not collapsed")
+	}
+	e.pressRun("m")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit || v.commit.Subject() != "add other" {
+		t.Fatalf("after reviewing every file, view is %q, want the next commit", e.m.viewLabel(v))
+	}
+	reviewedItem := false
+	for _, it := range e.m.viewsNav.items {
+		if strings.Contains(it.label, "say hello") {
+			reviewedItem = strings.HasPrefix(it.label, "x ")
+		}
+	}
+	if !reviewedItem || !strings.Contains(e.screen(), "1/2 commits reviewed") {
+		t.Errorf("commit not shown as reviewed:\n%s", e.screen())
+	}
+
+	// M reviews the whole commit.
+	e.pressRun("M")
+	if !strings.Contains(e.screen(), "2/2 commits reviewed") {
+		t.Errorf("M did not review the commit:\n%s", e.screen())
+	}
+
+	// Marks persist.
+	marks, err := e.svc.Marks(t.Context(), e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(marks) != 3 {
+		t.Errorf("stored marks = %v, want the two files and one commit", marks)
+	}
+
+	// Unmarking one file of a fully reviewed commit keeps the others.
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	e.pressRun("m")
+	v := e.m.views[e.m.current]
+	if e.m.fileReviewed(v, 1) || !e.m.fileReviewed(v, 0) {
+		t.Errorf("after unmarking main.go: message reviewed %v, main.go reviewed %v", e.m.fileReviewed(v, 0), e.m.fileReviewed(v, 1))
+	}
+}
+
+func TestExpandReviewedFile(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	e.pressRun("m")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	if len(e.m.main.rows) != 1 {
+		t.Fatalf("collapsed view has %d rows, want only the file header", len(e.m.main.rows))
+	}
+	e.press("enter")
+	if len(e.m.main.rows) == 1 {
+		t.Error("enter did not expand the reviewed file")
+	}
+}

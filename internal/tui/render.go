@@ -156,6 +156,14 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
 			label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
 		}
+		if rw.reviewed {
+			label += "  [reviewed]"
+		}
+		if rw.collapsed {
+			label += "  (collapsed, enter expands)"
+		} else if rw.reviewed {
+			label += "  (enter collapses)"
+		}
 		style := st.fileHeader
 		if state.cursor {
 			style = style.Background(r.cursorBg(state))

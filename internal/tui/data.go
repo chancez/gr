@@ -19,6 +19,8 @@ type changeData struct {
 	diffFiles   []git.FileDiff
 	threads     []review.ThreadView
 	reviews     []store.Review
+	// marks is what the viewer marked reviewed.
+	marks review.Marks
 	// draftReviewIDs marks the reviews that are the viewer's draft, so their threads show as drafts.
 	draftReviewIDs map[string]bool
 
@@ -70,6 +72,9 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 		return nil, err
 	}
 	if d.reviews, err = svc.Reviews(ctx, change); err != nil {
+		return nil, err
+	}
+	if d.marks, err = svc.Marks(ctx, change); err != nil {
 		return nil, err
 	}
 	for _, r := range d.reviews {
