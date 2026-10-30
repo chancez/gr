@@ -69,6 +69,8 @@ func (r *Repo) DiffFiles(ctx context.Context, from, to string) ([]FileDiff, erro
 			return nil, err
 		}
 	}
+	// No flag removes the hunks: git diff prints a patch only when no other output format is asked
+	// for, and --raw is one, so it prints the raw entries in place of the patch.
 	out, err := r.run(ctx, "diff", "--no-ext-diff", "--no-relative", "--no-abbrev", "--raw", "-z", "-M", from, to, "--")
 	if err != nil {
 		return nil, err
@@ -83,6 +85,7 @@ func (r *Repo) CommitFiles(ctx context.Context, base, head string) (map[string][
 	if base != "" {
 		rng = base + ".." + head
 	}
+	// As in DiffFiles, --raw takes the place of a patch; git log shows no diff at all by default.
 	out, err := r.run(ctx, "log", "--no-abbrev", "-M", "--raw", "-z", "--first-parent", "--root",
 		"--format=%x1e%H", rng, "--")
 	if err != nil {
