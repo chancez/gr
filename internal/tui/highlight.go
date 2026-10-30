@@ -18,8 +18,12 @@ type highlighter struct {
 	enabled bool
 }
 
-func newHighlighter() *highlighter {
-	return &highlighter{style: chromastyles.Get("github-dark"), lexers: map[string]chroma.Lexer{}, enabled: true}
+func newHighlighter(isDark bool) *highlighter {
+	name := "github"
+	if isDark {
+		name = "github-dark"
+	}
+	return &highlighter{style: chromastyles.Get(name), lexers: map[string]chroma.Lexer{}, enabled: true}
 }
 
 func (h *highlighter) lexer(path string) chroma.Lexer {

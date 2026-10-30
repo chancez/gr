@@ -139,13 +139,25 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 		w.Close()
 		return nil, err
 	}
-	h := help.New()
-	h.ShortSeparator, h.FullSeparator = " | ", "   "
 	m := &model{
-		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(), help: h, r: newRenderer(),
+		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
 		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew},
 	}
+	// Dark until the terminal reports its background.
+	m.setTheme(true)
 	return m, nil
+}
+
+// setTheme rebuilds colors for a dark or light background.
+func (m *model) setTheme(isDark bool) {
+	m.r = newRenderer(isDark)
+	h := help.New()
+	h.ShortSeparator, h.FullSeparator = " | ", "   "
+	h.Styles.ShortKey, h.Styles.FullKey = m.r.st.helpKey, m.r.st.helpKey
+	h.Styles.ShortDesc, h.Styles.FullDesc = m.r.st.helpDesc, m.r.st.helpDesc
+	h.Styles.ShortSeparator, h.Styles.FullSeparator = m.r.st.muted, m.r.st.muted
+	h.SetWidth(m.width)
+	m.help = h
 }
 
 func (m *model) close() {
@@ -155,7 +167,7 @@ func (m *model) close() {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), tick())
+	return tea.Batch(m.loadCmd(), tick(), tea.RequestBackgroundColor)
 }
 
 func tick() tea.Cmd {
@@ -206,6 +218,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.help.SetWidth(msg.Width)
+		m.relayout(true)
+		return m, nil
+	case tea.BackgroundColorMsg:
+		m.setTheme(msg.IsDark())
 		m.relayout(true)
 		return m, nil
 	case dataMsg:

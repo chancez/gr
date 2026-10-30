@@ -130,7 +130,7 @@ applied locally and exported later.
 
 ## Later
 
-- TOML config in `$XDG_CONFIG_HOME/gr/config.toml`: key bindings, defaults, who may resolve.
+- TOML config in `$XDG_CONFIG_HOME/gr/config.toml`: key bindings, colors, defaults, who may resolve.
 - Neovim plugin, likely backed by a `gr serve --stdio` JSON-RPC mode.
 - GitHub export of changes, reviews, and threads.
 - Reviewing uncommitted changes, by snapshotting the working tree into a commit.

@@ -25,8 +25,8 @@ type renderer struct {
 	markdown map[int]*glamour.TermRenderer
 }
 
-func newRenderer() *renderer {
-	return &renderer{st: defaultStyles(), hl: newHighlighter(), markdown: map[int]*glamour.TermRenderer{}}
+func newRenderer(isDark bool) *renderer {
+	return &renderer{st: newStyles(isDark), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
 }
 
 // rowState is how a row is highlighted.
@@ -43,7 +43,7 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 	md, ok := r.markdown[width]
 	if !ok {
 		var err error
-		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle()), glamour.WithWordWrap(width))
+		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(r.st.isDark)), glamour.WithWordWrap(width))
 		if err == nil {
 			r.markdown[width] = md
 		}
@@ -56,9 +56,12 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 	return strings.Split(lipgloss.NewStyle().Width(width).Render(body), "\n")
 }
 
-// markdownStyle is glamour's dark style, kept to ASCII.
-func markdownStyle() glamouransi.StyleConfig {
-	s := glamourstyles.DarkStyleConfig
+// markdownStyle is glamour's light or dark style, kept to ASCII.
+func markdownStyle(isDark bool) glamouransi.StyleConfig {
+	s := glamourstyles.LightStyleConfig
+	if isDark {
+		s = glamourstyles.DarkStyleConfig
+	}
 	s.Item.BlockPrefix = "- "
 	s.BlockQuote.IndentToken = new("| ")
 	// Inline code is padded with non-breaking spaces. The code background marks it already.
@@ -292,7 +295,7 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	}
 	box := st.threadBorder.Width(boxWidth)
 	if cursor {
-		box = box.BorderForeground(lipgloss.Color("#4493f8"))
+		box = box.BorderForeground(st.accent)
 	}
 	out := strings.Split(box.Render(strings.Join(lines, "\n")), "\n")
 	for i := range out {
