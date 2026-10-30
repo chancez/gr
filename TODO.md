@@ -23,7 +23,7 @@ In priority order. Foundations come first because every feature built before the
 ## State
 
 9. Remember where you were per change, the view, cursor, folds, and split mode, so reopening gr
-    after an accidental q puts you back.
+   after an accidental q puts you back.
 10. Open the overview where you last were, or at its newest end, with the change's details and
     thread counts fixed at the top like the title bar, so they stay put while scrolling.
 
