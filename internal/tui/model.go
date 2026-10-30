@@ -338,7 +338,7 @@ func (m *model) applyData(d *changeData) {
 			prevRow = m.main.rows[m.main.cursor].key(m.views[m.current].files)
 		}
 	}
-	prevOffset := m.main.offset
+	prevY := m.main.cursorY()
 	m.data = d
 	m.views = buildViews(d)
 	m.current = 0
@@ -352,10 +352,7 @@ func (m *model) applyData(d *changeData) {
 		files := m.views[m.current].files
 		for i, r := range m.main.rows {
 			if r.key(files) == prevRow {
-				m.main.cursor = i
-				m.main.offset = prevOffset
-				m.main.clamp()
-				m.main.ensureVisible()
+				m.main.placeAt(i, prevY)
 				break
 			}
 		}

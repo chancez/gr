@@ -24,6 +24,10 @@ type pane struct {
 	side   anchor.Side
 	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
 	scrolloff int
+	// overscroll lets the view sit past the end of the content, showing blank lines, so content
+	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
+	// scrolls back up.
+	overscroll int
 }
 
 // defaultScrolloff is the scrolloff panes start with.
@@ -82,7 +86,11 @@ func (p *pane) clamp() {
 		}
 	}
 	maxOffset := max(0, p.total-p.height)
-	p.offset = min(max(p.offset, 0), maxOffset)
+	if p.offset <= maxOffset {
+		// Back within the content: the overscroll has drained.
+		p.overscroll = 0
+	}
+	p.offset = min(max(p.offset, 0), maxOffset+p.overscroll)
 }
 
 func (p *pane) nextSelectable(from, dir int) int {
@@ -205,6 +213,25 @@ func (p *pane) ensureVisible() {
 		p.offset = start + h + so - p.height
 	}
 	p.clamp()
+}
+
+// cursorY is the screen line the cursor row starts on.
+func (p *pane) cursorY() int {
+	if p.cursor >= len(p.starts) {
+		return 0
+	}
+	return p.starts[p.cursor] - p.offset
+}
+
+// placeAt puts the cursor on row i, scrolled so the row starts on screen line y. Rebuilds use it
+// to keep the cursor still while rows around it change height.
+func (p *pane) placeAt(i, y int) {
+	p.cursor = i
+	want := p.starts[i] - y
+	p.overscroll = max(want-max(0, p.total-p.height), 0)
+	p.offset = want
+	p.clamp()
+	p.ensureVisible()
 }
 
 // jump puts the cursor on row i and scrolls it near the top, scrolloff lines down.

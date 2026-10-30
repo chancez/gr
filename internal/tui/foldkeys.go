@@ -140,7 +140,7 @@ func (m *model) foldAll(open bool) {
 // row, the first line of an opened gap, or the gap a closed line was in.
 func (m *model) rebuildKeeping(r row) {
 	files := m.views[m.current].files
-	offset := m.main.offset
+	y := m.main.cursorY()
 	m.rebuildMain()
 	for i, nr := range m.main.rows {
 		same := nr.key(files) == r.key(files)
@@ -148,10 +148,7 @@ func (m *model) rebuildKeeping(r row) {
 			same = true
 		}
 		if same {
-			m.main.cursor = i
-			m.main.offset = offset
-			m.main.clamp()
-			m.main.ensureVisible()
+			m.main.placeAt(i, y)
 			return
 		}
 	}

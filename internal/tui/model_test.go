@@ -893,3 +893,31 @@ func TestResolvedThreadsCollapse(t *testing.T) {
 		t.Error("reopened thread is still collapsed")
 	}
 }
+
+// TestResolvingKeepsTheCursorStill checks that a row collapsing above or at the cursor does not
+// scroll the view: the cursor row stays on the same screen line.
+func TestResolvingKeepsTheCursorStill(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	for _, body := range []string{"first", "second", "third"} {
+		if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 16})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	e.press("t", "t")
+	before := e.m.main.cursorY()
+	id := e.m.main.rows[e.m.main.cursor].thread.ID
+	e.pressRun("x")
+	if got := e.m.main.rows[e.m.main.cursor]; got.kind != rowThread || got.thread.ID != id {
+		t.Fatalf("cursor moved off the resolved thread to %+v", got)
+	}
+	if after := e.m.main.cursorY(); after != before {
+		t.Errorf("cursor moved from screen line %d to %d", before, after)
+	}
+}
