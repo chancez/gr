@@ -3,6 +3,8 @@ package tui
 import (
 	"sort"
 
+	"github.com/chancez/gr/internal/git"
+
 	"github.com/chancez/gr/internal/anchor"
 )
 
@@ -235,10 +237,15 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 	if first < 0 {
 		return out
 	}
+	var cursorHunk *git.Hunk
+	if p.cursor < len(p.rows) {
+		cursorHunk = p.rows[p.cursor].hunk
+	}
 	for i := first; i < len(p.rows) && len(out) < p.height; i++ {
 		state := rowState{cursor: i == p.cursor, selected: p.anchor >= 0 && i >= selStart && i <= selEnd, side: p.side}
+		state.activeHunk = cursorHunk != nil && p.rows[i].hunk == cursorHunk
 		var lines []string
-		if state.cursor || state.selected {
+		if state.cursor || state.selected || state.activeHunk {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {
 			lines = cached

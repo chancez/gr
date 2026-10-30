@@ -232,8 +232,17 @@ func (m *model) mainHeader(width int) string {
 	st := m.r.st
 	title := " " + m.viewLabel(m.views[m.current])
 	if c := m.main.cursor; c < len(m.main.rows) {
-		if f := m.main.rows[c].file; f >= 0 {
-			title += "  >  " + fileLabel(m.views[m.current].files[f])
+		r := m.main.rows[c]
+		if r.file >= 0 {
+			f := m.views[m.current].files[r.file]
+			title += "  >  " + fileLabel(f)
+			if r.hunk != nil {
+				for i := range f.Hunks {
+					if &f.Hunks[i] == r.hunk {
+						title += fmt.Sprintf("  (hunk %d/%d)", i+1, len(f.Hunks))
+					}
+				}
+			}
 		}
 	}
 	return paneTitle(st, title, width, m.focus == focusMain)

@@ -551,3 +551,33 @@ func TestSidebarDividerAndClicks(t *testing.T) {
 		t.Errorf("click on the second file: focus %d pos %d", e.m.focus, e.m.filesNav.pos)
 	}
 }
+
+func TestActiveHunkMarker(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(30)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	lines[1], lines[27] = "changed 2", "changed 28"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("edit both ends")
+	e.drain(e.m.loadCmd())
+	e.openNav("edit both ends")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	e.press("J", "J")
+
+	screen := e.screen()
+	if !strings.Contains(screen, "(hunk 2/2)") {
+		t.Errorf("title lacks the hunk position:\n%s", screen)
+	}
+	// The bar marks the second hunk's lines only: lines 25 to 30.
+	var marked []string
+	for _, l := range strings.Split(screen, "\n") {
+		_, main, ok := strings.Cut(l, "|")
+		if ok && strings.HasPrefix(main, "|") {
+			marked = append(marked, strings.TrimSpace(main[1:]))
+		}
+	}
+	if len(marked) != 8 || !strings.HasPrefix(marked[0], "@@") || !strings.Contains(marked[len(marked)-1], "line 30") {
+		t.Errorf("marked rows = %q, want the second hunk's header and its 7 lines", marked)
+	}
+}

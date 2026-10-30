@@ -37,6 +37,16 @@ type rowState struct {
 	side anchor.Side
 	// dim shows the cursor faintly, when the main pane does not have focus.
 	dim bool
+	// activeHunk is set on rows of the hunk the cursor is in.
+	activeHunk bool
+}
+
+// hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
+func (r *renderer) hunkMarker(state rowState) string {
+	if state.activeHunk {
+		return lipgloss.NewStyle().Bold(true).Foreground(r.st.accent).Render("|")
+	}
+	return " "
 }
 
 func (r *renderer) cursorBg(state rowState) color.Color {
@@ -176,13 +186,13 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if state.cursor {
 			style = style.Background(r.cursorBg(state))
 		}
-		return []string{style.Render(fit(label, width, nil))}
+		return []string{r.hunkMarker(state) + style.Render(fit(label, width-1, nil))}
 	case rowLine:
 		f := v.files[rw.file]
 		if rw.line != nil {
-			return []string{r.renderUnified(f, *rw.line, width, state)}
+			return []string{r.hunkMarker(state) + r.renderUnified(f, *rw.line, width-1, state)}
 		}
-		return []string{r.renderSplit(f, rw.left, rw.right, width, state)}
+		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
 	case rowThread:
 		return r.renderThread(d, *rw.thread, width, state.cursor)
 	}
