@@ -82,7 +82,8 @@ type Target struct {
 //   - a local branch name is that branch
 //   - anything else that resolves to a commit is that single commit
 //
-// base is the base branch for branch targets, defaulting to the repository's default branch.
+// base is the base branch for branch targets, defaulting to the open change's base, then the
+// repository's default branch.
 func (s *Service) ParseTarget(ctx context.Context, spec, base string) (Target, error) {
 	if strings.Contains(spec, "...") {
 		return Target{}, fmt.Errorf("%q: symmetric ranges are not supported, use A..B", spec)
@@ -110,6 +111,16 @@ func (s *Service) ParseTarget(ctx context.Context, spec, base string) (Target, e
 		return Target{}, err
 	}
 	if isBranch {
+		if base == "" {
+			// An open change already knows its base.
+			change, err := s.store.OpenBranchChange(ctx, s.repo.ID, branch)
+			switch {
+			case err == nil:
+				base = change.BaseBranch
+			case !errors.Is(err, store.ErrNotFound):
+				return Target{}, err
+			}
+		}
 		if base == "" {
 			if base, err = s.git.DefaultBranch(ctx); err != nil {
 				return Target{}, err

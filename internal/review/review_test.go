@@ -467,3 +467,33 @@ func TestParseAuthor(t *testing.T) {
 		}
 	}
 }
+
+func TestParseTargetUsesOpenChangeBase(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	// No main or master, so there is no default branch to fall back on.
+	e.repo.Git("branch", "-m", "main", "trunk")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+
+	if _, err := s.ParseTarget(ctx, "", ""); err == nil {
+		t.Fatal("ParseTarget with no default branch and no change succeeded")
+	}
+	target, err := s.ParseTarget(ctx, "", "trunk")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.EnsureChange(ctx, target); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.ParseTarget(ctx, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := review.Target{Kind: store.KindBranch, Branch: "feature", BaseBranch: "trunk"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("ParseTarget mismatch (-want +got):\n%s", diff)
+	}
+}
