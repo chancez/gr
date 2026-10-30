@@ -147,7 +147,7 @@ func addedLine(r row) bool { return r.kind == rowLine && r.line != nil && r.line
 func TestOverview(t *testing.T) {
 	e := newTUIEnv(t)
 	screen := e.screen()
-	for _, want := range []string{"#1 feature", "Overview", "All changes", "say hello", "Conversation"} {
+	for _, want := range []string{"#1 feature", "Overview", "All changes", "say h", "Conversation"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("overview missing %q:\n%s", want, screen)
 		}
@@ -477,7 +477,7 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	reviewedItem := false
 	for _, it := range e.m.viewsNav.items {
 		if strings.Contains(it.label, "say hello") {
-			reviewedItem = strings.HasPrefix(it.label, "x ")
+			reviewedItem = strings.HasPrefix(it.label, markReviewed)
 		}
 	}
 	if !reviewedItem || !strings.Contains(e.screen(), "1/2 commits reviewed") {
@@ -723,5 +723,31 @@ func TestFolds(t *testing.T) {
 	e.press("z", "R")
 	if !strings.Contains(e.screen(), "line 15") {
 		t.Errorf("zR did not open the file and its folds:\n%s", e.screen())
+	}
+}
+
+func TestSidebarMarks(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+	e.press("c")
+	e.typeText("draft")
+	e.pressRun("ctrl+s")
+
+	for _, it := range e.m.viewsNav.items {
+		if strings.Contains(it.label, "say hello") && !strings.HasPrefix(it.label, marks(false, true)) {
+			t.Errorf("commit label %q lacks the draft mark", it.label)
+		}
+	}
+	for _, it := range e.m.filesNav.items {
+		if strings.Contains(it.label, "main.go") && !strings.HasPrefix(it.prefix, marks(false, true)) {
+			t.Errorf("file prefix %q lacks the draft mark", it.prefix)
+		}
+		if strings.Contains(it.label, "COMMIT_MSG") && !strings.HasPrefix(it.prefix, marks(false, false)) {
+			t.Errorf("message prefix %q has marks", it.prefix)
+		}
+	}
+	if marks(true, true) != "x* " || marks(false, false) != "   " {
+		t.Errorf("marks = %q and %q", marks(true, true), marks(false, false))
 	}
 }

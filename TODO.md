@@ -7,6 +7,7 @@
 - Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
 - Configurable scrolloff.
 - Default sidebar width.
+- Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
 
 ## TUI
 

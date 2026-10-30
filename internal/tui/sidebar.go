@@ -115,6 +115,43 @@ func (m *model) viewLabel(v view) string {
 	return ""
 }
 
+// Sidebar marks, one column each, shown before an item's label.
+//
+// TODO: make these configurable, so icons such as checkboxes can replace the ASCII defaults.
+const (
+	// markReviewed is shown on files and commits marked reviewed.
+	markReviewed = "x"
+	// markDraft is shown where you have draft comments not yet submitted.
+	markDraft = "*"
+	// markNone fills an empty column, keeping labels aligned.
+	markNone = " "
+)
+
+// marks renders the mark columns and a separating space.
+func marks(reviewed, draft bool) string {
+	reviewedMark, draftMark := markNone, markNone
+	if reviewed {
+		reviewedMark = markReviewed
+	}
+	if draft {
+		draftMark = markDraft
+	}
+	return reviewedMark + draftMark + " "
+}
+
+// draftThreads counts the viewer's draft threads in a view, on one path or, if path is empty, on
+// any.
+func (m *model) draftThreads(v view, path string) int {
+	n := 0
+	for i := range m.data.threads {
+		t := &m.data.threads[i]
+		if m.data.isDraft(t.ReviewID) && threadInView(t, v) && (path == "" || t.Location.Path == path) {
+			n++
+		}
+	}
+	return n
+}
+
 // openThreads counts unresolved current threads per file path in a view.
 func (m *model) openThreads(v view) map[string]int {
 	counts := map[string]int{}
@@ -136,10 +173,7 @@ func (m *model) buildNav() {
 	for vi, v := range m.views {
 		prefix := ""
 		if v.kind == viewCommit || v.kind == viewDiff {
-			prefix = "  "
-			if m.viewReviewed(v) {
-				prefix = "x "
-			}
+			prefix = marks(m.viewReviewed(v), m.draftThreads(v, "") > 0)
 		}
 		m.viewsNav.items = append(m.viewsNav.items, navItem{label: prefix + m.viewLabel(v), view: vi, file: -1})
 	}
@@ -153,11 +187,7 @@ func (m *model) buildNav() {
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
 	for fi, f := range v.files {
-		mark := "  "
-		if m.fileReviewed(v, fi) {
-			mark = "x "
-		}
-		prefix := mark + statusLetter(f.Status) + " "
+		prefix := marks(m.fileReviewed(v, fi), m.draftThreads(v, f.Path()) > 0) + statusLetter(f.Status) + " "
 		if n := counts[f.Path()]; n > 0 {
 			prefix += fmt.Sprintf("(%d) ", n)
 		}
