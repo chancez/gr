@@ -27,6 +27,10 @@ type FileDiff struct {
 	Status  FileStatus
 	OldMode string
 	NewMode string
+	// OldBlob and NewBlob are the blob ids from the index line, empty for a side that does not exist
+	// or when git printed no index line, as for a pure rename.
+	OldBlob string
+	NewBlob string
 	Binary  bool
 	Hunks   []Hunk
 }
@@ -145,8 +149,12 @@ func (p *diffParser) parseFile() (FileDiff, error) {
 			f.Binary = true
 		case strings.HasPrefix(line, "index "):
 			// "index abc..def 100644": the mode is shared by both sides.
-			if _, mode, ok := strings.Cut(line[len("index "):], " "); ok {
+			blobs, mode, hasMode := strings.Cut(line[len("index "):], " ")
+			if hasMode {
 				f.OldMode, f.NewMode = mode, mode
+			}
+			if old, new, ok := strings.Cut(blobs, ".."); ok {
+				f.OldBlob, f.NewBlob = nonZero(old), nonZero(new)
 			}
 		}
 	}
@@ -180,6 +188,14 @@ func (p *diffParser) parseFile() (FileDiff, error) {
 		f.Hunks = append(f.Hunks, h)
 	}
 	return f, nil
+}
+
+// nonZero returns id, or "" for the all-zero id git prints for a missing side.
+func nonZero(id string) string {
+	if strings.Trim(id, "0") == "" {
+		return ""
+	}
+	return id
 }
 
 // stripPrefix removes git's a/ or b/ prefix from a ---/+++ path. /dev/null becomes "".

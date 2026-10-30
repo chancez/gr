@@ -310,7 +310,7 @@ func (r *Repo) Diff(ctx context.Context, from, to string) ([]FileDiff, error) {
 		}
 	}
 	out, err := r.run(ctx, "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-relative",
-		"--src-prefix=a/", "--dst-prefix=b/", "-M", from, to, "--")
+		"--full-index", "--src-prefix=a/", "--dst-prefix=b/", "-M", from, to, "--")
 	if err != nil {
 		return nil, err
 	}

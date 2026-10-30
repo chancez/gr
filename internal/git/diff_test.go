@@ -30,6 +30,8 @@ index 1111111..2222222 100644
 				Status:  StatusModified,
 				OldMode: "100644",
 				NewMode: "100644",
+				OldBlob: "1111111",
+				NewBlob: "2222222",
 				Hunks: []Hunk{{
 					OldStart: 1, OldLines: 3, NewStart: 1, NewLines: 3,
 					Section: "package main",
@@ -57,6 +59,7 @@ index 0000000..3333333
 				NewPath: "new.txt",
 				Status:  StatusAdded,
 				NewMode: "100644",
+				NewBlob: "3333333",
 				Hunks: []Hunk{{
 					OldStart: 0, OldLines: 0, NewStart: 1, NewLines: 1,
 					Lines: []Line{{Kind: LineAdded, Text: "hello", NewLine: 1, NoNewline: true}},
@@ -78,6 +81,7 @@ index 3333333..0000000
 				OldPath: "old.txt",
 				Status:  StatusDeleted,
 				OldMode: "100644",
+				OldBlob: "3333333",
 				Hunks: []Hunk{{
 					OldStart: 1, OldLines: 2, NewStart: 0, NewLines: 0,
 					Lines: []Line{
@@ -108,6 +112,8 @@ Binary files "a/caf\303\251\t.bin" and "b/caf\303\251\t.bin" differ
 				Status:  StatusModified,
 				OldMode: "100644",
 				NewMode: "100644",
+				OldBlob: "1111111",
+				NewBlob: "2222222",
 				Binary:  true,
 			}},
 		},
