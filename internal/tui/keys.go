@@ -4,56 +4,57 @@ import "charm.land/bubbles/v2/key"
 
 // keyMap holds every binding, so help text and future remapping read from one place.
 type keyMap struct {
-	Up           key.Binding
-	Down         key.Binding
-	HalfPageUp   key.Binding
-	HalfPageDown key.Binding
-	PageUp       key.Binding
-	PageDown     key.Binding
-	Top          key.Binding
-	Bottom       key.Binding
-	Left         key.Binding
-	Right        key.Binding
-	NextFile     key.Binding
-	PrevFile     key.Binding
-	AllChanges   key.Binding
-	NextCommit   key.Binding
-	PrevCommit   key.Binding
-	NextChange   key.Binding
-	PrevChange   key.Binding
-	NextHunk     key.Binding
-	PrevHunk     key.Binding
-	Filter       key.Binding
-	OpenThread   key.Binding
-	Fold         key.Binding
-	FoldAll      key.Binding
-	Search       key.Binding
-	SearchNext   key.Binding
-	SearchPrev   key.Binding
-	NextThread   key.Binding
-	PrevThread   key.Binding
-	Focus        key.Binding
-	FocusBack    key.Binding
-	SectionDown  key.Binding
-	SectionUp    key.Binding
-	Open         key.Binding
-	Select       key.Binding
-	Comment      key.Binding
-	FileComment  key.Binding
-	Reply        key.Binding
-	Resolve      key.Binding
-	Address      key.Binding
-	Edit         key.Binding
-	Delete       key.Binding
-	Reviewed     key.Binding
-	CommitDone   key.Binding
-	Submit       key.Binding
-	Discard      key.Binding
-	Split        key.Binding
-	Reload       key.Binding
-	Help         key.Binding
-	Quit         key.Binding
-	Cancel       key.Binding
+	Up               key.Binding
+	Down             key.Binding
+	HalfPageUp       key.Binding
+	HalfPageDown     key.Binding
+	PageUp           key.Binding
+	PageDown         key.Binding
+	Top              key.Binding
+	Bottom           key.Binding
+	Left             key.Binding
+	Right            key.Binding
+	NextFile         key.Binding
+	PrevFile         key.Binding
+	AllChanges       key.Binding
+	NextCommit       key.Binding
+	PrevCommit       key.Binding
+	NextChange       key.Binding
+	PrevChange       key.Binding
+	NextHunk         key.Binding
+	PrevHunk         key.Binding
+	Filter           key.Binding
+	OpenThread       key.Binding
+	OpenThreadCommit key.Binding
+	Fold             key.Binding
+	FoldAll          key.Binding
+	Search           key.Binding
+	SearchNext       key.Binding
+	SearchPrev       key.Binding
+	NextThread       key.Binding
+	PrevThread       key.Binding
+	Focus            key.Binding
+	FocusBack        key.Binding
+	SectionDown      key.Binding
+	SectionUp        key.Binding
+	Open             key.Binding
+	Select           key.Binding
+	Comment          key.Binding
+	FileComment      key.Binding
+	Reply            key.Binding
+	Resolve          key.Binding
+	Address          key.Binding
+	Edit             key.Binding
+	Delete           key.Binding
+	Reviewed         key.Binding
+	CommitDone       key.Binding
+	Submit           key.Binding
+	Discard          key.Binding
+	Split            key.Binding
+	Reload           key.Binding
+	Help             key.Binding
+	Quit             key.Binding
+	Cancel           key.Binding
 
 	// Compose mode.
 	Save         key.Binding
@@ -62,28 +63,29 @@ type keyMap struct {
 
 func defaultKeys() keyMap {
 	return keyMap{
-		Up:           key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("k/up", "up")),
-		Down:         key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("j/down", "down")),
-		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u", "u"), key.WithHelp("u", "half page up")),
-		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d", "d"), key.WithHelp("d", "half page down")),
-		PageUp:       key.NewBinding(key.WithKeys("pgup", "ctrl+b", "b"), key.WithHelp("b/pgup", "page up")),
-		PageDown:     key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/space", "page down")),
-		Top:          key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
-		Bottom:       key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Left:         key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "sidebar/diff, or diff side")),
-		Right:        key.NewBinding(key.WithKeys("l", "right")),
-		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
-		PrevFile:     key.NewBinding(key.WithKeys("[")),
-		AllChanges:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
-		NextCommit:   key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
-		PrevCommit:   key.NewBinding(key.WithKeys("{")),
-		NextChange:   key.NewBinding(key.WithKeys(")"), key.WithHelp(")/(", "next/prev change")),
-		PrevChange:   key.NewBinding(key.WithKeys("(")),
-		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
-		PrevHunk:     key.NewBinding(key.WithKeys("K")),
-		Filter:       key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "filter threads")),
-		OpenThread:   key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open thread in its diff")),
-		Fold:         key.NewBinding(key.WithKeys("z"), key.WithHelp("zo/zc/za", "open/close/toggle fold")),
+		Up:               key.NewBinding(key.WithKeys("up", "k"), key.WithHelp("k/up", "up")),
+		Down:             key.NewBinding(key.WithKeys("down", "j"), key.WithHelp("j/down", "down")),
+		HalfPageUp:       key.NewBinding(key.WithKeys("ctrl+u", "u"), key.WithHelp("u", "half page up")),
+		HalfPageDown:     key.NewBinding(key.WithKeys("ctrl+d", "d"), key.WithHelp("d", "half page down")),
+		PageUp:           key.NewBinding(key.WithKeys("pgup", "ctrl+b", "b"), key.WithHelp("b/pgup", "page up")),
+		PageDown:         key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/space", "page down")),
+		Top:              key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
+		Bottom:           key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
+		Left:             key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "sidebar/diff, or diff side")),
+		Right:            key.NewBinding(key.WithKeys("l", "right")),
+		NextFile:         key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
+		PrevFile:         key.NewBinding(key.WithKeys("[")),
+		AllChanges:       key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
+		NextCommit:       key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
+		PrevCommit:       key.NewBinding(key.WithKeys("{")),
+		NextChange:       key.NewBinding(key.WithKeys(")"), key.WithHelp(")/(", "next/prev change")),
+		PrevChange:       key.NewBinding(key.WithKeys("(")),
+		NextHunk:         key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
+		PrevHunk:         key.NewBinding(key.WithKeys("K")),
+		Filter:           key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "filter threads")),
+		OpenThread:       key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open thread in the whole diff")),
+		OpenThreadCommit: key.NewBinding(key.WithKeys("O"), key.WithHelp("O", "open thread in its commit")),
+		Fold:             key.NewBinding(key.WithKeys("z"), key.WithHelp("zo/zc/za", "open/close/toggle fold")),
 		// Help only: z sequences are handled as a pending prefix.
 		FoldAll:      key.NewBinding(key.WithKeys("zR"), key.WithHelp("zR/zM", "open/close all folds")),
 		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),

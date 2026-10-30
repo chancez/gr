@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
@@ -19,6 +20,8 @@ type changeData struct {
 	diffFiles   []git.FileDiff
 	threads     []review.ThreadView
 	reviews     []store.Review
+	// diffPlacements is where threads on commits show in the whole diff, by thread id.
+	diffPlacements map[string]store.Location
 	// marks is what the viewer marked reviewed.
 	marks review.Marks
 	// draftReviewIDs marks the reviews that are the viewer's draft, so their threads show as drafts.
@@ -76,6 +79,9 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 	if d.reviews, err = svc.Reviews(ctx, change); err != nil {
 		return nil, err
 	}
+	if d.diffPlacements, err = placeInDiff(ctx, svc, d); err != nil {
+		return nil, err
+	}
 	if d.marks, err = svc.Marks(ctx, change); err != nil {
 		return nil, err
 	}
@@ -92,6 +98,31 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 		d.interdiff, d.interdiffFrom, d.interdiffExact, d.interdiffFromReview = files, from, exact, fromReview
 	}
 	return d, nil
+}
+
+// placeInDiff maps current line threads on commits to the whole diff: their new-side lines carried
+// from the commit to the head, kept when they land in the diff.
+func placeInDiff(ctx context.Context, svc *review.Service, d *changeData) (map[string]store.Location, error) {
+	out := map[string]store.Location{}
+	for _, t := range d.threads {
+		loc := t.Location
+		if t.Outdated || loc.Scope != store.ScopeCommit || loc.StartLine == 0 || loc.Side != anchor.SideNew ||
+			loc.Path == review.CommitMsgPath {
+			continue
+		}
+		start, end, err := svc.TranslateLines(ctx, loc.Commit, d.revision.HeadSHA, loc.Path, loc.StartLine, loc.EndLine)
+		if err != nil {
+			return nil, err
+		}
+		for _, f := range d.diffFiles {
+			if f.NewPath == loc.Path && anchor.InDiff(f, anchor.SideNew, start, end) {
+				placed := loc
+				placed.Scope, placed.StartLine, placed.EndLine = store.ScopeDiff, start, end
+				out[t.ID] = placed
+			}
+		}
+	}
+	return out, nil
 }
 
 // interdiffBase picks the revision to compare the latest with: the one the viewer last reviewed,

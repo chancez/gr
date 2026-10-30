@@ -154,12 +154,14 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 	byLine := map[threadKey][]*review.ThreadView{}
 	byFile := map[string][]*review.ThreadView{}
 	var whole, lineThreads []*review.ThreadView
+	locs := map[*review.ThreadView]store.Location{}
 	for i := range d.threads {
 		t := &d.threads[i]
-		if !threadInView(t, v) {
+		loc, ok := d.locationIn(t, v)
+		if !ok {
 			continue
 		}
-		loc := t.Location
+		locs[t] = loc
 		switch {
 		case loc.Path == "":
 			whole = append(whole, t)
@@ -252,7 +254,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		gapRows(len(f.Hunks))
 		// Threads whose lines are not in this diff, which should not happen for current threads.
 		for _, t := range lineThreads {
-			loc := t.Location
+			loc := locs[t]
 			onFile := (loc.Side == anchor.SideOld && loc.Path == f.OldPath) || (loc.Side == anchor.SideNew && loc.Path == f.NewPath)
 			if onFile && !placed[t] {
 				rows = append(rows, row{kind: rowThread, file: fi, thread: t})
@@ -263,17 +265,28 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 }
 
 // threadInView reports whether a current thread belongs in a file view.
-func threadInView(t *review.ThreadView, v view) bool {
+func threadInView(t *review.ThreadView, v view, d *changeData) bool {
+	_, ok := d.locationIn(t, v)
+	return ok
+}
+
+// locationIn is where a current thread shows in a file view. Threads on a commit show in that
+// commit, and in the whole diff at the place their lines map to at the head, when it is in the diff.
+func (d *changeData) locationIn(t *review.ThreadView, v view) (store.Location, bool) {
 	if t.Outdated {
-		return false
+		return store.Location{}, false
 	}
 	switch v.kind {
 	case viewCommit:
-		return t.Location.Scope == store.ScopeCommit && t.Location.Commit == v.commit.SHA
+		return t.Location, t.Location.Scope == store.ScopeCommit && t.Location.Commit == v.commit.SHA
 	case viewDiff:
-		return t.Location.Scope == store.ScopeDiff
+		if t.Location.Scope == store.ScopeDiff {
+			return t.Location, true
+		}
+		loc, ok := d.diffPlacements[t.ID]
+		return loc, ok
 	}
-	return false
+	return store.Location{}, false
 }
 
 // pairLines lines up a hunk for side-by-side display: context lines face themselves, and each run of

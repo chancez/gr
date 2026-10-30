@@ -96,7 +96,8 @@ func (m *model) helpSections() []helpSection {
 		}},
 		{title: "Overview", context: contextOverview, bindings: []key.Binding{
 			hint("j/k", "scroll"), hint("d/u, f/b", "half page, page"), hint("t/T", "next/prev thread"),
-			hint("enter", "expand/collapse thread"), hint("o", "open thread in its diff"), k.Filter,
+			hint("enter", "expand/collapse thread"), hint("o", "open thread in the whole diff"),
+			hint("O", "open thread in its commit"), k.Filter,
 			hint("c", "comment on the change"),
 		}},
 		{title: "Diff", context: contextDiff, bindings: []key.Binding{

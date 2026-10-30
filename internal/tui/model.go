@@ -771,9 +771,9 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowLine {
 			p.anchor = p.cursor
 		}
-	case key.Matches(msg, k.OpenThread):
+	case key.Matches(msg, k.OpenThread), key.Matches(msg, k.OpenThreadCommit):
 		if m.views[m.current].kind == viewOverview && p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
-			m.openThread(*p.rows[p.cursor].thread)
+			m.openThread(*p.rows[p.cursor].thread, key.Matches(msg, k.OpenThread))
 		}
 	case key.Matches(msg, k.Filter):
 		if m.views[m.current].kind == viewOverview {
@@ -853,17 +853,20 @@ func (m *model) toggleAllChanges() {
 }
 
 // openThread shows a thread in the commit or diff it is anchored to, with the cursor on it.
-func (m *model) openThread(t review.ThreadView) {
+//
+// With inDiff, it prefers the whole diff, where a thread on a commit shows at the place its code
+// is now, so a fix made after the comment shows beside it; it falls back to the thread's commit.
+func (m *model) openThread(t review.ThreadView, inDiff bool) {
 	if t.Outdated {
 		m.setError(errors.New("the code this thread is on changed; it is shown as it was"))
 		return
 	}
 	target := -1
 	for i, v := range m.views {
-		switch {
-		case t.Location.Scope == store.ScopeCommit && v.kind == viewCommit && v.commit.SHA == t.Location.Commit,
-			t.Location.Scope == store.ScopeDiff && v.kind == viewDiff:
-			target = i
+		if _, ok := m.data.locationIn(&t, v); ok && (v.kind == viewCommit || v.kind == viewDiff) {
+			if target < 0 || (inDiff && v.kind == viewDiff) || (!inDiff && v.kind == viewCommit) {
+				target = i
+			}
 		}
 	}
 	if target < 0 {
@@ -884,7 +887,7 @@ func (m *model) openThread(t review.ThreadView) {
 	for f, file := range v.files {
 		if file.Path() == t.Location.Path && m.collapsed(v, f) {
 			m.toggleCollapsed(v, f)
-			m.openThread(t)
+			m.openThread(t, inDiff)
 			return
 		}
 	}

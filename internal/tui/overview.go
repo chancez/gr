@@ -90,7 +90,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			"Threads: "+st.badgeOpen.Render(fmt.Sprintf("%d open", counts[store.ThreadOpen]))+", "+
 				st.badgeWarn.Render(fmt.Sprintf("%d addressed", counts[store.ThreadAddressed]))+", "+
 				st.badgeDone.Render(fmt.Sprintf("%d resolved", counts[store.ThreadResolved]))+
-				st.muted.Render("   showing "+filter.String()+"; F filters, o opens a thread in its diff"),
+				st.muted.Render("   showing "+filter.String()+"; F filters, o opens a thread in the whole diff, O in its commit"),
 			"",
 		),
 	}

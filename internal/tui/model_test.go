@@ -843,9 +843,9 @@ func TestConversationView(t *testing.T) {
 		t.Errorf("addressed filter:\n%s", screen)
 	}
 
-	// o opens the line thread in its commit.
+	// O opens the line thread in its commit.
 	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == line.ID })
-	e.press("o")
+	e.press("O")
 	v := e.m.views[e.m.current]
 	cur := e.m.main.rows[e.m.main.cursor]
 	if v.kind != viewCommit || v.commit.SHA != commit || cur.kind != rowThread || cur.thread.ID != line.ID {
@@ -1392,5 +1392,50 @@ func TestWheelKeepsTheSelection(t *testing.T) {
 	}
 	if it := p.items[p.item]; it.end <= p.offset || it.start >= p.offset+p.height {
 		t.Errorf("j selected item %d, which is out of view", p.item)
+	}
+}
+
+// TestCommitThreadsShowInTheWholeDiff leaves a thread on a commit, fixes its line in a later commit,
+// and checks the thread shows in the whole diff beside the fix, and that o and O open it in each.
+func TestCommitThreadsShowInTheWholeDiff(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	first := e.m.data.commits[0].SHA
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{
+		Scope: store.ScopeCommit, Commit: first, Path: "main.go", StartLine: 4, Body: "say goodbye instead",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	// The fix, a line above, so the thread's line moves.
+	e.repo.Write("main.go", gittest.Lines("package main", "", "// greets", "func main() {", "\tprintln(\"goodbye\")", "}"))
+	e.repo.Commit("say goodbye")
+	e.drain(e.m.loadCmd())
+
+	loc, ok := e.m.data.diffPlacements[v.ID]
+	if !ok || loc.StartLine != 5 {
+		t.Fatalf("placement in the whole diff = %+v, %v; want line 5", loc, ok)
+	}
+	e.openNav("All changes")
+	e.press("t")
+	cur := e.m.main.rows[e.m.main.cursor]
+	if cur.kind != rowThread || cur.thread.ID != v.ID {
+		t.Fatalf("t in the whole diff selected %+v, want the commit's thread", cur)
+	}
+
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == v.ID })
+	e.press("o")
+	if got := e.m.views[e.m.current]; got.kind != viewDiff {
+		t.Errorf("o opened %q, want the whole diff", e.m.viewLabel(got))
+	}
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == v.ID })
+	e.press("O")
+	if got := e.m.views[e.m.current]; got.kind != viewCommit || got.commit.SHA != first {
+		t.Errorf("O opened %q, want the thread's commit", e.m.viewLabel(got))
 	}
 }

@@ -241,7 +241,7 @@ func (m *model) draftThreads(v view, path string) int {
 	n := 0
 	for i := range m.data.threads {
 		t := &m.data.threads[i]
-		if m.data.isDraft(t.ReviewID) && threadInView(t, v) && (path == "" || t.Location.Path == path) {
+		if loc, ok := m.data.locationIn(t, v); ok && m.data.isDraft(t.ReviewID) && (path == "" || loc.Path == path) {
 			n++
 		}
 	}
@@ -253,8 +253,8 @@ func (m *model) openThreads(v view) map[string]int {
 	counts := map[string]int{}
 	for i := range m.data.threads {
 		t := &m.data.threads[i]
-		if t.State != store.ThreadResolved && threadInView(t, v) {
-			counts[t.Location.Path]++
+		if loc, ok := m.data.locationIn(t, v); ok && t.State != store.ThreadResolved {
+			counts[loc.Path]++
 		}
 	}
 	return counts
