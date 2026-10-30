@@ -20,7 +20,15 @@ type pane struct {
 	width  int
 	height int
 	side   anchor.Side
+	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
+	scrolloff int
 }
+
+// defaultScrolloff is the scrolloff panes start with.
+const defaultScrolloff = 5
+
+// margin is the scrolloff that fits: at most a third of the pane each side.
+func (p *pane) margin() int { return max(min(p.scrolloff, (p.height-1)/3), 0) }
 
 func (p *pane) layout(render func(i int, state rowState) []string) {
 	p.cache = map[int][]string{}
@@ -182,22 +190,28 @@ func (p *pane) ensureVisible() {
 	}
 	start := p.starts[p.cursor]
 	h := p.rowHeight(p.cursor)
-	if start < p.offset {
-		p.offset = start
-	} else if start+h > p.offset+p.height {
-		// Show the whole row if it fits, else its top.
-		p.offset = start + min(h, p.height) - p.height
+	so := p.margin()
+	switch {
+	case h+2*so > p.height:
+		// Too tall to keep a margin below: show its top.
+		if start-so < p.offset || start >= p.offset+p.height {
+			p.offset = start - so
+		}
+	case start-so < p.offset:
+		p.offset = start - so
+	case start+h+so > p.offset+p.height:
+		p.offset = start + h + so - p.height
 	}
 	p.clamp()
 }
 
-// jump puts the cursor on row i and scrolls it near the top.
+// jump puts the cursor on row i and scrolls it near the top, scrolloff lines down.
 func (p *pane) jump(i int) {
 	if i < 0 || i >= len(p.rows) {
 		return
 	}
 	p.cursor = i
-	p.offset = p.starts[i]
+	p.offset = p.starts[i] - p.margin()
 	p.clamp()
 	p.ensureVisible()
 }

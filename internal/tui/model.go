@@ -142,7 +142,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew}, expanded: map[string]bool{}, returnView: -1,
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, returnView: -1,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
