@@ -934,11 +934,18 @@ func TestOverviewScrollsByLine(t *testing.T) {
 	e.openNav("Overview")
 
 	p := &e.m.main
+	// j moves the line cursor without scrolling until it nears the bottom edge.
+	for range p.height - 1 - p.margin() {
+		e.press("j")
+	}
+	if p.offset != 0 {
+		t.Fatalf("view scrolled before the cursor reached the scrolloff margin: offset %d", p.offset)
+	}
 	for i := range 3 {
 		before := p.offset
 		e.press("j")
 		if p.offset != before+1 {
-			t.Fatalf("j %d moved the view from %d to %d, want one line", i, before, p.offset)
+			t.Fatalf("j %d at the margin moved the view from %d to %d, want one line", i, before, p.offset)
 		}
 	}
 	// Scrolling far enough selects later threads, in order.
@@ -1013,5 +1020,56 @@ func TestOverviewEnterExpandsResolved(t *testing.T) {
 	e.press("enter")
 	if e.m.main.rows[e.m.main.cursor].collapsed {
 		t.Error("enter did not expand the resolved thread in the overview")
+	}
+}
+
+func TestOverviewLineCursorSelectsThreads(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	var ids []string
+	for _, body := range []string{"first", "second", "third"} {
+		v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, v.ID)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	// Tall enough that nothing scrolls.
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	p := &e.m.main
+	var selected []string
+	for range 40 {
+		e.press("j")
+		if p.offset != 0 {
+			t.Fatalf("view scrolled on a page that fits")
+		}
+		if r := p.rows[p.cursor]; r.kind == rowThread && (len(selected) == 0 || selected[len(selected)-1] != r.thread.ID) {
+			selected = append(selected, r.thread.ID)
+		}
+	}
+	if strings.Join(selected, ",") != strings.Join(ids, ",") {
+		t.Errorf("j selected %v, want each thread in order %v", selected, ids)
+	}
+	// The marker sits on the line cursor's line.
+	lines := strings.Split(e.m.render(), "\n")
+	marker := e.m.r.hunkMarker(rowState{activeHunk: true})
+	n := 0
+	for _, l := range lines {
+		if _, main, ok := strings.Cut(l, "|"); ok && strings.Contains(main, marker) {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Errorf("line cursor marker on %d lines, want 1", n)
+	}
+	e.press("k")
+	if p.line != p.total-2 {
+		t.Errorf("line cursor = %d after reaching the end and a k, want %d", p.line, p.total-2)
 	}
 }

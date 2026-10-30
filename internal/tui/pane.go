@@ -24,9 +24,12 @@ type pane struct {
 	side   anchor.Side
 	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
 	scrolloff int
-	// lineMode scrolls by lines instead of moving between rows, and selects the row at the reading
-	// line. The overview uses it, since its threads are many lines tall.
+	// lineMode moves a line cursor instead of moving between rows, and selects the row it is in. The overview uses it, since its threads are many lines tall.
 	lineMode bool
+	// line is the line cursor in line mode, as an index into all display lines.
+	line int
+	// lineMarker is drawn in the left margin on the line cursor's line.
+	lineMarker string
 	// overscroll lets the view sit past the end of the content, showing blank lines, so content
 	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
 	// scrolls back up.
@@ -88,6 +91,7 @@ func (p *pane) clamp() {
 			p.cursor = prev
 		}
 	}
+	p.line = min(max(p.line, 0), max(p.total-1, 0))
 	maxOffset := max(0, p.total-p.height)
 	if p.offset <= maxOffset {
 		// Back within the content: the overscroll has drained.
@@ -218,28 +222,52 @@ func (p *pane) ensureVisible() {
 	p.clamp()
 }
 
-// scrollLines scrolls the view by n lines in line mode and selects the row at the reading line.
+// moveLine moves the line cursor n lines in line mode, scrolling only to keep it scrolloff lines
+// from the edges, as in vim, and selects the row it is in.
+func (p *pane) moveLine(n int) {
+	if p.total == 0 {
+		return
+	}
+	p.line = min(max(p.line+n, 0), p.total-1)
+	so := p.margin()
+	if p.line-so < p.offset {
+		p.offset = p.line - so
+	} else if p.line+so >= p.offset+p.height {
+		p.offset = p.line + so - p.height + 1
+	}
+	p.clamp()
+	p.selectLine()
+}
+
+// scrollLines scrolls the view n lines in line mode, moving the line cursor with it, as paging does.
 func (p *pane) scrollLines(n int) {
 	p.offset += n
 	p.clamp()
-	p.pickReadingRow()
+	p.line = min(max(p.line+n, p.offset), min(p.offset+p.height, p.total)-1)
+	p.line = max(p.line, 0)
+	p.selectLine()
 }
 
-// pickReadingRow selects the row covering the reading line, scrolloff lines below the top, or the
-// nearest selectable row in view.
-func (p *pane) pickReadingRow() {
-	i := p.rowAt(min(p.margin(), max(p.total-p.offset-1, 0)))
+// selectLine selects the row the line cursor is in. On a line of static text, such as a review's
+// header, it selects the next row that can be, else the previous.
+func (p *pane) selectLine() {
+	i := sort.Search(len(p.starts), func(i int) bool { return p.starts[i] > p.line }) - 1
 	if i < 0 {
 		return
 	}
 	if p.rows[i].selectable() {
 		p.cursor = i
-		return
-	}
-	if next := p.nextSelectable(i, 1); next >= 0 && p.starts[next] < p.offset+p.height {
+	} else if next := p.nextSelectable(i, 1); next >= 0 {
 		p.cursor = next
-	} else if prev := p.nextSelectable(i, -1); prev >= 0 && p.starts[prev]+p.rowHeight(prev) > p.offset {
+	} else if prev := p.nextSelectable(i, -1); prev >= 0 {
 		p.cursor = prev
+	}
+}
+
+// syncLine puts the line cursor on the cursor row's first line, after the cursor moved by row.
+func (p *pane) syncLine() {
+	if p.cursor < len(p.starts) {
+		p.line = p.starts[p.cursor]
 	}
 }
 
@@ -260,6 +288,7 @@ func (p *pane) placeAt(i, y int) {
 	p.offset = want
 	p.clamp()
 	p.ensureVisible()
+	p.syncLine()
 }
 
 // jump puts the cursor on row i and scrolls it near the top, scrolloff lines down.
@@ -271,6 +300,7 @@ func (p *pane) jump(i int) {
 	p.offset = p.starts[i] - p.margin()
 	p.clamp()
 	p.ensureVisible()
+	p.syncLine()
 }
 
 // selection returns the selected row range, inclusive, or the cursor alone.
@@ -312,9 +342,17 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 		if i == first {
 			skip = p.offset - p.starts[i]
 		}
-		for _, l := range lines[min(skip, len(lines)):] {
+		for k, l := range lines[min(skip, len(lines)):] {
 			if len(out) == p.height {
 				break
+			}
+			if p.lineMode {
+				// The left margin marks the line cursor.
+				marker := " "
+				if p.starts[i]+skip+k == p.line {
+					marker = p.lineMarker
+				}
+				l = marker + l
 			}
 			out = append(out, l)
 		}

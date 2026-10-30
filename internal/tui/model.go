@@ -407,6 +407,7 @@ func (m *model) rebuildMain() {
 	}
 	v := m.views[m.current]
 	m.main.lineMode = v.kind == viewOverview
+	m.main.lineMarker = m.r.hunkMarker(rowState{activeHunk: true})
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
@@ -431,7 +432,12 @@ func (m *model) rebuildMain() {
 
 func (m *model) renderMainRow(i int, state rowState) []string {
 	state.dim = m.focus != focusMain
-	return m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], m.main.width, state)
+	width := m.main.width
+	if m.main.lineMode {
+		// One column is the line cursor's margin.
+		width--
+	}
+	return m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], width, state)
 }
 
 func (m *model) setView(i int) {
@@ -632,10 +638,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if p.lineMode {
 		switch {
 		case key.Matches(msg, k.Up):
-			p.scrollLines(-1)
+			p.moveLine(-1)
 			return m, nil
 		case key.Matches(msg, k.Down):
-			p.scrollLines(1)
+			p.moveLine(1)
 			return m, nil
 		case key.Matches(msg, k.HalfPageDown):
 			p.scrollLines(p.height / 2)
@@ -650,10 +656,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			p.scrollLines(-p.height)
 			return m, nil
 		case key.Matches(msg, k.Top):
-			p.scrollLines(-p.total)
+			p.moveLine(-p.total)
 			return m, nil
 		case key.Matches(msg, k.Bottom):
-			p.scrollLines(p.total)
+			p.moveLine(p.total)
 			return m, nil
 		}
 	}
@@ -1262,6 +1268,7 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.main.cursor = i
+	m.main.line = m.main.offset + msg.Y - 1
 	if m.split && m.main.rows[i].kind == rowLine {
 		if msg.X-nw-1 < mw/2 {
 			m.main.side = anchor.SideOld
