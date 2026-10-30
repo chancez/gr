@@ -129,8 +129,9 @@ type model struct {
 	jumps     []jumpPoint
 	jumpAt    int
 	restoring bool
-	// returnView is where the all-changes key goes back to.
-	returnView int
+	// returns is where the keys that open a view, such as the overview's and the whole diff's, go
+	// back to, by the kind of view they open.
+	returns map[viewKind]jumpPoint
 	// segments holds where each overview row's items start, filled as rows render.
 	segments map[int][]int
 	// threadFolds overrides whether a thread is collapsed, by thread id. Resolved threads are
@@ -194,7 +195,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, threadFolds: map[string]bool{}, contents: map[string][]string{}, returnView: -1, lastSidebar: focusFiles,
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, threadFolds: map[string]bool{}, contents: map[string][]string{}, returns: map[viewKind]jumpPoint{}, lastSidebar: focusFiles,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -584,6 +585,9 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.AllChanges):
 		m.toggleAllChanges()
 		return m, nil
+	case key.Matches(msg, k.Overview):
+		m.toggleView(viewOverview)
+		return m, nil
 	case key.Matches(msg, k.NextCommit):
 		m.stepCommit(1)
 		return m, nil
@@ -864,19 +868,25 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // toggleAllChanges opens the whole diff, or goes back to the view it was opened from.
-func (m *model) toggleAllChanges() {
-	if m.views[m.current].kind == viewDiff {
-		if m.returnView >= 0 && m.returnView < len(m.views) {
-			m.viewsNav.pos = m.returnView
-			m.openView()
+func (m *model) toggleAllChanges() { m.toggleView(viewDiff) }
+
+// toggleView opens the view of a kind, or, from that view, goes back exactly where it was opened
+// from: the same view, row, and screen line.
+func (m *model) toggleView(kind viewKind) {
+	if m.views[m.current].kind == kind {
+		if back, ok := m.returns[kind]; ok {
+			delete(m.returns, kind)
+			m.pushJump(m.here())
+			m.restore(back)
 		}
 		return
 	}
 	for i, v := range m.views {
-		if v.kind == viewDiff {
-			m.returnView = m.current
+		if v.kind == kind {
+			m.returns[kind] = m.here()
 			m.viewsNav.pos = i
 			m.openView()
+			return
 		}
 	}
 }

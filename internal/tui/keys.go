@@ -17,6 +17,7 @@ type keyMap struct {
 	NextFile         key.Binding
 	PrevFile         key.Binding
 	AllChanges       key.Binding
+	Overview         key.Binding
 	JumpBack         key.Binding
 	JumpForward      key.Binding
 	NextCommit       key.Binding
@@ -78,6 +79,7 @@ func defaultKeys() keyMap {
 		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
 		PrevFile:     key.NewBinding(key.WithKeys("[")),
 		AllChanges:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
+		Overview:     key.NewBinding(key.WithKeys("H"), key.WithHelp("H", "overview and back")),
 		JumpBack:     key.NewBinding(key.WithKeys("ctrl+o"), key.WithHelp("ctrl+o", "back in the jump list")),
 		// Terminals without enhanced keyboard reporting send ctrl+i as tab, which switches panes.
 		JumpForward:      key.NewBinding(key.WithKeys("ctrl+i"), key.WithHelp("ctrl+i", "forward in the jump list")),

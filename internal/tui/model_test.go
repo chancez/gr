@@ -1570,3 +1570,23 @@ func mustThread(t *testing.T, e *tuiEnv, ref string) review.ThreadView {
 	}
 	return v
 }
+
+func TestOverviewKeyAndBack(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(addedLine)
+	start := e.m.here()
+	e.press("H")
+	if e.m.views[e.m.current].kind != viewOverview {
+		t.Fatal("H did not open the overview")
+	}
+	e.press("H")
+	if got := e.m.here(); got != start {
+		t.Errorf("H from the overview went to %+v, want %+v", got, start)
+	}
+	// A returns exactly too.
+	e.press("A", "A")
+	if got := e.m.here(); got != start {
+		t.Errorf("A A went to %+v, want %+v", got, start)
+	}
+}
