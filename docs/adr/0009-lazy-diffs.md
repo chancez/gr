@@ -38,3 +38,13 @@ threads in the whole diff.
   unaffected.
 - Loading becomes asynchronous in more places, which the views must handle: a view can be shown
   before its diff arrives.
+
+## Prototype results
+
+Measured on a 66-commit range of this repository, from the debug log:
+
+| | Before | After |
+| --- | --- | --- |
+| Opening the change | 791 ms, 224 git processes | 73 ms, 13 git processes |
+| Reloading after an action | 620 ms | under 2 ms |
+| Opening a commit | already loaded | 12 to 23 ms the first time, cached after |
