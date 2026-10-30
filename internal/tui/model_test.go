@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -404,7 +405,7 @@ func TestDragSidebar(t *testing.T) {
 
 func TestSidebarTruncates(t *testing.T) {
 	l := navList{items: []navItem{{label: "a very long label that does not fit"}}}
-	got := ansi.Strip(l.render(newStyles(true, ThemeDefault), "T", 12, 2, false)[1])
+	got := ansi.Strip(l.render(newTheme(true, ThemeDefault), "T", 12, 2, false)[1])
 	if got != "a very lo..." {
 		t.Errorf("truncated label = %q", got)
 	}
@@ -412,7 +413,7 @@ func TestSidebarTruncates(t *testing.T) {
 
 func TestFileLabelsKeepTheirEnd(t *testing.T) {
 	l := navList{items: []navItem{{prefix: "M ", label: "internal/anchor/anchor_test.go"}}}
-	got := ansi.Strip(l.render(newStyles(true, ThemeDefault), "T", 20, 2, false)[1])
+	got := ansi.Strip(l.render(newTheme(true, ThemeDefault), "T", 20, 2, false)[1])
 	if got != "M .../anchor_test.go" {
 		t.Errorf("file label = %q", got)
 	}
@@ -764,7 +765,7 @@ func TestSidebarMarks(t *testing.T) {
 
 	// A badge survives truncation.
 	it := navItem{label: "a very long commit subject", badge: "(2) *x"}
-	if got := ansi.Strip(it.render(newStyles(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
+	if got := ansi.Strip(it.render(newTheme(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
 		t.Errorf("rendered = %q", got)
 	}
 }
@@ -1268,17 +1269,14 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 }
 
 func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
-	st := newStyles(true, ThemeDefault)
+	th := newTheme(true, ThemeDefault)
 	done := navItem{label: "M a.go", badge: "(2) *x", done: true}
-	got := done.render(st, 30, false, false)
-	if !strings.Contains(got, st.muted.Render(fit("M a.go", 23, nil))) {
-		t.Errorf("reviewed entry not dimmed: %q", got)
+	want := th.draw(surfPlain, 23, sp(elText, "M a.go", dim)) + th.render(surfPlain, sp(elText, " "), sp(elCount, "(2)"),
+		sp(elText, " "), sp(elDraft, markDraft, strong), sp(elReviewed, markReviewed, strong))
+	if got := done.render(th, 30, false, false); !reflect.DeepEqual(cells(got), cells(want)) {
+		t.Errorf("reviewed entry = %q, want it dimmed with a colored badge: %q", got, want)
 	}
-	for _, part := range []string{st.badgeOpen.Bold(true).Render(markReviewed), st.badgeWarn.Bold(true).Render(markDraft)} {
-		if !strings.Contains(got, part) {
-			t.Errorf("badge part %q not colored in %q", part, got)
-		}
-	}
+	st := newStyles(true, ThemeDefault)
 
 	e := newTUIEnv(t)
 	e.openNav("All changes")
@@ -1335,10 +1333,10 @@ func TestSidebarShowsMoreAboveAndBelow(t *testing.T) {
 	for i := range 10 {
 		items = append(items, navItem{label: fmt.Sprintf("item %d", i)})
 	}
-	st := newStyles(true, ThemeDefault)
+	th := newTheme(true, ThemeDefault)
 	render := func(l *navList) []string {
 		var out []string
-		for _, line := range l.render(st, "List", 30, 6, false)[1:] {
+		for _, line := range l.render(th, "List", 30, 6, false)[1:] {
 			out = append(out, strings.TrimSpace(ansi.Strip(line)))
 		}
 		return out

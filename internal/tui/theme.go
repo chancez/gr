@@ -90,7 +90,9 @@ func newRoles(isDark bool, theme string) roles {
 type element int
 
 const (
-	elText element = iota
+	// elDefault is text in the terminal's own foreground.
+	elDefault element = iota
+	elText
 	elMuted
 	elHeading
 	elAuthor
@@ -121,6 +123,7 @@ const (
 
 // elementNames are the names the config file will override elements by.
 var elementNames = [numElements]string{
+	elDefault:               "default",
 	elText:                  "text",
 	elMuted:                 "muted",
 	elHeading:               "heading",
@@ -223,6 +226,7 @@ func newTheme(isDark bool, name string) *theme {
 	bold := func(c color.Color) lipgloss.Style { return fg(c).Bold(true) }
 	t := &theme{isDark: isDark, roles: p}
 	t.elements = [numElements]lipgloss.Style{
+		elDefault:               lipgloss.NewStyle(),
 		elText:                  fg(p.text),
 		elMuted:                 fg(p.muted),
 		elHeading:               bold(p.text),

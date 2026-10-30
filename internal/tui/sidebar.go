@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/store"
@@ -29,30 +28,29 @@ type navItem struct {
 	done bool
 }
 
-// colorBadge colors a badge's parts: the open thread count, the draft mark, and the reviewed
-// mark.
-func colorBadge(st styles, badge string) string {
-	var parts []string
-	for _, p := range strings.Fields(badge) {
-		switch {
-		case strings.HasPrefix(p, "("):
-			parts = append(parts, lipgloss.NewStyle().Foreground(st.accent).Render(p))
-		default:
-			var b strings.Builder
-			for _, r := range p {
-				switch string(r) {
-				case markReviewed:
-					b.WriteString(st.badgeOpen.Bold(true).Render(markReviewed))
-				case markDraft:
-					b.WriteString(st.badgeWarn.Bold(true).Render(markDraft))
-				default:
-					b.WriteRune(r)
-				}
+// badgeSpans are a badge's parts: the open thread count, the draft mark, and the reviewed mark.
+func badgeSpans(badge string) []span {
+	var out []span
+	for i, p := range strings.Fields(badge) {
+		if i > 0 {
+			out = append(out, sp(elDefault, " "))
+		}
+		if strings.HasPrefix(p, "(") {
+			out = append(out, sp(elCount, p))
+			continue
+		}
+		for _, r := range p {
+			switch string(r) {
+			case markReviewed:
+				out = append(out, sp(elReviewed, markReviewed, strong))
+			case markDraft:
+				out = append(out, sp(elDraft, markDraft, strong))
+			default:
+				out = append(out, sp(elDefault, string(r)))
 			}
-			parts = append(parts, b.String())
 		}
 	}
-	return strings.Join(parts, " ")
+	return out
 }
 
 // truncateLeft keeps the end of s, marking the cut with "...".
@@ -134,13 +132,13 @@ func (l *navList) at(y int) int {
 }
 
 // render draws a titled section of height lines: a header, then items.
-func (l *navList) render(st styles, title string, width, height int, focused bool) []string {
+func (l *navList) render(th *theme, title string, width, height int, focused bool) []string {
 	if height <= 0 {
 		return nil
 	}
 	rows := height - 1
 	l.scrollTo(rows)
-	out := []string{paneTitle(st, " "+title, width, focused)}
+	out := []string{paneTitle(th, " "+title, width, focused)}
 	first, last := l.covers(l.top, rows)
 	for y := range rows {
 		i := l.top + y
@@ -148,11 +146,11 @@ func (l *navList) render(st styles, title string, width, height int, focused boo
 		case i >= len(l.items):
 		case first && y == 0:
 			// The indicator covers this entry, so it counts as hidden too.
-			out = append(out, st.muted.Render(fit(fmt.Sprintf("^ %d more", l.top+1), width, nil)))
+			out = append(out, th.draw(surfPlain, width, sp(elMuted, fmt.Sprintf("^ %d more", l.top+1))))
 		case last && y == rows-1:
-			out = append(out, st.muted.Render(fit(fmt.Sprintf("v %d more", len(l.items)-i), width, nil)))
+			out = append(out, th.draw(surfPlain, width, sp(elMuted, fmt.Sprintf("v %d more", len(l.items)-i))))
 		default:
-			out = append(out, l.items[i].render(st, width, i == l.pos, focused))
+			out = append(out, l.items[i].render(th, width, i == l.pos, focused))
 		}
 	}
 	for len(out) < height {
@@ -162,7 +160,7 @@ func (l *navList) render(st styles, title string, width, height int, focused boo
 }
 
 // render draws one entry at width: the label, truncated so the badge always shows at the right.
-func (it navItem) render(st styles, width int, selected, focused bool) string {
+func (it navItem) render(th *theme, width int, selected, focused bool) string {
 	room := width
 	if it.badge != "" {
 		room -= ansi.StringWidth(it.badge) + 1
@@ -171,27 +169,28 @@ func (it navItem) render(st styles, width int, selected, focused bool) string {
 	if it.prefix != "" {
 		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
 	}
-	text := fit(label, room, nil)
-	badge := ""
-	if it.badge != "" {
-		badge = " " + it.badge
-	}
-	// Selected and heading entries take one style over the whole line, so their badge is plain.
+	// Selected and heading entries draw their badge in the line's own style.
+	surf, el := surfPlain, elDefault
+	var p props
 	switch {
 	case selected && focused:
-		return st.navFocused.Render(fit(text+badge, width, nil))
+		surf, el = surfCursor, elText
 	case selected:
-		return st.navSelected.Render(fit(text+badge, width, nil))
+		surf, el = surfCursorDim, elText
 	case it.heading:
-		return st.navHeading.Render(fit(text+badge, width, nil))
+		surf, el = surfHeading, elHeading
+	case it.done:
+		p = dim
 	}
-	if it.done {
-		text = st.muted.Render(text)
+	out := th.draw(surf, room, sp(el, label, p))
+	if it.badge == "" {
+		return out
 	}
-	if badge != "" {
-		badge = " " + colorBadge(st, it.badge)
+	badge := []span{sp(el, " "+it.badge)}
+	if surf == surfPlain {
+		badge = append([]span{sp(elDefault, " ")}, badgeSpans(it.badge)...)
 	}
-	return fit(text+badge, width, nil)
+	return out + th.draw(surf, width-room, badge...)
 }
 
 func (m *model) viewLabel(v view) string {
@@ -369,17 +368,17 @@ func (m *model) renderSidebar(width, height int) []string {
 	}
 	vh, fh := m.sidebarHeights(height)
 	title := fmt.Sprintf("Change #%d", m.data.change.Seq)
-	out := m.viewsNav.render(m.r.st, title, width, vh, m.focus == focusViews)
+	th := m.r.th
+	out := m.viewsNav.render(th, title, width, vh, m.focus == focusViews)
 	if fh > 0 {
-		out = append(out, m.r.st.paneBorder.Render(strings.Repeat("-", width)))
-		out = append(out, m.filesNav.render(m.r.st, "Files", width, fh, m.focus == focusFiles)...)
+		out = append(out, th.render(surfPlain, sp(elBorder, strings.Repeat("-", width))))
+		out = append(out, m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)...)
 	}
 	return out
 }
 
 // mainHeader titles the main pane with the view and the file under the cursor.
 func (m *model) mainHeader(width int) string {
-	st := m.r.st
 	title := " " + m.viewLabel(m.views[m.current])
 	if m.needsLoad(m.views[m.current]) {
 		title += "  (loading)"
@@ -398,7 +397,7 @@ func (m *model) mainHeader(width int) string {
 			}
 		}
 	}
-	return m.withStatus(paneTitle(st, title, width, m.focus == focusMain), width)
+	return m.withStatus(paneTitle(m.r.th, title, width, m.focus == focusMain), width)
 }
 
 // withStatus overlays the current message at the right of the main pane's title bar, so it does
@@ -407,22 +406,21 @@ func (m *model) withStatus(title string, width int) string {
 	if m.status == "" {
 		return title
 	}
-	st := m.r.st
 	msg := ansi.Truncate(m.status, max(width/2, 20), "...")
-	style := st.statusMsg
+	surf := surfStatus
 	if m.statusErr {
-		style = st.statusErrMsg
+		surf = surfStatusError
 	}
-	badge := style.Render(" " + msg + " ")
+	badge := m.r.th.render(surf, sp(elText, " "+msg+" "))
 	keep := max(width-ansi.StringWidth(badge), 0)
 	return ansi.Truncate(title, keep, "") + badge
 }
 
 // paneTitle draws a pane's title bar.
-func paneTitle(st styles, title string, width int, focused bool) string {
-	style := st.paneUnfocused
+func paneTitle(th *theme, title string, width int, focused bool) string {
+	surf := surfPaneUnfocused
 	if focused {
-		style = st.paneFocused
+		surf = surfPaneFocused
 	}
-	return style.Render(fit(ansi.Truncate(title, width, "..."), width, nil))
+	return th.drawCut(surf, width, sp(elText, title))
 }
