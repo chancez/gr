@@ -1262,7 +1262,7 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 	}
 	e.drain(e.m.loadCmd())
 	e.openNav("Overview")
-	verdict := e.m.r.th.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
+	verdict := e.m.r.th.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
 	if !strings.Contains(e.m.render(), verdict) {
 		t.Error("the review bar's verdict is not in its own color")
 	}
@@ -1286,7 +1286,7 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	if !strings.Contains(header, "reviewed  collapsed, enter expands") {
 		t.Errorf("file header = %q", header)
 	}
-	key := th.render(surfPlain, sp(elKey, "enter"))
+	key := th.render(surfHeading, sp(elKey, "enter"))
 	if !strings.Contains(e.m.renderMainRow(e.m.main.cursor, rowState{})[0], key) {
 		t.Error("enter not styled as a key in the file header")
 	}

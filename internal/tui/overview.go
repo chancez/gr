@@ -139,7 +139,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 				}
 				spans = append(spans, p...)
 			}
-			return []string{th.draw(surfPlain, width, spans...)}
+			return []string{th.draw(surfHeading, width, spans...)}
 		}
 		return row{kind: rowReview, file: -1, text: bar, review: rv, thread: summary}
 	}

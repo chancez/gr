@@ -159,7 +159,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
 			label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
 		}
-		surf := surfPlain
+		surf := surfHeading
 		if state.cursor {
 			surf = cursorSurface(state)
 		}

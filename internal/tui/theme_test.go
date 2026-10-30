@@ -108,8 +108,8 @@ func TestLightBackgroundRecolorsBuiltRows(t *testing.T) {
 	e.openNav("Overview")
 	e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#ffffff")})
 	light, dark := newTheme(false, ThemeDefault), newTheme(true, ThemeDefault)
-	want := light.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
-	stale := dark.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
+	want := light.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
+	stale := dark.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
 	if out := e.m.render(); !strings.Contains(out, want) || strings.Contains(out, stale) {
 		t.Errorf("the overview keeps the dark theme's colors on a light background:\n%q", out)
 	}
