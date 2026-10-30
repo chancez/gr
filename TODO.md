@@ -14,8 +14,8 @@ Sections are in priority order, and so are the items within them.
 4. Expand and collapse every thread in the overview, and every thread of one review from its header.
 5. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
    skipping past them is obvious.
-6. A style registry: every element drawn in the UI (author, sha, verdict, path, ...) gets its style
-   from one place, so the same thing looks the same in every pane. Design first.
+6. Draw the TUI from registered elements, per [ADR 8](docs/adr/0008-tui-elements.md): every element
+   (author, sha, verdict, path, ...) styled from one place, so it looks the same in every pane.
 7. Right-click menus with the actions for what was clicked.
 8. Track commits across rebases, for example from `post-rewrite` or by patch id, so threads and
    reviewed marks survive squashing fixups.
