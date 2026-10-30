@@ -80,7 +80,6 @@ use the change for the current branch, creating it if needed.`,
 
 	root.AddCommand(
 		a.reviewCommand(),
-		a.changesCommand(),
 		a.changeCommand(),
 		a.threadsCommand(),
 		a.threadCommand(),

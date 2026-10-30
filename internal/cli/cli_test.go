@@ -138,3 +138,22 @@ func TestDeleteCommands(t *testing.T) {
 		t.Errorf("threads after deleting #1 and review 2 = %+v, want only r1", got)
 	}
 }
+
+func TestChangeListAndMerged(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "review")
+	if got := e.run(human, "change", "list"); !strings.Contains(got, "#1\topen") {
+		t.Errorf("change list = %q", got)
+	}
+	e.run(human, "change", "merged", "--change", "1")
+	if got := e.run(human, "change", "list"); strings.Contains(got, "#1") {
+		t.Errorf("change list after merged = %q, want only open changes", got)
+	}
+	if got := e.run(human, "change", "list", "--all"); !strings.Contains(got, "#1\tmerged") {
+		t.Errorf("change list --all = %q", got)
+	}
+}

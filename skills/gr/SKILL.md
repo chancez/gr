@@ -18,8 +18,8 @@ reviewer you think a thread is handled, and they **resolve** it or reopen it.
 - **Pass bodies with `-m` or `-F -`** (stdin). Without either, gr wants an editor on a terminal and
   fails without one.
 - **Pick the change.** Run gr from the branch under review and it uses that branch's change. From
-  anywhere else, `gr changes` lists the changes and `--change N` selects one. If gr asks for a base
-  branch, pass `--base` once; the change remembers it.
+  anywhere else, `gr change list` lists the changes and `--change N` selects one. If gr asks for a
+  base branch, pass `--base` once; the change remembers it.
 
 Flags and their meanings are in `gr <command> --help`.
 

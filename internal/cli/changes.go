@@ -32,10 +32,10 @@ A target is a branch (default: the current one), a range A..B, or a commit.`,
 	return cmd
 }
 
-func (a *app) changesCommand() *cobra.Command {
+func (a *app) changeListCommand() *cobra.Command {
 	var all bool
 	cmd := &cobra.Command{
-		Use:   "changes",
+		Use:   "list",
 		Short: "List changes in this repository",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -130,9 +130,10 @@ func (a *app) changeCommand() *cobra.Command {
 	}
 	tf.register(title)
 
-	cmd.AddCommand(show, title,
+	cmd.AddCommand(a.changeListCommand(), show, title,
 		setState("abandon", "Abandon a change", store.ChangeAbandoned),
-		setState("reopen", "Reopen an abandoned change", store.ChangeOpen))
+		setState("merged", "Mark a change merged, as when it landed somewhere other than its base", store.ChangeMerged),
+		setState("reopen", "Reopen an abandoned or merged change", store.ChangeOpen))
 	return cmd
 }
 
