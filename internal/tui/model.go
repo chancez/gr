@@ -623,12 +623,37 @@ func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model,
 		open()
 		m.setFocus(focusMain)
 		return m, nil
+	case key.Matches(msg, k.Comment), key.Matches(msg, k.FileComment):
+		return m.sidebarComment()
 	default:
 		return m.mainKey(msg)
 	}
 	if changed {
 		open()
 	}
+	return m, nil
+}
+
+// sidebarComment comments on what the sidebar has selected: the commit, the file, or, on the
+// overview, the change. It moves the main cursor there first, so the comment lands where the
+// selection is rather than wherever the diff's cursor was.
+func (m *model) sidebarComment() (tea.Model, tea.Cmd) {
+	v := m.views[m.current]
+	switch {
+	case v.kind == viewOverview:
+		return m.startComment(false)
+	case m.focus == focusFiles:
+		m.openFile()
+		return m.startComment(true)
+	case v.kind == viewCommit:
+		for i, r := range m.main.rows {
+			if r.kind == rowCommit {
+				m.main.cursor = i
+			}
+		}
+		return m.startComment(true)
+	}
+	m.setError(errors.New("select a commit or file to comment on"))
 	return m, nil
 }
 

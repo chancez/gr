@@ -39,24 +39,39 @@ func (m *model) shortHelp() []key.Binding {
 	tail := []key.Binding{k.Help, k.Quit}
 	switch m.helpContext() {
 	case contextSidebar:
-		return append([]key.Binding{hint("j/k", "move"), hint("enter/l", "open"), k.Reviewed,
-			hint("ctrl+j/k", "other list"), k.Focus}, tail...)
+		comment := hint("C", "comment on commit")
+		switch {
+		case m.focus == focusFiles:
+			comment = hint("c", "comment on file")
+		case m.data != nil && m.views[m.current].kind == viewOverview:
+			comment = hint("c", "comment")
+		}
+		return append([]key.Binding{comment, k.Submit, hint("enter", "open"), k.Reviewed,
+			hint("ctrl+j/k", "other list")}, tail...)
 	case contextOverview:
-		return append([]key.Binding{hint("j/k", "scroll"), hint("t/T", "threads"), hint("enter", "expand"),
-			hint("o", "open in diff"), k.Reply, k.Resolve, hint("F", "filter")}, tail...)
+		bindings := []key.Binding{hint("c", "comment"), k.Submit}
+		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].kind == rowThread {
+			bindings = append(bindings, k.Reply, hint("e", "edit"), k.Resolve, hint("enter", "expand"), hint("o", "open in diff"))
+		}
+		return append(append(bindings, hint("t/T", "threads"), hint("F", "filter")), tail...)
 	}
 	if c := m.main.cursor; c < len(m.main.rows) {
 		switch m.main.rows[c].kind {
 		case rowThread:
-			return append([]key.Binding{k.Reply, k.Resolve, k.Address, hint("enter", "expand"), k.Edit,
-				hint("t/T", "threads")}, tail...)
+			return append([]key.Binding{k.Reply, hint("e", "edit"), k.Resolve, k.Address, hint("enter", "expand"),
+				k.Submit, hint("t/T", "threads")}, tail...)
 		case rowGap:
 			return append([]key.Binding{hint("enter", "expand"), hint("zR/zM", "all folds"),
 				hint("J/K", "hunks")}, tail...)
+		case rowCommit:
+			return append([]key.Binding{hint("C", "comment on commit"), k.Submit, k.Reviewed}, tail...)
+		case rowFile:
+			return append([]key.Binding{hint("c", "comment on file"), k.Submit, k.Reviewed,
+				hint("enter", "fold"), hint("]/[", "files")}, tail...)
 		}
 	}
-	return append([]key.Binding{k.Comment, k.Select, k.Reviewed, hint("J/K", "hunks"), hint("]/[", "files"),
-		k.Submit}, tail...)
+	return append([]key.Binding{k.Comment, k.Select, k.Submit, k.Reviewed, hint("J/K", "hunks"),
+		hint("]/[", "files")}, tail...)
 }
 
 // helpSection is one titled group in the full help.

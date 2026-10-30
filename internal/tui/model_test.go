@@ -972,11 +972,11 @@ func TestContextualHelp(t *testing.T) {
 	bar := func() string { return ansi.Strip(e.m.renderStatus()) }
 
 	e.openNav("Overview")
-	if !strings.Contains(bar(), "o open in diff") || !strings.Contains(bar(), "enter expand") {
+	if !strings.Contains(bar(), "c comment") || !strings.Contains(bar(), "S submit") {
 		t.Errorf("overview hints = %q", bar())
 	}
 	e.press("h")
-	if !strings.Contains(bar(), "enter/l open") {
+	if !strings.Contains(bar(), "enter open") || !strings.Contains(bar(), "S submit") {
 		t.Errorf("sidebar hints = %q", bar())
 	}
 	e.press("l")
@@ -1113,5 +1113,25 @@ func TestOverviewGroupsReviews(t *testing.T) {
 			t.Fatalf("%q missing or out of order in:\n%s", want, screen)
 		}
 		last = i
+	}
+}
+
+func TestCommentFromTheSidebar(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	// Leave the diff cursor on a line, then comment from the commit list.
+	e.cursorTo(addedLine)
+	e.press("h", "ctrl+k")
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "C comment on commit") {
+		t.Errorf("commit list hints = %q", ansi.Strip(e.m.renderStatus()))
+	}
+	e.press("C")
+	if e.m.mode != modeCompose || !strings.HasPrefix(e.m.compose.title, "Comment on commit") {
+		t.Fatalf("C in the commit list: mode %d, title %q", e.m.mode, e.m.compose.title)
+	}
+	e.press("esc", "ctrl+j")
+	e.press("C")
+	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, review.CommitMsgPath) {
+		t.Errorf("C in the file list: mode %d, title %q, want the selected file", e.m.mode, e.m.compose.title)
 	}
 }
