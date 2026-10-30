@@ -283,7 +283,7 @@ func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []strin
 		surf = cursorSurface(state)
 	}
 	return []string{r.th.draw(surf, width, sp(elSHA, "commit "+c.SHA, strong), sp(elDefault, "  "),
-		sp(elMuted, c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
+		sp(elAuthor, c.AuthorName), sp(elMuted, " <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
 }
 
 // stateSpans are a thread's state badge: its state and who set it, outdated, and draft.
