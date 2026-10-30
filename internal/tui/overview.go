@@ -130,6 +130,17 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	// reviewRow is a review's entry: a full-width header bar of separately colored parts, so the
 	// verdict stands out, with the summary and its replies drawn beneath it. It is selectable, so
 	// the review can be acted on even when it has no threads.
+	// finished reports whether a review has threads and every one is resolved, its summary included.
+	finished := func(reviewID string) bool {
+		n := 0
+		for _, i := range byReview[reviewID] {
+			if d.threads[i].State != store.ThreadResolved {
+				return false
+			}
+			n++
+		}
+		return n > 0
+	}
 	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...[]span) row {
 		bar := func(width int) []string {
 			spans := []span{sp(elDefault, " ")}
@@ -139,7 +150,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 				}
 				spans = append(spans, p...)
 			}
-			return []string{th.draw(surfHeading, width, spans...)}
+			return []string{th.draw(surfHeading, width, dimmed(spans, finished(rv.ID))...)}
 		}
 		return row{kind: rowReview, file: -1, text: bar, review: rv, thread: summary}
 	}

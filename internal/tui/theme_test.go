@@ -13,6 +13,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
 
@@ -112,5 +113,37 @@ func TestLightBackgroundRecolorsBuiltRows(t *testing.T) {
 	stale := dark.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
 	if out := e.m.render(); !strings.Contains(out, want) || strings.Contains(out, stale) {
 		t.Errorf("the overview keeps the dark theme's colors on a light background:\n%q", out)
+	}
+}
+
+// A review whose threads are all resolved recedes, and one with an open thread stands out.
+func TestFinishedReviewsDim(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	tv, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "done soon"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	th := e.m.r.th
+	dimHeader := th.render(surfHeading, sp(elHeading, "Review #1", dim))
+	header := th.render(surfHeading, sp(elHeading, "Review #1"))
+	for _, tc := range []struct {
+		state store.ThreadState
+		want  string
+	}{
+		{store.ThreadOpen, header},
+		{store.ThreadResolved, dimHeader},
+	} {
+		if err := e.svc.SetThreadState(ctx, tv.ID, tc.state); err != nil {
+			t.Fatal(err)
+		}
+		e.drain(e.m.loadCmd())
+		e.openNav("Overview")
+		if !strings.Contains(e.m.render(), tc.want) {
+			t.Errorf("thread %s: review header is not %q:\n%s", tc.state, tc.want, e.screen())
+		}
 	}
 }

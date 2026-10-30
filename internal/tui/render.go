@@ -386,7 +386,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	return r.th.drawCut(surf, width, spans...)
+	return r.th.drawCut(surf, width, dimmed(spans, t.State == store.ThreadResolved)...)
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
@@ -403,12 +403,14 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	if loc := locationSpans(t.Location, elMuted); len(loc) > 0 && !t.Summary {
 		title = append(append(title, sp(elMuted, "  ")), loc...)
 	}
-	lines := []string{ansi.Truncate(r.th.render(surfPlain, title...), inner, "")}
+	// A resolved thread recedes: its title and comment headers are dimmed.
+	done := t.State == store.ThreadResolved
+	lines := []string{ansi.Truncate(r.th.render(surfPlain, dimmed(title, done)...), inner, "")}
 	var starts []int
 	for _, c := range t.Comments {
 		// The box's top border is the first output line.
 		starts = append(starts, len(lines)+1)
-		lines = append(lines, "", r.th.render(surfPlain, commentHeader(d, c)...))
+		lines = append(lines, "", r.th.render(surfPlain, dimmed(commentHeader(d, c), done)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
 	out := strings.Split(r.th.box(boxWidth, cursor).Render(strings.Join(lines, "\n")), "\n")

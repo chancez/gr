@@ -86,6 +86,19 @@ func (t *theme) box(width int, active bool) lipgloss.Style {
 	return lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).BorderForeground(border.GetForeground()).Padding(0, 1).Width(width)
 }
 
+// dimmed dims spans when on, for what is finished.
+func dimmed(spans []span, on bool) []span {
+	if !on {
+		return spans
+	}
+	out := make([]span, len(spans))
+	for i, x := range spans {
+		x.props |= dim
+		out[i] = x
+	}
+	return out
+}
+
 // spanText is the text of spans, without styles.
 func spanText(spans []span) string {
 	var b strings.Builder
