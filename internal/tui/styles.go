@@ -8,7 +8,9 @@ import (
 
 // styles are the TUI's colors, modelled on GitHub's light and dark themes.
 type styles struct {
-	isDark      bool
+	isDark bool
+	// headingBg is the background of heading bars such as the overview's review headers.
+	headingBg   color.Color
 	fg          color.Color
 	accent      color.Color
 	dimCursorBg color.Color

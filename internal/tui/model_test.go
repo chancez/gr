@@ -1003,8 +1003,8 @@ func TestOverviewGroupsReviews(t *testing.T) {
 
 	screen := e.screen()
 	order := []string{
-		"Review #1  Human requested changes  on revision 1", "from the first round",
-		"--- branch updated: revision 1 -> 2", "Review #2  Human approved  on revision 2", "from the second round",
+		"Review #1  Human  requested changes  revision 1", "from the first round",
+		"--- branch updated: revision 1 -> 2", "Review #2  Human  approved  revision 2", "from the second round",
 		"Your pending review  1 new threads", "not yet submitted",
 	}
 	last := -1
@@ -1226,5 +1226,19 @@ func TestReaderKeepsTheThreadInView(t *testing.T) {
 	}
 	if !strings.Contains(e.screen(), `println("hello")`) {
 		t.Errorf("excerpt not on screen:\n%s", e.screen())
+	}
+}
+
+func TestReviewBarColorsTheVerdict(t *testing.T) {
+	e := newTUIEnv(t)
+	if _, err := e.svc.Submit(t.Context(), e.chg, store.VerdictRequestChanges, "fix"); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	st := e.m.r.st
+	verdict := verdictStyle(st, store.VerdictRequestChanges).Background(st.headingBg).Render("requested changes")
+	if !strings.Contains(e.m.render(), verdict) {
+		t.Error("the review bar's verdict is not in its own color")
 	}
 }

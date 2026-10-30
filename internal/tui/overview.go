@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/git"
@@ -121,11 +122,16 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		revSeq[rv.ID] = rv.Seq
 	}
 	// reviewBar heads a review: a full-width bar, so each review's threads read as one group.
-	reviewBar := func(label string) row {
+	// reviewBar heads a review with a full-width bar of separately colored parts, so the verdict
+	// stands out from the author, revision, and time.
+	reviewBar := func(parts ...string) row {
 		return text(func(width int) []string {
-			return []string{st.navHeading.Render(fit(" "+ansi.Strip(label), width, nil))}
+			gap := lipgloss.NewStyle().Background(st.headingBg).Render("  ")
+			line := lipgloss.NewStyle().Background(st.headingBg).Render(" ") + strings.Join(parts, gap)
+			return []string{fit(ansi.Truncate(line, width, ""), width, st.headingBg)}
 		})
 	}
+	on := func(style lipgloss.Style, s string) string { return style.Background(st.headingBg).Render(s) }
 	divider := func(label string) row {
 		return text(func(width int) []string {
 			line := "--- " + label + " "
@@ -148,8 +154,12 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(""))
 		}
 		lastRev = seq
-		rows = append(rows, reviewBar(fmt.Sprintf("Review #%d  %s %s  on revision %d  %s", rv.Seq, rv.Author.Name,
-			ansi.Strip(verdictLabel(st, rv.Verdict)), seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04"))))
+		rows = append(rows, reviewBar(
+			on(st.heading, fmt.Sprintf("Review #%d", rv.Seq)),
+			on(st.author, rv.Author.Name),
+			on(verdictStyle(st, rv.Verdict), verdictText(rv.Verdict)),
+			on(st.muted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04"))),
+		))
 		if !hasSummary(d, rv.ID) && strings.TrimSpace(rv.Body) != "" {
 			rows = append(rows, text(func(width int) []string {
 				var lines []string
@@ -168,8 +178,11 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		if lastRev != 0 && lastRev != rev.Seq {
 			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(""))
 		}
-		rows = append(rows, reviewBar(fmt.Sprintf("Your pending review  %d new threads  S submits it, D discards it",
-			len(byReview[draft.ID]))))
+		rows = append(rows, reviewBar(
+			on(st.heading, "Your pending review"),
+			on(st.badgeWarn.Bold(true), fmt.Sprintf("%d new threads", len(byReview[draft.ID]))),
+			on(st.muted, "S submits it, D discards it"),
+		))
 		rows = append(rows, threads...)
 		shown += len(threads)
 	}
@@ -192,12 +205,28 @@ func hasSummary(d *changeData, reviewID string) bool {
 	return false
 }
 
-func verdictLabel(st styles, v store.Verdict) string {
+func verdictText(v store.Verdict) string {
 	switch v {
 	case store.VerdictApprove:
-		return st.badgeOpen.Render("approved")
+		return "approved"
 	case store.VerdictRequestChanges:
-		return st.statusErr.Render("requested changes")
+		return "requested changes"
 	}
-	return st.muted.Render("commented")
+	return "commented"
+}
+
+// verdictStyle colors a verdict: green for approved, red for requested changes, accent for
+// commented.
+func verdictStyle(st styles, v store.Verdict) lipgloss.Style {
+	switch v {
+	case store.VerdictApprove:
+		return st.badgeOpen.Bold(true)
+	case store.VerdictRequestChanges:
+		return st.statusErr.Bold(true)
+	}
+	return lipgloss.NewStyle().Bold(true).Foreground(st.accent)
+}
+
+func verdictLabel(st styles, v store.Verdict) string {
+	return verdictStyle(st, v).Render(verdictText(v))
 }
