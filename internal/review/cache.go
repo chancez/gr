@@ -82,18 +82,63 @@ func cacheKey(from, to string, paths []string) string {
 	return from + "\x00" + to + "\x00" + strings.Join(paths, "\x00")
 }
 
-// diff reads a diff through the cache.
-func (s *Service) diff(ctx context.Context, from, to string, paths ...string) ([]git.FileDiff, error) {
+// Diffs is where the service reads diffs and file lists. A *git.Repo is one, and NewCachedDiffs
+// wraps one in caches, so the code using it reads the same way whether or not it is cached.
+type Diffs interface {
+	Diff(ctx context.Context, from, to string, paths ...string) ([]git.FileDiff, error)
+	DiffFiles(ctx context.Context, from, to string) ([]git.FileDiff, error)
+	CommitFiles(ctx context.Context, base, head string) (map[string][]git.FileDiff, error)
+}
+
+// NewCachedDiffs caches next's diffs in a cache of at most maxLines diff lines, and its file lists.
+// Both are keyed by revisions, whose diffs never change, so nothing is invalidated.
+func NewCachedDiffs(next Diffs, maxLines int) Diffs {
+	return &cachedDiffs{next: next, cache: newDiffCache(maxLines)}
+}
+
+type cachedDiffs struct {
+	next  Diffs
+	cache *diffCache
+	lists fileLists
+}
+
+func (c *cachedDiffs) Diff(ctx context.Context, from, to string, paths ...string) ([]git.FileDiff, error) {
 	key := cacheKey(from, to, paths)
-	if files, ok := s.cache.get(key); ok {
+	if files, ok := c.cache.get(key); ok {
 		return files, nil
 	}
-	files, err := s.git.Diff(ctx, from, to, paths...)
+	files, err := c.next.Diff(ctx, from, to, paths...)
 	if err != nil {
 		return nil, err
 	}
-	s.cache.put(key, files)
+	c.cache.put(key, files)
 	return files, nil
+}
+
+func (c *cachedDiffs) DiffFiles(ctx context.Context, from, to string) ([]git.FileDiff, error) {
+	key := "diff:" + from + ".." + to
+	if lists, ok := c.lists.get(key); ok {
+		return lists[""], nil
+	}
+	files, err := c.next.DiffFiles(ctx, from, to)
+	if err != nil {
+		return nil, err
+	}
+	c.lists.put(key, map[string][]git.FileDiff{"": files})
+	return files, nil
+}
+
+func (c *cachedDiffs) CommitFiles(ctx context.Context, base, head string) (map[string][]git.FileDiff, error) {
+	key := "log:" + base + ".." + head
+	if lists, ok := c.lists.get(key); ok {
+		return lists, nil
+	}
+	lists, err := c.next.CommitFiles(ctx, base, head)
+	if err != nil {
+		return nil, err
+	}
+	c.lists.put(key, lists)
+	return lists, nil
 }
 
 // fileLists caches the per-commit file lists of ranges, which are small, keeping a few ranges.

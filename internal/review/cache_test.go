@@ -1,6 +1,7 @@
 package review
 
 import (
+	"context"
 	"testing"
 
 	"github.com/chancez/gr/internal/git"
@@ -35,5 +36,47 @@ func TestDiffCacheEvictsByWeight(t *testing.T) {
 	c.put("huge", lines(100))
 	if _, ok := c.get("huge"); !ok || c.order.Len() != 1 {
 		t.Errorf("huge diff: cached %v, entries %d", ok, c.order.Len())
+	}
+}
+
+// countingDiffs counts the reads that reach it.
+type countingDiffs struct{ diffs, lists, logs int }
+
+func (c *countingDiffs) Diff(context.Context, string, string, ...string) ([]git.FileDiff, error) {
+	c.diffs++
+	return lines(3), nil
+}
+
+func (c *countingDiffs) DiffFiles(context.Context, string, string) ([]git.FileDiff, error) {
+	c.lists++
+	return lines(0), nil
+}
+
+func (c *countingDiffs) CommitFiles(context.Context, string, string) (map[string][]git.FileDiff, error) {
+	c.logs++
+	return map[string][]git.FileDiff{"c": lines(0)}, nil
+}
+
+func TestCachedDiffsReadOnce(t *testing.T) {
+	next := &countingDiffs{}
+	d := NewCachedDiffs(next, 100)
+	ctx := t.Context()
+	for range 3 {
+		if _, err := d.Diff(ctx, "a", "b", "f"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.DiffFiles(ctx, "a", "b"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := d.CommitFiles(ctx, "a", "b"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Another path is another diff.
+	if _, err := d.Diff(ctx, "a", "b", "g"); err != nil {
+		t.Fatal(err)
+	}
+	if *next != (countingDiffs{diffs: 2, lists: 1, logs: 1}) {
+		t.Errorf("reads that reached git = %+v, want each read once", *next)
 	}
 }

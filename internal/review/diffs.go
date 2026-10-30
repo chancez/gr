@@ -29,9 +29,9 @@ func parent(c git.Commit) string {
 	return ""
 }
 
-// commitDiff is a commit's diff against its first parent, through the cache.
+// commitDiff is a commit's diff against its first parent.
 func (s *Service) commitDiff(ctx context.Context, c git.Commit, paths ...string) ([]git.FileDiff, error) {
-	return s.diff(ctx, parent(c), c.SHA, paths...)
+	return s.diffs.Diff(ctx, parent(c), c.SHA, paths...)
 }
 
 // CommitFile is one file's diff in a commit, for when only that file is needed, as for a thread's
@@ -43,14 +43,9 @@ func (s *Service) CommitFile(ctx context.Context, c git.Commit, path string) ([]
 // CommitFileLists lists the files each commit of a revision changes, without hunks, with each
 // commit's message first as CommitMsgPath, from one git process.
 func (s *Service) CommitFileLists(ctx context.Context, rev store.Revision, commits []git.Commit) (map[string][]git.FileDiff, error) {
-	key := rev.BaseSHA + ".." + rev.HeadSHA
-	lists, ok := s.lists.get(key)
-	if !ok {
-		var err error
-		if lists, err = s.git.CommitFiles(ctx, rev.BaseSHA, rev.HeadSHA); err != nil {
-			return nil, err
-		}
-		s.lists.put(key, lists)
+	lists, err := s.diffs.CommitFiles(ctx, rev.BaseSHA, rev.HeadSHA)
+	if err != nil {
+		return nil, err
 	}
 	out := make(map[string][]git.FileDiff, len(commits))
 	for _, c := range commits {
@@ -63,26 +58,17 @@ func (s *Service) CommitFileLists(ctx context.Context, rev store.Revision, commi
 
 // RevisionFileList lists the files in a revision's whole diff, without hunks.
 func (s *Service) RevisionFileList(ctx context.Context, rev store.Revision) ([]git.FileDiff, error) {
-	key := "diff:" + rev.BaseSHA + ".." + rev.HeadSHA
-	if lists, ok := s.lists.get(key); ok {
-		return lists[""], nil
-	}
-	files, err := s.git.DiffFiles(ctx, rev.BaseSHA, rev.HeadSHA)
-	if err != nil {
-		return nil, err
-	}
-	s.lists.put(key, map[string][]git.FileDiff{"": files})
-	return files, nil
+	return s.diffs.DiffFiles(ctx, rev.BaseSHA, rev.HeadSHA)
 }
 
 // RevisionFile is one file's diff in a revision's whole diff.
 func (s *Service) RevisionFile(ctx context.Context, rev store.Revision, path string) ([]git.FileDiff, error) {
-	return s.diff(ctx, rev.BaseSHA, rev.HeadSHA, path)
+	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA, path)
 }
 
-// RevisionFiles returns a revision's whole diff, through the cache.
+// RevisionFiles returns a revision's whole diff.
 func (s *Service) RevisionFiles(ctx context.Context, rev store.Revision) ([]git.FileDiff, error) {
-	return s.diff(ctx, rev.BaseSHA, rev.HeadSHA)
+	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA)
 }
 
 // Interdiff returns what changed between two revisions of a change, excluding changes that came only
@@ -93,7 +79,7 @@ func (s *Service) RevisionFiles(ctx context.Context, rev store.Revision) ([]git.
 // are compared directly, which includes the base's changes.
 func (s *Service) Interdiff(ctx context.Context, from, to store.Revision) (files []git.FileDiff, exact bool, err error) {
 	if from.BaseSHA == to.BaseSHA || from.BaseSHA == "" || to.BaseSHA == "" {
-		files, err = s.diff(ctx, from.HeadSHA, to.HeadSHA)
+		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA)
 		return files, true, err
 	}
 	tree, clean, err := s.git.MergeTree(ctx, from.BaseSHA, to.BaseSHA, from.HeadSHA)
@@ -101,10 +87,10 @@ func (s *Service) Interdiff(ctx context.Context, from, to store.Revision) (files
 		return nil, false, err
 	}
 	if !clean {
-		files, err = s.diff(ctx, from.HeadSHA, to.HeadSHA)
+		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA)
 		return files, false, err
 	}
-	files, err = s.diff(ctx, tree, to.HeadSHA)
+	files, err = s.diffs.Diff(ctx, tree, to.HeadSHA)
 	return files, true, err
 }
 
