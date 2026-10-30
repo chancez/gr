@@ -944,12 +944,28 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 	c.area = textarea.New()
 	c.area.ShowLineNumbers = false
 	c.area.Placeholder = "Markdown. ctrl+s to save, ctrl+e for $EDITOR, esc to cancel."
+	c.area.SetStyles(m.composeStyles())
 	c.area.SetValue(initial)
 	m.compose = c
 	m.mode = modeCompose
 	m.relayout(false)
 	m.main.ensureVisible()
 	return m.compose.area.Focus()
+}
+
+// composeStyles colors the comment editor from the palette, so text and hints are readable on any
+// background.
+func (m *model) composeStyles() textarea.Styles {
+	st := m.r.st
+	styles := textarea.DefaultStyles(st.isDark)
+	for _, state := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
+		state.Text = lipgloss.NewStyle().Foreground(st.fg)
+		state.Placeholder = st.muted
+		state.CursorLine = lipgloss.NewStyle().Foreground(st.fg)
+		state.EndOfBuffer = st.muted
+		state.Prompt = st.muted
+	}
+	return styles
 }
 
 func (m *model) closeComposer() {
@@ -1195,7 +1211,8 @@ func (m *model) render() string {
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
-		title := m.r.st.heading.Render(m.compose.title) + m.r.st.muted.Render("  ctrl+s save, ctrl+e $EDITOR, esc cancel")
+		hints := "  " + m.help.ShortHelpView([]key.Binding{m.keys.Save, m.keys.ExternalEdit, m.keys.Cancel})
+		title := m.r.st.heading.Render(m.compose.title) + hints
 		box := m.r.st.composeBox.Width(m.width).Render(ansi.Truncate(title, m.width-4, "") + "\n" + m.compose.area.View())
 		b.WriteString(box)
 		b.WriteString("\n")
