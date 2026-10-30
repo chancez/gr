@@ -22,6 +22,7 @@ import (
 // renderer draws rows. It caches what depends only on width.
 type renderer struct {
 	st       styles
+	th       *theme
 	hl       *highlighter
 	markdown map[int]*glamour.TermRenderer
 	// segments holds, after renderRow draws a thread, the line each of its comments starts on. The
@@ -30,7 +31,7 @@ type renderer struct {
 }
 
 func newRenderer(isDark bool, theme string) *renderer {
-	return &renderer{st: newStyles(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
+	return &renderer{st: newStyles(isDark, theme), th: newTheme(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
 }
 
 // rowState is how a row is highlighted.

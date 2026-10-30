@@ -52,18 +52,6 @@ type styles struct {
 	paneUnfocused lipgloss.Style
 }
 
-// Themes are the built-in palettes.
-const (
-	// ThemeDefault is modelled on GitHub's light and dark themes.
-	ThemeDefault = "default"
-	// ThemeColorblind is modelled on GitHub's protanopia and deuteranopia themes: blue for added
-	// and good, orange for deleted and bad, in place of green and red.
-	ThemeColorblind = "colorblind"
-)
-
-// Themes lists the built-in palettes.
-var Themes = []string{ThemeDefault, ThemeColorblind}
-
 // newStyles picks colors for a dark or light terminal background, in a built-in theme.
 //
 // TODO: let the config file override individual colors.

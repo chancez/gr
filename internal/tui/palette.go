@@ -1,0 +1,48 @@
+package tui
+
+import "charm.land/lipgloss/v2"
+
+// The palette: colors from GitHub's Primer light and dark themes, named by how they look. They carry
+// no meaning; a theme gives them roles. A dark background's colors are lighter, so a role is a
+// darker color in light mode and a lighter one in dark.
+var (
+	white       = lipgloss.Color("#ffffff")
+	offWhite    = lipgloss.Color("#f6f8fa")
+	snow        = lipgloss.Color("#e6edf3")
+	lightGray   = lipgloss.Color("#eaeef2")
+	paleGray    = lipgloss.Color("#d1d9e0")
+	ash         = lipgloss.Color("#9198a1")
+	slate       = lipgloss.Color("#59636e")
+	charcoal    = lipgloss.Color("#3d444d")
+	graphite    = lipgloss.Color("#262c36")
+	darkGray    = lipgloss.Color("#21262d")
+	ink         = lipgloss.Color("#1f2328")
+	nearNight   = lipgloss.Color("#161b22")
+	night       = lipgloss.Color("#0d1117")
+	blue        = lipgloss.Color("#0969da")
+	lightBlue   = lipgloss.Color("#4493f8")
+	skyBlue     = lipgloss.Color("#b6e3ff")
+	paleBlue    = lipgloss.Color("#eef6ff")
+	paleSky     = lipgloss.Color("#ddf4ff")
+	steelBlue   = lipgloss.Color("#1f3a5f")
+	navy        = lipgloss.Color("#121d2f")
+	deepNavy    = lipgloss.Color("#0d2140")
+	indigoGray  = lipgloss.Color("#2a2f45")
+	green       = lipgloss.Color("#1a7f37")
+	lightGreen  = lipgloss.Color("#3fb950")
+	paleGreen   = lipgloss.Color("#e6ffec")
+	darkGreen   = lipgloss.Color("#12261e")
+	red         = lipgloss.Color("#d1242f")
+	lightRed    = lipgloss.Color("#f85149")
+	palePink    = lipgloss.Color("#ffebe9")
+	darkMaroon  = lipgloss.Color("#25171c")
+	amber       = lipgloss.Color("#9a6700")
+	gold        = lipgloss.Color("#d29922")
+	paleYellow  = lipgloss.Color("#fff8c5")
+	purple      = lipgloss.Color("#8250df")
+	lavender    = lipgloss.Color("#ab7df8")
+	orange      = lipgloss.Color("#bc4c00")
+	lightOrange = lipgloss.Color("#f0883e")
+	paleOrange  = lipgloss.Color("#fff1e5")
+	darkBrown   = lipgloss.Color("#2e1a08")
+)

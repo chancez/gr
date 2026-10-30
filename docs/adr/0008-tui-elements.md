@@ -42,8 +42,8 @@ registry in `styles.go` with three layers.
   the plain surface.
 - **Layout stays in code.** Borders, padding, indents, and widths are not styles. Only their colors
   come from the registry.
-- **Enforced.** A test fails when code outside `styles.go` creates a style or sets a color, other
-  than the two foreign renderers. A new kind of thing on screen gets an element before it can be
+- **Enforced.** A test fails when code outside the registry's files creates a style or sets a
+  color, other than the two foreign renderers. A new kind of thing on screen gets an element before it can be
   drawn.
 - **Names match the config.** Elements and surfaces have dotted names, such as `author`,
   `verdict.approve`, and `surface.cursor`, which the config file will use to override them.
