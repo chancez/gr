@@ -71,6 +71,23 @@ type commentJSON struct {
 	UpdatedAt time.Time  `json:"updated_at"`
 }
 
+type lineJSON struct {
+	Kind string `json:"kind"`
+	Old  int    `json:"old,omitzero"`
+	New  int    `json:"new,omitzero"`
+	Text string `json:"text"`
+}
+
+// excerptJSON is the diff a thread is about: its anchored lines and a few before them.
+type excerptJSON struct {
+	Path string `json:"path"`
+	Side string `json:"side"`
+	Hunk string `json:"hunk,omitempty"`
+	// Exact is false when the lines come from the anchor's stored content, as for outdated threads.
+	Exact bool       `json:"exact"`
+	Lines []lineJSON `json:"lines"`
+}
+
 type threadJSON struct {
 	ID       string        `json:"id"`
 	Seq      int           `json:"seq"`
@@ -80,7 +97,16 @@ type threadJSON struct {
 	Outdated bool          `json:"outdated"`
 	Draft    bool          `json:"draft"`
 	Location locationJSON  `json:"location"`
+	Context  *excerptJSON  `json:"context,omitzero"`
 	Comments []commentJSON `json:"comments"`
+}
+
+func toExcerpt(e review.Excerpt) *excerptJSON {
+	out := &excerptJSON{Path: e.Path, Side: string(e.Side), Hunk: e.Hunk, Exact: e.Exact, Lines: []lineJSON{}}
+	for _, l := range e.Lines {
+		out.Lines = append(out.Lines, lineJSON{Kind: string(l.Kind), Old: l.OldLine, New: l.NewLine, Text: l.Text})
+	}
+	return out
 }
 
 func toAuthor(a store.Author) authorJSON { return authorJSON(a) }
@@ -106,10 +132,41 @@ type lookups struct {
 	revisions map[string]int
 	changes   map[string]int
 	reviews   map[string]store.ReviewState
+	// excerpts holds loaded thread excerpts by thread id. A loaded thread without lines has no entry.
+	excerpts map[string]review.Excerpt
+	loaded   map[string]bool
+}
+
+// loadExcerpts reads excerpts for many threads at once, sharing the diffs they are anchored to.
+func (l *lookups) loadExcerpts(ctx context.Context, threads []review.ThreadView) error {
+	excerpts, err := l.svc.Excerpts(ctx, threads)
+	if err != nil {
+		return err
+	}
+	for _, t := range threads {
+		l.loaded[t.ID] = true
+		if e, ok := excerpts[t.ID]; ok {
+			l.excerpts[t.ID] = e
+		}
+	}
+	return nil
+}
+
+func (l *lookups) excerpt(ctx context.Context, v review.ThreadView) (review.Excerpt, bool, error) {
+	if !l.loaded[v.ID] {
+		if err := l.loadExcerpts(ctx, []review.ThreadView{v}); err != nil {
+			return review.Excerpt{}, false, err
+		}
+	}
+	e, ok := l.excerpts[v.ID]
+	return e, ok, nil
 }
 
 func newLookups(svc *review.Service) *lookups {
-	return &lookups{svc: svc, revisions: map[string]int{}, changes: map[string]int{}, reviews: map[string]store.ReviewState{}}
+	return &lookups{
+		svc: svc, revisions: map[string]int{}, changes: map[string]int{}, reviews: map[string]store.ReviewState{},
+		excerpts: map[string]review.Excerpt{}, loaded: map[string]bool{},
+	}
 }
 
 func (l *lookups) revision(ctx context.Context, id string) (int, error) {
@@ -187,6 +244,11 @@ func (l *lookups) thread(ctx context.Context, v review.ThreadView) (threadJSON, 
 	}
 	if v.StateBy.Name != "" {
 		out.StateBy = new(toAuthor(v.StateBy))
+	}
+	if e, ok, err := l.excerpt(ctx, v); err != nil {
+		return threadJSON{}, err
+	} else if ok {
+		out.Context = toExcerpt(e)
 	}
 	for _, c := range v.Comments {
 		draft, err := l.draft(ctx, c.ReviewID)

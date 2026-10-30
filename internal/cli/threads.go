@@ -3,12 +3,14 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/chancez/gr/internal/anchor"
+	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
@@ -99,6 +101,9 @@ func (a *app) threadCommand() *cobra.Command {
 
 func (a *app) printThreads(ctx context.Context, svc *review.Service, threads []review.ThreadView) error {
 	l := newLookups(svc)
+	if err := l.loadExcerpts(ctx, threads); err != nil {
+		return err
+	}
 	if a.json {
 		out := make([]threadJSON, 0, len(threads))
 		for _, t := range threads {
@@ -119,14 +124,46 @@ func (a *app) printThreads(ctx context.Context, svc *review.Service, threads []r
 			return err
 		}
 		fmt.Fprintln(a.stdout, threadHeader(t, draft))
-		for _, line := range t.Location.Lines {
-			fmt.Fprintf(a.stdout, "  | %s\n", line)
+		if e, ok, err := l.excerpt(ctx, t); err != nil {
+			return err
+		} else if ok {
+			printExcerpt(a.stdout, e)
 		}
 		for _, c := range t.Comments {
 			fmt.Fprintf(a.stdout, "  %s:\n%s\n", c.Author, indent(c.Body, "    "))
 		}
 	}
 	return nil
+}
+
+// printExcerpt prints a thread's excerpt as diff lines: old and new line numbers, a marker, and
+// the text.
+func printExcerpt(w io.Writer, e review.Excerpt) {
+	if e.Hunk != "" {
+		fmt.Fprintf(w, "  %s\n", e.Hunk)
+	} else {
+		fmt.Fprintln(w, "  (from the outdated anchor)")
+	}
+	width := 1
+	for _, l := range e.Lines {
+		width = max(width, len(strconv.Itoa(max(l.OldLine, l.NewLine))))
+	}
+	num := func(n int) string {
+		if n == 0 {
+			return strings.Repeat(" ", width)
+		}
+		return fmt.Sprintf("%*d", width, n)
+	}
+	for _, l := range e.Lines {
+		mark := " "
+		switch l.Kind {
+		case git.LineAdded:
+			mark = "+"
+		case git.LineDeleted:
+			mark = "-"
+		}
+		fmt.Fprintf(w, "  %s %s %s %s\n", num(l.OldLine), num(l.NewLine), mark, l.Text)
+	}
 }
 
 func threadHeader(t review.ThreadView, draft bool) string {

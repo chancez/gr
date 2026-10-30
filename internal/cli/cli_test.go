@@ -64,6 +64,14 @@ func TestReviewRoundTrip(t *testing.T) {
 		Location: locationJSON{
 			Scope: "commit", Revision: 1, Commit: commit, Path: "f.txt", Side: "new", StartLine: 2, EndLine: 2, Lines: []string{"B"},
 		},
+		Context: &excerptJSON{
+			Path: "f.txt", Side: "new", Hunk: "@@ -1,3 +1,3 @@", Exact: true,
+			Lines: []lineJSON{
+				{Kind: "context", Old: 1, New: 1, Text: "a"},
+				{Kind: "deleted", Old: 2, Text: "b"},
+				{Kind: "added", New: 2, Text: "B"},
+			},
+		},
 		Comments: []commentJSON{
 			{Author: authorJSON{Name: "Human", Email: "h@example.com"}, Body: "why?"},
 			{Author: authorJSON{Name: "agent"}, Body: "done"},
