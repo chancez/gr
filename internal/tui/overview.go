@@ -46,12 +46,8 @@ func (f threadFilter) match(t review.ThreadView) bool {
 // that are not loaded, such as outdated ones, fall back to their stored lines.
 func (d *changeData) excerpt(t review.ThreadView) (review.Excerpt, bool) {
 	var files []git.FileDiff
-	switch loc := t.Location; {
-	case t.Outdated:
-	case loc.Scope == store.ScopeCommit:
-		files = d.commitFiles[loc.Commit]
-	case loc.Scope == store.ScopeDiff && loc.RevisionID == d.revision.ID:
-		files = d.diffFiles
+	if !t.Outdated {
+		files = d.threadFiles[t.ID]
 	}
 	return review.ExcerptFor(files, t.Location)
 }

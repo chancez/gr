@@ -307,6 +307,21 @@ func (m *model) openView() {
 	}
 }
 
+// openFileByPath scrolls the main pane to a file of the current view.
+func (m *model) openFileByPath(path string) {
+	for i, f := range m.views[m.current].files {
+		if f.Path() == path {
+			for j, n := range m.filesNav.items {
+				if n.file == i {
+					m.filesNav.pos = j
+				}
+			}
+			m.openFile()
+			return
+		}
+	}
+}
+
 // openFile scrolls the main pane to the file selected in the sidebar.
 func (m *model) openFile() {
 	if m.filesNav.pos >= len(m.filesNav.items) {
@@ -365,6 +380,9 @@ func (m *model) renderSidebar(width, height int) []string {
 func (m *model) mainHeader(width int) string {
 	st := m.r.st
 	title := " " + m.viewLabel(m.views[m.current])
+	if m.needsLoad(m.views[m.current]) {
+		title += "  (loading)"
+	}
 	if c := m.main.cursor; c < len(m.main.rows) {
 		r := m.main.rows[c]
 		if r.file >= 0 {

@@ -125,6 +125,13 @@ type model struct {
 	viewsHeight int
 	// draggingSplit is set while the divider between the sidebar lists is dragged.
 	draggingSplit bool
+	// pendingLoads are views whose diffs to load once the current message is handled, and
+	// syncLoads loads them at once instead, for tests. pendingThread and pendingFile are where to go
+	// once the current view's diff arrives.
+	pendingLoads  []int
+	syncLoads     bool
+	pendingThread *review.ThreadView
+	pendingFile   string
 	// jumps is the jump list and jumpAt the place in it, as in vim. restoring is set while going to
 	// a place in it, so that does not record a jump of its own.
 	jumps     []jumpPoint
@@ -174,9 +181,12 @@ type opMsg struct {
 
 type tickMsg struct{}
 
+// refreshMsg reports another process's writes (changed), or the branch moving (headMoved), which
+// needs git read again.
 type refreshMsg struct {
-	version int64
-	changed bool
+	version   int64
+	changed   bool
+	headMoved bool
 }
 
 type editorMsg struct {
@@ -230,6 +240,82 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
+// reloadCmd re-reads the database, keeping git's data and the loaded diffs.
+func (m *model) reloadCmd() tea.Cmd {
+	if m.data == nil {
+		return m.loadCmd()
+	}
+	ctx, svc, old := m.ctx, m.svc, m.data
+	return func() tea.Msg {
+		start := time.Now()
+		d, err := reload(ctx, svc, old)
+		slog.Debug("reload database", "duration", time.Since(start), "err", err)
+		return dataMsg{data: d, err: err}
+	}
+}
+
+// needsLoad reports whether a view shows diff contents that are not loaded yet.
+func (m *model) needsLoad(v view) bool {
+	return v.kind != viewOverview && !m.data.loaded[v.key()]
+}
+
+// requestLoad asks for the current view's diff contents, synchronously in tests.
+func (m *model) requestLoad() {
+	if m.data == nil || !m.needsLoad(m.views[m.current]) {
+		return
+	}
+	if m.syncLoads {
+		m.applyView(loadView(m.ctx, m.svc, m.data, m.views[m.current]))
+		return
+	}
+	m.pendingLoads = append(m.pendingLoads, m.current)
+}
+
+func (m *model) loadViewCmd(i int) tea.Cmd {
+	ctx, svc, d, v := m.ctx, m.svc, m.data, m.views[i]
+	return func() tea.Msg {
+		start := time.Now()
+		msg := loadView(ctx, svc, d, v)
+		slog.Debug("load view", "view", v.key(), "duration", time.Since(start), "err", msg.err)
+		return msg
+	}
+}
+
+// applyView puts a loaded view's diff contents on screen, keeping the cursor where it was.
+func (m *model) applyView(msg viewLoadedMsg) {
+	if msg.err != nil {
+		m.setError(msg.err)
+		return
+	}
+	if m.data == nil || msg.head != m.data.revision.HeadSHA {
+		return
+	}
+	m.data.apply(msg)
+	key := m.views[m.current].key()
+	var cur row
+	if m.main.cursor < len(m.main.rows) {
+		cur = m.main.rows[m.main.cursor]
+	}
+	m.views = buildViews(m.data)
+	for i, v := range m.views {
+		if v.key() == key {
+			m.current = i
+		}
+	}
+	if key == msg.key {
+		m.rebuildKeeping(cur)
+		m.buildNav()
+		if m.pendingFile != "" {
+			m.openFileByPath(m.pendingFile)
+			m.pendingFile = ""
+		}
+		if t := m.pendingThread; t != nil {
+			m.pendingThread = nil
+			m.openThread(*t, true)
+		}
+	}
+}
+
 func (m *model) loadCmd() tea.Cmd {
 	ctx, svc, id := m.ctx, m.svc, m.changeID
 	return func() tea.Msg {
@@ -253,13 +339,13 @@ func (m *model) refreshCmd() tea.Cmd {
 		if err != nil {
 			return refreshMsg{version: last}
 		}
-		changed := v != last
-		if !changed && change.Kind == store.KindBranch && change.State == store.ChangeOpen {
+		msg := refreshMsg{version: v, changed: v != last}
+		if change.Kind == store.KindBranch && change.State == store.ChangeOpen {
 			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != head {
-				changed = true
+				msg.headMoved = true
 			}
 		}
-		return refreshMsg{version: v, changed: changed}
+		return msg
 	}
 }
 
@@ -294,6 +380,19 @@ func (m *model) expireStatus(now time.Time) {
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	mdl, cmd := m.update(msg)
+	if len(m.pendingLoads) > 0 {
+		cmds := []tea.Cmd{cmd}
+		for _, i := range m.pendingLoads {
+			cmds = append(cmds, m.loadViewCmd(i))
+		}
+		m.pendingLoads = nil
+		return mdl, tea.Batch(cmds...)
+	}
+	return mdl, cmd
+}
+
+func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -311,20 +410,27 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.applyData(msg.data)
 		return m, nil
+	case viewLoadedMsg:
+		m.applyView(msg)
+		return m, nil
 	case opMsg:
 		if msg.err != nil {
 			m.setError(msg.err)
 		} else if msg.status != "" {
 			m.setStatus("%s", msg.status)
 		}
-		return m, m.loadCmd()
+		// An action changes the database, not git: reload just that.
+		return m, m.reloadCmd()
 	case tickMsg:
 		m.expireStatus(time.Now())
 		return m, tea.Batch(m.refreshCmd(), tick())
 	case refreshMsg:
 		m.version = msg.version
-		if msg.changed {
+		switch {
+		case msg.headMoved:
 			return m, m.loadCmd()
+		case msg.changed:
+			return m, m.reloadCmd()
 		}
 		return m, nil
 	case editorMsg:
@@ -379,6 +485,7 @@ func (m *model) applyData(d *changeData) {
 	}
 	prevY := m.main.cursorY()
 	prevSeg := m.main.itemSegment()
+	d.carryLoaded(m.data)
 	m.data = d
 	m.views = buildViews(d)
 	m.current = 0
@@ -388,6 +495,7 @@ func (m *model) applyData(d *changeData) {
 		}
 	}
 	m.rebuildMain()
+	m.requestLoad()
 	if prevRow != "" {
 		files := m.views[m.current].files
 		for i, r := range m.main.rows {
@@ -497,6 +605,7 @@ func (m *model) setView(i int) {
 	m.main.cursor, m.main.offset = 0, 0
 	m.rebuildMain()
 	m.buildNav()
+	m.requestLoad()
 }
 
 func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -909,6 +1018,25 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 	if t.Outdated {
 		m.setError(errors.New("the code this thread is on changed; it is shown as it was"))
 		return
+	}
+	if inDiff && t.Location.Scope == store.ScopeCommit && t.Location.StartLine > 0 && !m.data.loaded[view{kind: viewDiff}.key()] && !m.syncLoads {
+		// Where the thread shows in the whole diff is known once the diff loads.
+		for i, v := range m.views {
+			if v.kind == viewDiff {
+				m.pendingThread = &t
+				m.viewsNav.pos = i
+				m.openView()
+				return
+			}
+		}
+	}
+	if inDiff && t.Location.Scope == store.ScopeCommit && t.Location.StartLine > 0 && m.syncLoads {
+		for _, v := range m.views {
+			if v.kind == viewDiff && m.needsLoad(v) {
+				m.data.apply(loadView(m.ctx, m.svc, m.data, v))
+				m.views = buildViews(m.data)
+			}
+		}
 	}
 	target := -1
 	for i, v := range m.views {

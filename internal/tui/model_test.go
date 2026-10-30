@@ -61,6 +61,7 @@ func newTUIEnv(t *testing.T) *tuiEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	m.syncLoads = true
 	t.Cleanup(m.close)
 	e := &tuiEnv{t: t, repo: r, svc: svc, m: m, chg: chg, store: st}
 	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -276,7 +277,7 @@ func TestLiveRefresh(t *testing.T) {
 	e.repo.Write("new.go", "package main\n")
 	e.repo.Commit("add file")
 	msg = e.m.refreshCmd()().(refreshMsg)
-	if !msg.changed {
+	if !msg.headMoved {
 		t.Fatal("refresh did not notice the branch moving")
 	}
 	_, cmd = e.m.Update(msg)
@@ -1431,11 +1432,15 @@ func TestCommitThreadsShowInTheWholeDiff(t *testing.T) {
 	e.repo.Commit("say goodbye")
 	e.drain(e.m.loadCmd())
 
+	// Placements are made when the whole diff loads, which opening it does.
+	if _, ok := e.m.data.diffPlacements[v.ID]; ok {
+		t.Error("placed before the whole diff loaded")
+	}
+	e.openNav("All changes")
 	loc, ok := e.m.data.diffPlacements[v.ID]
 	if !ok || loc.StartLine != 5 {
 		t.Fatalf("placement in the whole diff = %+v, %v; want line 5", loc, ok)
 	}
-	e.openNav("All changes")
 	e.press("t")
 	cur := e.m.main.rows[e.m.main.cursor]
 	if cur.kind != rowThread || cur.thread.ID != v.ID {
@@ -1639,5 +1644,91 @@ func TestStepUnreviewed(t *testing.T) {
 	e.press("<")
 	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" {
 		t.Errorf("< opened %q, want the first commit", e.m.viewLabel(v))
+	}
+}
+
+// TestDiffsLoadLazily checks that a change opens with file lists only, that a view's diff loads
+// when it opens, and that a database reload keeps what was loaded.
+func TestDiffsLoadLazily(t *testing.T) {
+	e := newTUIEnv(t)
+	sha := e.m.data.commits[0].SHA
+	for _, f := range e.m.data.commitFiles[sha] {
+		if len(f.Hunks) > 0 {
+			t.Fatalf("%s loaded hunks before its commit was opened", f.Path())
+		}
+	}
+	if len(e.m.data.commitFiles[sha]) != 2 {
+		t.Fatalf("file list = %+v, want the message and main.go", e.m.data.commitFiles[sha])
+	}
+	e.openNav("say hello")
+	if !e.m.data.loaded["commit:"+sha] || len(e.m.data.commitFiles[sha][1].Hunks) == 0 {
+		t.Fatal("opening the commit did not load its diff")
+	}
+	// An action reloads the database only, keeping the loaded diff.
+	e.cursorTo(addedLine)
+	e.press("c")
+	e.typeText("note")
+	e.pressRun("ctrl+s")
+	if !e.m.data.loaded["commit:"+sha] || len(e.m.data.commitFiles[sha][1].Hunks) == 0 {
+		t.Error("the reload after an action dropped the loaded diff")
+	}
+	if len(e.m.data.threads) != 1 {
+		t.Errorf("threads after the reload = %d, want 1", len(e.m.data.threads))
+	}
+}
+
+// TestAsyncViewLoad walks the asynchronous path: opening a view queues its load, the title says it
+// is loading, and the loaded message fills it in. o on a commit's thread waits for the whole diff.
+func TestAsyncViewLoad(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.syncLoads = false
+	ctx := t.Context()
+	first := e.m.data.commits[0].SHA
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{
+		Scope: store.ScopeCommit, Commit: first, Path: "main.go", StartLine: 4, Body: "hm",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.reloadCmd())
+
+	e.openNav("say hello")
+	if len(e.m.pendingLoads) != 1 || !strings.Contains(e.screen(), "(loading)") {
+		t.Fatalf("opening a commit: pending %v, screen:\n%s", e.m.pendingLoads, e.screen())
+	}
+	i := e.m.pendingLoads[0]
+	e.m.pendingLoads = nil
+	e.m.Update(e.m.loadViewCmd(i)())
+	if strings.Contains(e.screen(), "(loading)") || !e.m.data.loaded["commit:"+first] {
+		t.Fatalf("after the load:\n%s", e.screen())
+	}
+
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == v.ID })
+	_, cmd := e.m.Update(keyMsg("o"))
+	if e.m.pendingThread == nil || e.m.views[e.m.current].kind != viewDiff {
+		t.Fatalf("o before the whole diff loaded: pending %v, view %q", e.m.pendingThread, e.m.viewLabel(e.m.views[e.m.current]))
+	}
+	runViewLoads(e, cmd)
+	if cur := e.m.main.rows[e.m.main.cursor]; cur.kind != rowThread || cur.thread.ID != v.ID {
+		t.Errorf("after the whole diff loaded, cursor on %+v, want the thread", cur)
+	}
+}
+
+// runViewLoads runs a command's view loads, including those inside a batch, and feeds them back.
+func runViewLoads(e *tuiEnv, cmd tea.Cmd) {
+	if cmd == nil {
+		return
+	}
+	switch msg := cmd().(type) {
+	case tea.BatchMsg:
+		for _, c := range msg {
+			runViewLoads(e, c)
+		}
+	case viewLoadedMsg:
+		e.m.Update(msg)
 	}
 }

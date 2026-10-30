@@ -3,6 +3,8 @@ package tui
 import (
 	"context"
 	"errors"
+	"maps"
+	"strings"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -10,7 +12,9 @@ import (
 	"github.com/chancez/gr/internal/store"
 )
 
-// changeData is everything the TUI shows for a change, loaded in one pass.
+// changeData is what the TUI shows for a change. Per ADR 9, file lists load eagerly and diff
+// contents lazily: commitFiles, diffFiles, and interdiff hold file lists without hunks until their
+// view is loaded, which loaded records by view key.
 type changeData struct {
 	change      store.Change
 	revision    store.Revision
@@ -18,6 +22,9 @@ type changeData struct {
 	commits     []git.Commit
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
+	loaded      map[string]bool
+	// threadFiles are the diffs, of just the thread's file, that excerpts are cut from.
+	threadFiles map[string][]git.FileDiff
 	threads     []review.ThreadView
 	reviews     []store.Review
 	// diffPlacements is where threads on commits show in the whole diff, by thread id.
@@ -27,7 +34,9 @@ type changeData struct {
 	// draftReviewIDs marks the reviews that are the viewer's draft, so their threads show as drafts.
 	draftReviewIDs map[string]bool
 
-	// interdiff is set when there is an earlier revision to compare with.
+	// hasInterdiff is set when there is an earlier revision to compare with; interdiff is loaded
+	// with its view.
+	hasInterdiff  bool
 	interdiff     []git.FileDiff
 	interdiffFrom store.Revision
 	// interdiffFromReview is set when interdiffFrom is the revision the viewer last reviewed.
@@ -47,6 +56,8 @@ func (d *changeData) draft() (store.Review, bool) {
 
 func (d *changeData) isDraft(reviewID string) bool { return d.draftReviewIDs[reviewID] }
 
+// load reads a change: git's file lists, which need one process each, then what the database holds.
+// Diff contents are left to loadView.
 func load(ctx context.Context, svc *review.Service, changeID string) (*changeData, error) {
 	change, err := svc.Store().GetChange(ctx, changeID)
 	if err != nil {
@@ -56,53 +67,169 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 	if err != nil {
 		return nil, err
 	}
-	d := &changeData{change: change, revision: rev, commitFiles: map[string][]git.FileDiff{}, draftReviewIDs: map[string]bool{}}
+	d := &changeData{change: change, revision: rev, loaded: map[string]bool{}, diffPlacements: map[string]store.Location{}}
 	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
 		return nil, err
 	}
 	if d.commits, err = svc.Commits(ctx, rev); err != nil {
 		return nil, err
 	}
-	for _, c := range d.commits {
-		files, err := svc.CommitFiles(ctx, c)
-		if err != nil {
+	if d.commitFiles, err = svc.CommitFileLists(ctx, rev, d.commits); err != nil {
+		return nil, err
+	}
+	if d.diffFiles, err = svc.RevisionFileList(ctx, rev); err != nil {
+		return nil, err
+	}
+	if err := loadDB(ctx, svc, d); err != nil {
+		return nil, err
+	}
+	if from, fromReview, ok := interdiffBase(d, svc.Author()); ok {
+		d.hasInterdiff, d.interdiffFrom, d.interdiffFromReview = true, from, fromReview
+	}
+	return d, nil
+}
+
+// reload re-reads only what the database holds, keeping git's data, loaded diffs included, from
+// old. It is for after an action, when the branch has not moved.
+func reload(ctx context.Context, svc *review.Service, old *changeData) (*changeData, error) {
+	change, err := svc.Store().GetChange(ctx, old.change.ID)
+	if err != nil {
+		return nil, err
+	}
+	d := *old
+	d.change = change
+	d.loaded = maps.Clone(old.loaded)
+	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
+		return nil, err
+	}
+	if err := loadDB(ctx, svc, &d); err != nil {
+		return nil, err
+	}
+	if d.loaded[view{kind: viewDiff}.key()] {
+		if d.diffPlacements, err = placeInDiff(ctx, svc, &d, d.diffFiles); err != nil {
 			return nil, err
 		}
-		d.commitFiles[c.SHA] = files
 	}
-	if d.diffFiles, err = svc.RevisionFiles(ctx, rev); err != nil {
-		return nil, err
+	return &d, nil
+}
+
+// loadDB reads threads, reviews, and marks, and the per-file diffs their excerpts need.
+func loadDB(ctx context.Context, svc *review.Service, d *changeData) error {
+	var err error
+	if d.threads, err = svc.Threads(ctx, d.change, review.ThreadFilter{}); err != nil {
+		return err
 	}
-	if d.threads, err = svc.Threads(ctx, change, review.ThreadFilter{}); err != nil {
-		return nil, err
+	if d.reviews, err = svc.Reviews(ctx, d.change); err != nil {
+		return err
 	}
-	if d.reviews, err = svc.Reviews(ctx, change); err != nil {
-		return nil, err
+	if d.marks, err = svc.Marks(ctx, d.change); err != nil {
+		return err
 	}
-	if d.diffPlacements, err = placeInDiff(ctx, svc, d); err != nil {
-		return nil, err
-	}
-	if d.marks, err = svc.Marks(ctx, change); err != nil {
-		return nil, err
-	}
+	d.draftReviewIDs = map[string]bool{}
 	for _, r := range d.reviews {
 		if r.State == store.ReviewDraft {
 			d.draftReviewIDs[r.ID] = true
 		}
 	}
-	if from, fromReview, ok := interdiffBase(d, svc.Author()); ok {
-		files, exact, err := svc.Interdiff(ctx, from, rev)
-		if err != nil {
-			return nil, err
-		}
-		d.interdiff, d.interdiffFrom, d.interdiffExact, d.interdiffFromReview = files, from, exact, fromReview
+	commits := map[string]git.Commit{}
+	for _, c := range d.commits {
+		commits[c.SHA] = c
 	}
-	return d, nil
+	d.threadFiles = map[string][]git.FileDiff{}
+	for _, t := range d.threads {
+		loc := t.Location
+		if t.Outdated || loc.StartLine == 0 || loc.Path == "" || loc.Path == review.CommitMsgPath {
+			continue
+		}
+		var files []git.FileDiff
+		switch {
+		case loc.Scope == store.ScopeCommit:
+			c, ok := commits[loc.Commit]
+			if !ok {
+				continue
+			}
+			if files, err = svc.CommitFile(ctx, c, loc.Path); err != nil {
+				return err
+			}
+		case loc.Scope == store.ScopeDiff && loc.RevisionID == d.revision.ID:
+			if files, err = svc.RevisionFile(ctx, d.revision, loc.Path); err != nil {
+				return err
+			}
+		}
+		d.threadFiles[t.ID] = files
+	}
+	return nil
 }
 
-// placeInDiff maps current line threads on commits to the whole diff: their new-side lines carried
-// from the commit to the head, kept when they land in the diff.
-func placeInDiff(ctx context.Context, svc *review.Service, d *changeData) (map[string]store.Location, error) {
+// viewLoadedMsg carries a view's diff contents, read by loadView.
+type viewLoadedMsg struct {
+	key        string
+	head       string
+	files      []git.FileDiff
+	placements map[string]store.Location
+	exact      bool
+	err        error
+}
+
+// loadView reads a view's diff contents, through the service's cache.
+func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) viewLoadedMsg {
+	msg := viewLoadedMsg{key: v.key(), head: d.revision.HeadSHA}
+	switch v.kind {
+	case viewCommit:
+		msg.files, msg.err = svc.CommitFiles(ctx, v.commit)
+	case viewDiff:
+		if msg.files, msg.err = svc.RevisionFiles(ctx, d.revision); msg.err == nil {
+			msg.placements, msg.err = placeInDiff(ctx, svc, d, msg.files)
+		}
+	case viewInterdiff:
+		msg.files, msg.exact, msg.err = svc.Interdiff(ctx, d.interdiffFrom, d.revision)
+	}
+	return msg
+}
+
+// apply stores a loaded view's diff contents.
+func (d *changeData) apply(msg viewLoadedMsg) {
+	for _, c := range d.commits {
+		if "commit:"+c.SHA == msg.key {
+			d.commitFiles[c.SHA] = msg.files
+		}
+	}
+	switch msg.key {
+	case view{kind: viewDiff}.key():
+		d.diffFiles, d.diffPlacements = msg.files, msg.placements
+	case view{kind: viewInterdiff}.key():
+		d.interdiff, d.interdiffExact = msg.files, msg.exact
+	}
+	d.loaded[msg.key] = true
+}
+
+// carryLoaded keeps diffs old had loaded when d is the same revision, so a reload does not drop them.
+func (d *changeData) carryLoaded(old *changeData) {
+	if old == nil || old.revision.ID != d.revision.ID {
+		return
+	}
+	for key := range old.loaded {
+		switch {
+		case key == view{kind: viewDiff}.key():
+			d.diffFiles, d.diffPlacements = old.diffFiles, old.diffPlacements
+		case key == view{kind: viewInterdiff}.key():
+			if old.interdiffFrom.ID != d.interdiffFrom.ID {
+				continue
+			}
+			d.interdiff, d.interdiffExact = old.interdiff, old.interdiffExact
+		default:
+			sha := strings.TrimPrefix(key, "commit:")
+			if files, ok := old.commitFiles[sha]; ok {
+				d.commitFiles[sha] = files
+			}
+		}
+		d.loaded[key] = true
+	}
+}
+
+// placeInDiff maps current line threads on commits to the whole diff, given as files: their
+// new-side lines carried from the commit to the head, kept when they land in the diff.
+func placeInDiff(ctx context.Context, svc *review.Service, d *changeData, diffFiles []git.FileDiff) (map[string]store.Location, error) {
 	out := map[string]store.Location{}
 	for _, t := range d.threads {
 		loc := t.Location
@@ -114,7 +241,7 @@ func placeInDiff(ctx context.Context, svc *review.Service, d *changeData) (map[s
 		if err != nil {
 			return nil, err
 		}
-		for _, f := range d.diffFiles {
+		for _, f := range diffFiles {
 			if f.NewPath == loc.Path && anchor.InDiff(f, anchor.SideNew, start, end) {
 				placed := loc
 				placed.Scope, placed.StartLine, placed.EndLine = store.ScopeDiff, start, end

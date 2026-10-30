@@ -75,6 +75,11 @@ func (s *Service) RevisionFileList(ctx context.Context, rev store.Revision) ([]g
 	return files, nil
 }
 
+// RevisionFile is one file's diff in a revision's whole diff.
+func (s *Service) RevisionFile(ctx context.Context, rev store.Revision, path string) ([]git.FileDiff, error) {
+	return s.diff(ctx, rev.BaseSHA, rev.HeadSHA, path)
+}
+
 // RevisionFiles returns a revision's whole diff, through the cache.
 func (s *Service) RevisionFiles(ctx context.Context, rev store.Revision) ([]git.FileDiff, error) {
 	return s.diff(ctx, rev.BaseSHA, rev.HeadSHA)

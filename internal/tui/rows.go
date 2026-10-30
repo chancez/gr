@@ -44,7 +44,7 @@ func (v view) readOnly() bool { return v.kind == viewInterdiff }
 func buildViews(d *changeData) []view {
 	head := d.revision.HeadSHA
 	views := []view{{kind: viewOverview}}
-	if d.interdiff != nil {
+	if d.hasInterdiff {
 		views = append(views, view{kind: viewInterdiff, files: d.interdiff, newRev: head})
 	}
 	for _, c := range d.commits {
