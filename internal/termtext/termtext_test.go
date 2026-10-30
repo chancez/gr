@@ -1,6 +1,9 @@
 package termtext
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLine(t *testing.T) {
 	for in, want := range map[string]string{
@@ -25,5 +28,18 @@ func TestBlock(t *testing.T) {
 	want := "line one\n\tindented ^[[2Jcleared\n"
 	if got := Block(in); got != want {
 		t.Errorf("Block(%q) = %q, want %q", in, got, want)
+	}
+}
+
+func TestWriter(t *testing.T) {
+	var b strings.Builder
+	w := NewWriter(&b)
+	in := "name\x1b]0;title\x07\n"
+	n, err := w.Write([]byte(in))
+	if err != nil || n != len(in) {
+		t.Fatalf("Write = %d, %v", n, err)
+	}
+	if want := "name^[]0;title^G\n"; b.String() != want {
+		t.Errorf("wrote %q, want %q", b.String(), want)
 	}
 }

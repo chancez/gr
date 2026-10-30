@@ -14,6 +14,7 @@ import (
 	"github.com/chancez/gr/internal/logging"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 	"github.com/chancez/gr/internal/tui"
 )
 
@@ -54,6 +55,8 @@ func Execute(ctx context.Context) int {
 }
 
 func (a *app) rootCommand() *cobra.Command {
+	// Names, paths, and comments can hold control characters, which a terminal would act on.
+	a.stdout, a.stderr = termtext.NewWriter(a.stdout), termtext.NewWriter(a.stderr)
 	root := &cobra.Command{
 		Short: "Local code review for git",
 		Use:   "gr [target]",

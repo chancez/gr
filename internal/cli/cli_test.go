@@ -175,3 +175,23 @@ func TestDebugLogsGitCommands(t *testing.T) {
 		t.Errorf("debug log lacks git commands:\n%s", got)
 	}
 }
+
+func TestControlCharactersAreShown(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Write("f.txt", gittest.Lines("a"))
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("f.txt", gittest.Lines("a \x1b[5mblink"))
+	commit := e.repo.Commit("blink")
+	e.run("Human", "comment", "--commit", commit, "-p", "f.txt", "-l", "1", "-m", "title \x1b]0;pwned\x07")
+	e.run("Human", "submit")
+	for _, args := range [][]string{{"threads"}, {"thread", "1"}, {"change", "show"}} {
+		got := e.run("agent", args...)
+		if strings.ContainsAny(got, "\x1b\x07") {
+			t.Errorf("gr %s sent control characters: %q", strings.Join(args, " "), got)
+		}
+	}
+	if got, want := e.run("agent", "threads"), "^[[5mblink"; !strings.Contains(got, want) {
+		t.Errorf("gr threads does not show %q:\n%s", want, got)
+	}
+}

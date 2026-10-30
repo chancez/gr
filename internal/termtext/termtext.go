@@ -8,6 +8,7 @@ package termtext
 
 import (
 	"fmt"
+	"io"
 	"strings"
 	"unicode/utf8"
 )
@@ -68,4 +69,26 @@ func control(r rune, block bool) bool {
 		return false
 	}
 	return r < 0x20 || r >= 0x7f && r < 0xa0
+}
+
+// NewWriter returns a writer that shows control characters in what it writes to w, as Block
+// does. Each write is cleaned on its own, so a rune split across writes shows as bytes; fmt and
+// encoders write whole strings.
+func NewWriter(w io.Writer) io.Writer {
+	return writer{w}
+}
+
+type writer struct {
+	w io.Writer
+}
+
+func (w writer) Write(p []byte) (int, error) {
+	s := string(p)
+	if clean := Block(s); clean != s {
+		if _, err := io.WriteString(w.w, clean); err != nil {
+			return 0, err
+		}
+		return len(p), nil
+	}
+	return w.w.Write(p)
 }
