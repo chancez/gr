@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/x/ansi"
 
@@ -207,12 +208,15 @@ func (m *model) syncNav() {
 }
 
 // sidebarHeights splits the sidebar between the views and files sections, header lines included.
+// The sidebar sections are separated by one divider line.
+const sidebarGap = 1
+
 func (m *model) sidebarHeights(height int) (views, files int) {
-	views = min(len(m.viewsNav.items)+1, max(4, height*2/5))
 	if len(m.filesNav.items) == 0 {
-		views = min(len(m.viewsNav.items)+1, height)
+		return min(len(m.viewsNav.items)+1, height), 0
 	}
-	return views, height - views
+	views = min(len(m.viewsNav.items)+1, max(4, height*2/5))
+	return views, max(height-views-sidebarGap, 0)
 }
 
 func (m *model) renderSidebar(width, height int) []string {
@@ -223,6 +227,7 @@ func (m *model) renderSidebar(width, height int) []string {
 	title := fmt.Sprintf("Change #%d", m.data.change.Seq)
 	out := m.viewsNav.render(m.r.st, title, width, vh, m.focus == focusViews)
 	if fh > 0 {
+		out = append(out, m.r.st.paneBorder.Render(strings.Repeat("-", width)))
 		out = append(out, m.filesNav.render(m.r.st, "Files", width, fh, m.focus == focusFiles)...)
 	}
 	return out

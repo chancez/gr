@@ -513,3 +513,31 @@ func TestExpandReviewedFile(t *testing.T) {
 		t.Error("enter did not expand the reviewed file")
 	}
 }
+
+func TestAllChangesToggle(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.press("A")
+	if v := e.m.views[e.m.current]; v.kind != viewDiff {
+		t.Fatalf("A opened %q, want all changes", e.m.viewLabel(v))
+	}
+	e.press("A")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit {
+		t.Errorf("second A opened %q, want the commit again", e.m.viewLabel(v))
+	}
+}
+
+func TestSidebarDividerAndClicks(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	lines := strings.Split(e.screen(), "\n")
+	vh, _ := e.m.sidebarHeights(e.m.height - 1)
+	if !strings.HasPrefix(lines[vh], "----") || !strings.Contains(lines[vh+1], "Files") {
+		t.Errorf("no divider before the files section:\n%s", e.screen())
+	}
+	// Clicking the second file selects it.
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: vh + 3, Button: tea.MouseLeft})
+	if e.m.focus != focusFiles || e.m.filesNav.pos != 1 {
+		t.Errorf("click on the second file: focus %d pos %d", e.m.focus, e.m.filesNav.pos)
+	}
+}

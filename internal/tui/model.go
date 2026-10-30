@@ -89,6 +89,8 @@ type model struct {
 	// navWidth is the sidebar width once dragged, or 0 for the default.
 	navWidth int
 	dragging bool
+	// returnView is where the all-changes key goes back to.
+	returnView int
 	// expanded overrides whether a file is collapsed, keyed by view and path.
 	expanded map[string]bool
 	main     pane
@@ -140,7 +142,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew}, expanded: map[string]bool{},
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew}, expanded: map[string]bool{}, returnView: -1,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -442,6 +444,9 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch {
+	case key.Matches(msg, k.AllChanges):
+		m.toggleAllChanges()
+		return m, nil
 	case key.Matches(msg, k.NextCommit):
 		m.stepCommit(1)
 		return m, nil
@@ -630,6 +635,24 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	m.syncNav()
 	return m, nil
+}
+
+// toggleAllChanges opens the whole diff, or goes back to the view it was opened from.
+func (m *model) toggleAllChanges() {
+	if m.views[m.current].kind == viewDiff {
+		if m.returnView >= 0 && m.returnView < len(m.views) {
+			m.viewsNav.pos = m.returnView
+			m.openView()
+		}
+		return
+	}
+	for i, v := range m.views {
+		if v.kind == viewDiff {
+			m.returnView = m.current
+			m.viewsNav.pos = i
+			m.openView()
+		}
+	}
 }
 
 // stepCommit opens the next or previous commit, starting from the first or last when the current
@@ -951,7 +974,8 @@ func (m *model) sidebarAt(y int) (*navList, focus, int) {
 	if y < vh {
 		return &m.viewsNav, focusViews, m.viewsNav.at(y - 1)
 	}
-	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - 1)
+	// Past the divider and the files header.
+	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - sidebarGap - 1)
 }
 
 func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {

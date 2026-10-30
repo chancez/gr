@@ -16,6 +16,7 @@ type keyMap struct {
 	Right        key.Binding
 	NextFile     key.Binding
 	PrevFile     key.Binding
+	AllChanges   key.Binding
 	NextCommit   key.Binding
 	PrevCommit   key.Binding
 	NextHunk     key.Binding
@@ -62,6 +63,7 @@ func defaultKeys() keyMap {
 		Right:        key.NewBinding(key.WithKeys("l", "right")),
 		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
 		PrevFile:     key.NewBinding(key.WithKeys("[")),
+		AllChanges:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
 		NextCommit:   key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
 		PrevCommit:   key.NewBinding(key.WithKeys("{")),
 		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
@@ -102,7 +104,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.NextCommit, k.NextFile, k.NextHunk, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
+		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
 		{k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
