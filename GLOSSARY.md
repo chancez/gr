@@ -48,3 +48,22 @@ the whole diff is tied to the file's content and lapses when it changes.
 
 **Suggestion**: a fenced ```` ```suggestion ```` block in a comment, holding replacement text for
 the anchored lines. Same syntax as GitHub.
+
+## Drawing the TUI
+
+**Palette**: the colors available to the TUI, named by how they look, such as `ink` or `lightBlue`.
+A palette color has no meaning of its own.
+
+**Role**: what a color is for, such as text, muted, success, danger, attention, done, added, or
+deleted. Named by intent rather than hue, so a theme or the config can make danger blue.
+
+**Theme**: an assignment of palette colors to roles, for a light or dark background. Built in:
+default and colorblind.
+
+**Element**: a kind of text on screen, such as an author, a sha, or a thread's state, styled from
+the roles. Variants cover values, such as `verdict.approve`.
+
+**Prop**: an option a place asks an element for, such as dim or strong.
+
+**Surface**: where a line sits, such as plain, the cursor, a heading bar, or an added line. It owns
+the background.

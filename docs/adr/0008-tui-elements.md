@@ -15,15 +15,21 @@ what is being colored.
 ## Decision
 
 The TUI is drawn from **elements**, much like components in React, on **surfaces**, from one
-registry in `styles.go` with three layers.
+registry with these layers: the palette in `palette.go`, the rest in `theme.go`, and the functions
+that draw lines in `draw.go`.
 
-- **Palette.** Named colors: foreground, muted, accent, green, red, yellow, purple, border, and the
-  backgrounds. A theme is a palette; the colorblind theme swaps green and red for blue and orange
-  without touching the elements.
+- **Palette.** The available colors, named by how they look, such as `ink`, `snow`, and
+  `lightBlue`. They carry no meaning.
+- **Roles.** What a color is for: text, muted, accent, success, danger, attention, done, added,
+  deleted, border, and the backgrounds. Roles are named by intent, not hue, so overriding one says
+  what it means, as in "danger is blue".
+- **Theme.** An assignment of palette colors to roles, for a light or dark background. Default and
+  colorblind are built in; colorblind assigns blue to success and added and orange to danger and
+  deleted, without touching the elements.
 - **Elements.** A named kind of text on screen, such as author, sha, timestamp, path, thread ref,
-  thread state, verdict, key, and hint. An element sets a foreground and attributes, never a
-  background. An element whose look depends on a value has variants, such as `verdict.approve` or
-  `thread-state.resolved`.
+  thread state, verdict, key, and hint. An element sets a foreground and attributes from the roles,
+  never a background. An element whose look depends on a value has variants, such as
+  `verdict.approve` or `thread-state.resolved`.
 - **Props.** Like a component's props, a place can ask for an element with options, and the
   registry defines what each does: `dim` for reviewed, collapsed, or resolved entries, and `strong`
   for headers. A place asks for "author, dimmed" rather than choosing a color. Options are added
@@ -45,8 +51,9 @@ registry in `styles.go` with three layers.
 - **Enforced.** A test fails when code outside the registry's files creates a style or sets a
   color, other than the two foreign renderers. A new kind of thing on screen gets an element before it can be
   drawn.
-- **Names match the config.** Elements and surfaces have dotted names, such as `author`,
-  `verdict.approve`, and `surface.cursor`, which the config file will use to override them.
+- **Names match the config.** Roles, elements, and surfaces have names, such as `danger`, `author`,
+  `verdict.approve`, and `surface.cursor`, which the config file will use to override them: a role
+  to change a color everywhere it means the same thing, an element to change one kind of text.
 
 ## Consequences
 
