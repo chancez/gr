@@ -301,16 +301,18 @@ func (r *Repo) BlobID(ctx context.Context, rev, path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Diff returns the diff from one revision to another. An empty from diffs against the empty tree.
-func (r *Repo) Diff(ctx context.Context, from, to string) ([]FileDiff, error) {
+// Diff returns the diff from one revision to another, limited to paths if any are given. An empty
+// from diffs against the empty tree.
+func (r *Repo) Diff(ctx context.Context, from, to string, paths ...string) ([]FileDiff, error) {
 	if from == "" {
 		var err error
 		if from, err = r.EmptyTree(ctx); err != nil {
 			return nil, err
 		}
 	}
-	out, err := r.run(ctx, "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-relative",
-		"--full-index", "--src-prefix=a/", "--dst-prefix=b/", "-M", from, to, "--")
+	args := append([]string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-relative",
+		"--full-index", "--src-prefix=a/", "--dst-prefix=b/", "-M", from, to, "--"}, paths...)
+	out, err := r.run(ctx, args...)
 	if err != nil {
 		return nil, err
 	}
