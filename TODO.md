@@ -29,22 +29,29 @@ Sections are in priority order, and so are the items within them.
 14. Load commit diffs lazily. Every diff is loaded up front, so large branches are slow to open.
 15. Reviewed marks from the CLI, for agents that review.
 16. Test mouse handling in a real terminal.
+17. Speed up feedback after an action. Each action already reloads at once, but a reload re-runs git
+    for everything: a diff per commit (66 diffs take about 0.5s on this branch), the whole diff, the
+    interdiff, and one diff per thread placed in the whole diff. Reload only the database when git
+    has not moved, and apply the change to the screen before the reload lands.
+18. Log with `log/slog` to a file under `$XDG_STATE_HOME/gr/`, since the TUI owns the terminal: git
+    commands and their timing, database writes, reloads, and errors, so problems can be diagnosed
+    after the fact. A `--debug` flag or `GR_LOG` sets the level.
 
 ## Config
 
-17. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
-18. Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
-19. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
+19. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
+20. Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
+21. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
     override individual colors. gr draws its own diff colors, so git's `color.diff.*` do not apply.
-20. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
-21. Configurable scrolloff and default sidebar width.
+22. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
+23. Configurable scrolloff and default sidebar width.
 
 ## Polish
 
-22. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+24. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
-23. Run git outside the write transaction when re-anchoring, so other writers do not wait on it.
-24. Detect squash merges as merged.
+25. Run git outside the write transaction when re-anchoring, so other writers do not wait on it.
+26. Detect squash merges as merged.
 
 ## Later
 
