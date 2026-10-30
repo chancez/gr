@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -24,12 +25,23 @@ import (
 	"github.com/chancez/gr/internal/store"
 )
 
+// Options configure the TUI.
+type Options struct {
+	// Theme is a built-in palette, one of Themes. Empty is ThemeDefault.
+	Theme string
+}
+
 // Run opens the TUI on a change.
-func Run(ctx context.Context, svc *review.Service, change store.Change) error {
+func Run(ctx context.Context, svc *review.Service, change store.Change, opts Options) error {
+	if opts.Theme != "" && !slices.Contains(Themes, opts.Theme) {
+		return fmt.Errorf("unknown theme %q, want one of %s", opts.Theme, strings.Join(Themes, ", "))
+	}
 	m, err := newModel(ctx, svc, change)
 	if err != nil {
 		return err
 	}
+	m.theme = opts.Theme
+	m.setTheme(true)
 	defer m.close()
 	_, err = tea.NewProgram(m, tea.WithContext(ctx)).Run()
 	return err
@@ -99,6 +111,9 @@ type model struct {
 	searchPos   int
 	searchHits  int
 	searchInput textinput.Model
+	// theme is the built-in palette, and isDark whether the terminal's background is dark.
+	theme  string
+	isDark bool
 	// filter selects the threads the overview shows.
 	filter threadFilter
 	// lastSidebar is the sidebar section h returns to.
@@ -177,7 +192,8 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 
 // setTheme rebuilds colors for a dark or light background.
 func (m *model) setTheme(isDark bool) {
-	m.r = newRenderer(isDark)
+	m.isDark = isDark
+	m.r = newRenderer(isDark, m.theme)
 	h := help.New()
 	h.ShortSeparator, h.FullSeparator, h.Ellipsis = " | ", "   ", "..."
 	h.Styles.ShortKey, h.Styles.FullKey = m.r.st.helpKey, m.r.st.helpKey

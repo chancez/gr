@@ -52,7 +52,7 @@ func (a *app) rootCommand() *cobra.Command {
 reviews: threads on the change, a commit, a file, or lines, batched into a review with a verdict.
 
 Run without a command to review in the TUI. A target is a branch (default: the current one), a
-range A..B, or a commit.
+range A..B, or a commit. GR_THEME=colorblind uses blue and orange in place of green and red.
 
 Commands that act on a change take --change to pick one by number or id prefix. Without it, they
 use the change for the current branch, creating it if needed.`,
@@ -67,7 +67,7 @@ use the change for the current branch, creating it if needed.`,
 		if err != nil {
 			return err
 		}
-		return tui.Run(cmd.Context(), svc, change)
+		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME")})
 	}
 	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)

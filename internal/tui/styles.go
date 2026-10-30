@@ -52,10 +52,22 @@ type styles struct {
 	paneUnfocused lipgloss.Style
 }
 
-// newStyles picks colors for a dark or light terminal background.
+// Themes are the built-in palettes.
+const (
+	// ThemeDefault is modelled on GitHub's light and dark themes.
+	ThemeDefault = "default"
+	// ThemeColorblind is modelled on GitHub's protanopia and deuteranopia themes: blue for added
+	// and good, orange for deleted and bad, in place of green and red.
+	ThemeColorblind = "colorblind"
+)
+
+// Themes lists the built-in palettes.
+var Themes = []string{ThemeDefault, ThemeColorblind}
+
+// newStyles picks colors for a dark or light terminal background, in a built-in theme.
 //
-// TODO: make colors configurable once there is a config file.
-func newStyles(isDark bool) styles {
+// TODO: let the config file override individual colors.
+func newStyles(isDark bool, theme string) styles {
 	ld := lipgloss.LightDark(isDark)
 	fg := ld(lipgloss.Color("#1f2328"), lipgloss.Color("#e6edf3"))
 	muted := ld(lipgloss.Color("#59636e"), lipgloss.Color("#9198a1"))
@@ -65,12 +77,20 @@ func newStyles(isDark bool) styles {
 	yellow := ld(lipgloss.Color("#9a6700"), lipgloss.Color("#d29922"))
 	purple := ld(lipgloss.Color("#8250df"), lipgloss.Color("#ab7df8"))
 	border := ld(lipgloss.Color("#d1d9e0"), lipgloss.Color("#3d444d"))
+	addedBg := ld(lipgloss.Color("#e6ffec"), lipgloss.Color("#12261e"))
+	deletedBg := ld(lipgloss.Color("#ffebe9"), lipgloss.Color("#25171c"))
+	if theme == ThemeColorblind {
+		green = blue
+		red = ld(lipgloss.Color("#bc4c00"), lipgloss.Color("#f0883e"))
+		addedBg = ld(lipgloss.Color("#ddf4ff"), lipgloss.Color("#0d2140"))
+		deletedBg = ld(lipgloss.Color("#fff1e5"), lipgloss.Color("#2e1a08"))
+	}
 	return styles{
 		isDark:      isDark,
 		fg:          fg,
 		accent:      blue,
-		addedBg:     ld(lipgloss.Color("#e6ffec"), lipgloss.Color("#12261e")),
-		deletedBg:   ld(lipgloss.Color("#ffebe9"), lipgloss.Color("#25171c")),
+		addedBg:     addedBg,
+		deletedBg:   deletedBg,
 		cursorBg:    ld(lipgloss.Color("#b6e3ff"), lipgloss.Color("#1f3a5f")),
 		dimCursorBg: ld(lipgloss.Color("#eaeef2"), lipgloss.Color("#262c36")),
 		selectedBg:  ld(lipgloss.Color("#fff8c5"), lipgloss.Color("#2a2f45")),

@@ -401,7 +401,7 @@ func TestDragSidebar(t *testing.T) {
 
 func TestSidebarTruncates(t *testing.T) {
 	l := navList{items: []navItem{{label: "a very long label that does not fit"}}}
-	got := ansi.Strip(l.render(newStyles(true), "T", 12, 2, false)[1])
+	got := ansi.Strip(l.render(newStyles(true, ThemeDefault), "T", 12, 2, false)[1])
 	if got != "a very lo..." {
 		t.Errorf("truncated label = %q", got)
 	}
@@ -409,7 +409,7 @@ func TestSidebarTruncates(t *testing.T) {
 
 func TestFileLabelsKeepTheirEnd(t *testing.T) {
 	l := navList{items: []navItem{{prefix: "M ", label: "internal/anchor/anchor_test.go"}}}
-	got := ansi.Strip(l.render(newStyles(true), "T", 20, 2, false)[1])
+	got := ansi.Strip(l.render(newStyles(true, ThemeDefault), "T", 20, 2, false)[1])
 	if got != "M .../anchor_test.go" {
 		t.Errorf("file label = %q", got)
 	}
@@ -755,7 +755,7 @@ func TestSidebarMarks(t *testing.T) {
 
 	// A badge survives truncation.
 	it := navItem{label: "a very long commit subject", badge: "(2) *x"}
-	if got := ansi.Strip(it.render(newStyles(true), 20, false, false)); got != "a very lon... (2) *x" {
+	if got := ansi.Strip(it.render(newStyles(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
 		t.Errorf("rendered = %q", got)
 	}
 }
@@ -1244,7 +1244,7 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 }
 
 func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
-	st := newStyles(true)
+	st := newStyles(true, ThemeDefault)
 	done := navItem{label: "M a.go", badge: "(2) *x", done: true}
 	got := done.render(st, 30, false, false)
 	if !strings.Contains(got, st.muted.Render(fit("M a.go", 23, nil))) {
@@ -1290,5 +1290,18 @@ func TestEditingAResolvedThreadWarns(t *testing.T) {
 	e.press("e")
 	if e.m.mode != modeCompose || !e.m.compose.warn || !strings.Contains(e.m.compose.title, "will not reopen") {
 		t.Errorf("editing a resolved thread: mode %d, title %q", e.m.mode, e.m.compose.title)
+	}
+}
+
+func TestColorblindTheme(t *testing.T) {
+	for _, dark := range []bool{true, false} {
+		def, cb := newStyles(dark, ThemeDefault), newStyles(dark, ThemeColorblind)
+		if cb.addedBg == def.addedBg || cb.deletedBg == def.deletedBg {
+			t.Errorf("dark %v: colorblind theme keeps the default diff backgrounds", dark)
+		}
+		// No green or red: approvals and additions share the accent's blue.
+		if cb.badgeOpen.GetForeground() != cb.accent {
+			t.Errorf("dark %v: colorblind good color is not blue", dark)
+		}
 	}
 }

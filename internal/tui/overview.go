@@ -215,8 +215,8 @@ func verdictText(v store.Verdict) string {
 	return "commented"
 }
 
-// verdictStyle colors a verdict: green for approved, red for requested changes, accent for
-// commented.
+// verdictStyle colors a verdict: green for approved, red for requested changes, and the plain
+// foreground for commented, in the theme's colors.
 func verdictStyle(st styles, v store.Verdict) lipgloss.Style {
 	switch v {
 	case store.VerdictApprove:
@@ -224,7 +224,7 @@ func verdictStyle(st styles, v store.Verdict) lipgloss.Style {
 	case store.VerdictRequestChanges:
 		return st.statusErr.Bold(true)
 	}
-	return lipgloss.NewStyle().Bold(true).Foreground(st.accent)
+	return st.heading
 }
 
 func verdictLabel(st styles, v store.Verdict) string {

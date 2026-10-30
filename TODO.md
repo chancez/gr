@@ -20,7 +20,8 @@ Sections are in priority order, and so are the items within them.
 
 7. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
 8. Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
-9. Configurable colors. The light and dark palettes are hard-coded in `internal/tui/styles.go`.
+9. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
+   override individual colors. gr draws its own diff colors, so git's `color.diff.*` do not apply.
 10. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
 11. Configurable scrolloff and default sidebar width.
 

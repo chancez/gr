@@ -28,8 +28,8 @@ type renderer struct {
 	segments []int
 }
 
-func newRenderer(isDark bool) *renderer {
-	return &renderer{st: newStyles(isDark), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
+func newRenderer(isDark bool, theme string) *renderer {
+	return &renderer{st: newStyles(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
 }
 
 // rowState is how a row is highlighted.

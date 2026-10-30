@@ -45,6 +45,9 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 
 Comments are Markdown. `ctrl+e` writes one in `$EDITOR`.
 
+Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in
+place of green and red.
+
 ## For agents
 
 Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name.
