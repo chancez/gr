@@ -39,6 +39,7 @@ type styles struct {
 	badgeDone    lipgloss.Style
 	badgeWarn    lipgloss.Style
 	composeBox   lipgloss.Style
+	searchMatch  lipgloss.Style
 	statusMsg    lipgloss.Style
 	statusErrMsg lipgloss.Style
 	helpKey      lipgloss.Style
@@ -94,6 +95,8 @@ func newStyles(isDark bool) styles {
 		badgeDone:    lipgloss.NewStyle().Foreground(purple),
 		badgeWarn:    lipgloss.NewStyle().Foreground(yellow),
 		composeBox:   lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).BorderForeground(blue).Padding(0, 1),
+		searchMatch: lipgloss.NewStyle().Bold(true).Background(yellow).
+			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
 		statusMsg: lipgloss.NewStyle().Bold(true).Background(green).
 			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
 		statusErrMsg: lipgloss.NewStyle().Bold(true).Background(red).

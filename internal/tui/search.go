@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"unicode"
 
@@ -39,6 +41,7 @@ func (m *model) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		if pattern := m.searchInput.Value(); pattern != "" {
 			m.search = pattern
+			m.searchPos, m.searchHits = 0, 0
 		}
 		m.searchStep(1)
 		return m, nil
@@ -64,6 +67,7 @@ func (m *model) searchStep(dir int) {
 		}
 	}
 	if len(hits) == 0 {
+		m.searchPos, m.searchHits = 0, 0
 		m.setError(fmt.Errorf("no match for %q", m.search))
 		return
 	}
@@ -86,9 +90,60 @@ func (m *model) searchStep(dir int) {
 	}
 	p.jump(hits[next])
 	m.syncNav()
-	status := fmt.Sprintf("/%s  match %d of %d", m.search, next+1, len(hits))
+	m.searchPos, m.searchHits = next+1, len(hits)
 	if wrapped {
-		status += ", wrapped"
+		m.setStatus("search wrapped")
 	}
-	m.setStatus("%s", status)
+}
+
+// matchSpans returns the cell ranges in plain where the search pattern occurs, with smartcase.
+func matchSpans(plain, pattern string) [][2]int {
+	if pattern == "" {
+		return nil
+	}
+	haystack, needle := plain, pattern
+	if strings.IndexFunc(pattern, unicode.IsUpper) < 0 {
+		haystack, needle = strings.ToLower(plain), strings.ToLower(pattern)
+	}
+	var spans [][2]int
+	for from := 0; from < len(haystack); {
+		i := strings.Index(haystack[from:], needle)
+		if i < 0 {
+			break
+		}
+		start := from + i
+		end := start + len(needle)
+		spans = append(spans, [2]int{ansi.StringWidth(plain[:start]), ansi.StringWidth(plain[:end])})
+		from = end
+	}
+	return spans
+}
+
+// highlightMatches marks the search pattern's matches in a rendered line, keeping its other styles.
+func (m *model) highlightMatches(line string) string {
+	spans := matchSpans(ansi.Strip(line), m.search)
+	if len(spans) == 0 {
+		return line
+	}
+	var b strings.Builder
+	at := 0
+	for _, sp := range spans {
+		b.WriteString(ansi.Cut(line, at, sp[0]))
+		b.WriteString(m.r.st.searchMatch.Render(ansi.Strip(ansi.Cut(line, sp[0], sp[1]))))
+		at = sp[1]
+	}
+	b.WriteString(ansi.Cut(line, at, ansi.StringWidth(line)))
+	return b.String()
+}
+
+// searchLabel shows the active search in the status bar.
+func (m *model) searchLabel() string {
+	if m.search == "" {
+		return ""
+	}
+	label := "/" + m.search
+	if m.searchHits > 0 {
+		label += fmt.Sprintf(" %d/%d", m.searchPos, m.searchHits)
+	}
+	return label
 }

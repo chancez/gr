@@ -637,8 +637,8 @@ func TestSearch(t *testing.T) {
 	if r := e.m.main.rows[first]; r.line == nil || !strings.Contains(r.line.Text, "println") {
 		t.Fatalf("cursor after search on %+v", r)
 	}
-	if !strings.Contains(e.m.status, "match 1 of 2") {
-		t.Errorf("status = %q", e.m.status)
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "/println 1/2") {
+		t.Errorf("status bar = %q, want the search and its position", ansi.Strip(e.m.renderStatus()))
 	}
 	e.press("n")
 	second := e.m.main.cursor
@@ -1148,5 +1148,35 @@ func TestReaderScrollSelectsAtReadingPosition(t *testing.T) {
 	it := p.items[p.item]
 	if !(it.start <= line && line < it.end) && it.start < line {
 		t.Errorf("after d, item %+v does not cover or follow the reading line %d", it, line)
+	}
+}
+
+func TestSearchHighlights(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.press("/")
+	e.typeText("hello")
+	e.press("enter")
+	match := e.m.r.st.searchMatch.Render("hello")
+	if !strings.Contains(e.m.render(), match) {
+		t.Errorf("match not highlighted:\n%q", e.m.render())
+	}
+	// The rest of the line keeps its text.
+	if !strings.Contains(e.screen(), `println("hello")`) {
+		t.Errorf("highlighting changed the line's text:\n%s", e.screen())
+	}
+	e.press("esc")
+	if strings.Contains(e.m.render(), match) || strings.Contains(ansi.Strip(e.m.renderStatus()), "/hello") {
+		t.Error("esc did not clear the search")
+	}
+}
+
+func TestMatchSpans(t *testing.T) {
+	got := matchSpans("Foo foo FOO", "foo")
+	if len(got) != 3 || got[1] != [2]int{4, 7} {
+		t.Errorf("smartcase spans = %v", got)
+	}
+	if got := matchSpans("Foo foo", "Foo"); len(got) != 1 {
+		t.Errorf("case-sensitive spans = %v", got)
 	}
 }

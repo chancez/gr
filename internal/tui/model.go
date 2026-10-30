@@ -91,8 +91,11 @@ type model struct {
 	// navWidth is the sidebar width once dragged, or 0 for the default.
 	navWidth int
 	dragging bool
-	// search is the last search pattern, and searchInput the prompt while typing one.
+	// search is the last search pattern, and searchInput the prompt while typing one. searchPos
+	// and searchHits are the current match's position among the matches.
 	search      string
+	searchPos   int
+	searchHits  int
 	searchInput textinput.Model
 	// filter selects the threads the overview shows.
 	filter threadFilter
@@ -473,6 +476,7 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.Cancel):
 		m.main.anchor = -1
 		m.status = ""
+		m.search, m.searchPos, m.searchHits = "", 0, 0
 		return m, nil
 	case key.Matches(msg, k.Focus):
 		m.cycleFocus(1)
@@ -1355,7 +1359,13 @@ func (m *model) render() string {
 		return msg
 	}
 	nw, mw, bh := m.layoutSizes()
-	mainLines := append([]string{m.mainHeader(mw)}, m.main.visible(m.renderMainRow)...)
+	body := m.main.visible(m.renderMainRow)
+	if m.search != "" {
+		for i := range body {
+			body[i] = m.highlightMatches(body[i])
+		}
+	}
+	mainLines := append([]string{m.mainHeader(mw)}, body...)
 	navLines := m.renderSidebar(nw, bh)
 	sep := m.r.st.paneBorder.Render("|")
 	if m.dragging {
@@ -1413,6 +1423,9 @@ func (m *model) renderStatus() string {
 	}
 	if m.main.anchor >= 0 {
 		left += st.badgeWarn.Render(" selecting")
+	}
+	if label := m.searchLabel(); label != "" {
+		left += " " + st.searchMatch.Render(label)
 	}
 	// Fit the hints in what the left side leaves, keeping help and quit.
 	right := m.renderHints(m.shortHelp(), max(m.width-lipgloss.Width(left)-2, 10))
