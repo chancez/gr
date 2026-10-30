@@ -9,7 +9,6 @@ import (
 	"charm.land/glamour/v2"
 	glamouransi "charm.land/glamour/v2/ansi"
 	glamourstyles "charm.land/glamour/v2/styles"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
@@ -74,7 +73,7 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 	md, ok := r.markdown[width]
 	if !ok {
 		var err error
-		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(r.st.isDark)), glamour.WithWordWrap(width))
+		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(r.th.isDark)), glamour.WithWordWrap(width))
 		if err == nil {
 			r.markdown[width] = md
 		}
@@ -84,7 +83,7 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 			return trimBlank(strings.Split(strings.TrimRight(out, "\n"), "\n"))
 		}
 	}
-	return strings.Split(lipgloss.NewStyle().Width(width).Render(body), "\n")
+	return wrap(body, width)
 }
 
 // markdownStyle is glamour's light or dark style, kept to ASCII.
@@ -110,23 +109,6 @@ func trimBlank(lines []string) []string {
 		lines = lines[:len(lines)-1]
 	}
 	return lines
-}
-
-// fit truncates or pads a styled string to exactly width cells, padding with bg.
-func fit(s string, width int, bg color.Color) string {
-	if width <= 0 {
-		return ""
-	}
-	s = ansi.Truncate(s, width, "")
-	pad := width - ansi.StringWidth(s)
-	if pad > 0 {
-		style := lipgloss.NewStyle()
-		if bg != nil {
-			style = style.Background(bg)
-		}
-		s += style.Render(strings.Repeat(" ", pad))
-	}
-	return s
 }
 
 func expandTabs(s string) string { return strings.ReplaceAll(s, "\t", "    ") }

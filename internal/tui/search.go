@@ -129,7 +129,7 @@ func (m *model) highlightMatches(line string) string {
 	at := 0
 	for _, sp := range spans {
 		b.WriteString(ansi.Cut(line, at, sp[0]))
-		b.WriteString(m.r.st.searchMatch.Render(ansi.Strip(ansi.Cut(line, sp[0], sp[1]))))
+		b.WriteString(m.r.th.render(surfSearchMatch, span{el: elText, text: ansi.Strip(ansi.Cut(line, sp[0], sp[1]))}))
 		at = sp[1]
 	}
 	b.WriteString(ansi.Cut(line, at, ansi.StringWidth(line)))

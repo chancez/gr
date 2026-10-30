@@ -17,8 +17,8 @@ import (
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"image/color"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -223,9 +223,11 @@ func (m *model) setTheme(isDark bool) {
 	m.r = newRenderer(isDark, m.theme)
 	h := help.New()
 	h.ShortSeparator, h.FullSeparator, h.Ellipsis = " | ", "   ", "..."
-	h.Styles.ShortKey, h.Styles.FullKey = m.r.st.helpKey, m.r.st.helpKey
-	h.Styles.ShortDesc, h.Styles.FullDesc = m.r.st.helpDesc, m.r.st.helpDesc
-	h.Styles.ShortSeparator, h.Styles.FullSeparator = m.r.st.muted, m.r.st.muted
+	th := m.r.th
+	key, desc, muted := th.style(elKey, 0, surfPlain), th.style(elKeyDesc, 0, surfPlain), th.style(elMuted, 0, surfPlain)
+	h.Styles.ShortKey, h.Styles.FullKey = key, key
+	h.Styles.ShortDesc, h.Styles.FullDesc = desc, desc
+	h.Styles.ShortSeparator, h.Styles.FullSeparator = muted, muted
 	h.SetWidth(m.width)
 	m.help = h
 }
@@ -1369,14 +1371,15 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 // composeStyles colors the comment editor from the palette, so text and hints are readable on any
 // background.
 func (m *model) composeStyles() textarea.Styles {
-	st := m.r.st
-	styles := textarea.DefaultStyles(st.isDark)
+	th := m.r.th
+	styles := textarea.DefaultStyles(th.isDark)
+	text, muted := th.style(elText, 0, surfPlain), th.style(elMuted, 0, surfPlain)
 	for _, state := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
-		state.Text = lipgloss.NewStyle().Foreground(st.fg)
-		state.Placeholder = st.muted
-		state.CursorLine = lipgloss.NewStyle().Foreground(st.fg)
-		state.EndOfBuffer = st.muted
-		state.Prompt = st.muted
+		state.Text = text
+		state.Placeholder = muted
+		state.CursorLine = text
+		state.EndOfBuffer = muted
+		state.Prompt = muted
 	}
 	return styles
 }
@@ -1682,10 +1685,11 @@ func (m *model) render() string {
 	}
 	mainLines := append([]string{m.mainHeader(mw)}, body...)
 	navLines := m.renderSidebar(nw, bh)
-	sep := m.r.st.paneBorder.Render("|")
+	border := elBorder
 	if m.dragging {
-		sep = lipgloss.NewStyle().Foreground(m.r.st.accent).Render("|")
+		border = elBorderActive
 	}
+	sep := m.r.th.render(surfPlain, sp(border, "|"))
 	var b strings.Builder
 	for y := range bh {
 		if nw > 0 {
@@ -1693,24 +1697,24 @@ func (m *model) render() string {
 			if y < len(navLines) {
 				nl = navLines[y]
 			}
-			b.WriteString(fit(nl, nw, nil))
+			b.WriteString(fit(nl, nw))
 			b.WriteString(sep)
 		}
 		ml := ""
 		if y < len(mainLines) {
 			ml = mainLines[y]
 		}
-		b.WriteString(fit(ml, mw, nil))
+		b.WriteString(fit(ml, mw))
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
 		hints := "  " + m.help.ShortHelpView([]key.Binding{m.keys.Save, m.keys.ExternalEdit, m.keys.Cancel})
-		titleStyle := m.r.st.heading
+		el := elHeading
 		if m.compose.warn {
-			titleStyle = m.r.st.badgeWarn.Bold(true)
+			el = elWarning
 		}
-		title := titleStyle.Render(m.compose.title) + hints
-		box := m.r.st.composeBox.Width(m.width).Render(ansi.Truncate(title, m.width-4, "") + "\n" + m.compose.area.View())
+		title := m.r.th.render(surfPlain, sp(el, m.compose.title)) + hints
+		box := m.r.th.box(m.width, true).Render(ansi.Truncate(title, m.width-4, "") + "\n" + m.compose.area.View())
 		b.WriteString(box)
 		b.WriteString("\n")
 	}
@@ -1719,41 +1723,44 @@ func (m *model) render() string {
 }
 
 func (m *model) renderStatus() string {
-	st := m.r.st
+	th := m.r.th
 	switch m.mode {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		return st.heading.Render("Submit review: ") + m.renderHints([]key.Binding{
+		return th.render(surfPlain, sp(elHeading, "Submit review: ")) + m.renderHints([]key.Binding{
 			hint("a", "approve"), hint("r", "request changes"), hint("c", "comment"),
 			hint("A R C", "skip the summary"), hint("esc", "cancel"),
 		}, m.width-15)
 	case modeConfirm:
-		return st.statusErr.Render(m.confirm.prompt)
+		return th.render(surfPlain, sp(elError, m.confirm.prompt))
 	}
 	d := m.data
-	left := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)
+	text := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)
 	if d.change.State != store.ChangeOpen {
-		left += " " + string(d.change.State)
+		text += " " + string(d.change.State)
 	}
+	left := []span{sp(elText, text)}
 	if _, ok := d.draft(); ok {
-		left += st.badgeWarn.Render(" draft")
+		left = append(left, sp(elDraft, " draft"))
 	}
-	left += " " + m.reviewProgress()
+	left = append(left, sp(elText, " "+m.reviewProgress()))
 	if m.autoAdvance {
-		left += st.badgeWarn.Render(" auto-advance")
+		left = append(left, sp(elMode, " auto-advance"))
 	}
 	if m.split {
-		left += " split"
+		left = append(left, sp(elText, " split"))
 	}
 	if m.main.anchor >= 0 {
-		left += st.badgeWarn.Render(" selecting")
+		left = append(left, sp(elMode, " selecting"))
 	}
 	if label := m.searchLabel(); label != "" {
-		left += " " + st.searchMatch.Render(label) + " " + st.helpKey.Render("esc") + st.helpDesc.Render(" clears")
+		left = append(left, sp(elText, " "), styledSpan(func(color.Color) string { return th.render(surfSearchMatch, sp(elText, label)) }),
+			sp(elText, " "), sp(elKey, "esc"), sp(elKeyDesc, " clears"))
 	}
+	l := th.render(surfPlain, left...)
 	// Fit the hints in what the left side leaves, keeping help and quit.
-	right := m.renderHints(m.shortHelp(), max(m.width-lipgloss.Width(left)-2, 10))
-	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
-	return fit(st.statusBar.Render(left)+strings.Repeat(" ", gap)+right, m.width, nil)
+	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10))
+	gap := max(m.width-ansi.StringWidth(l)-ansi.StringWidth(right)-1, 1)
+	return fit(l+strings.Repeat(" ", gap)+right, m.width)
 }

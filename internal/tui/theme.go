@@ -118,6 +118,9 @@ const (
 	elError
 	elBorder
 	elBorderActive
+	// elMode marks a mode that changes what keys do, such as selecting lines.
+	elMode
+	elWarning
 	numElements
 )
 
@@ -150,6 +153,8 @@ var elementNames = [numElements]string{
 	elError:                 "error",
 	elBorder:                "border",
 	elBorderActive:          "border.active",
+	elMode:                  "mode",
+	elWarning:               "warning",
 }
 
 // props are options a place asks an element for. The theme defines what each does.
@@ -253,6 +258,8 @@ func newTheme(isDark bool, name string) *theme {
 		elError:                 fg(p.danger),
 		elBorder:                fg(p.border),
 		elBorderActive:          fg(p.accent),
+		elMode:                  fg(p.attention),
+		elWarning:               bold(p.attention),
 	}
 	t.surfaces = [numSurfaces]surfaceStyle{
 		surfPlain:         {},

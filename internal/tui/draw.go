@@ -93,3 +93,17 @@ func spanText(spans []span) string {
 	}
 	return b.String()
 }
+
+// fit cuts or pads s, already styled, to exactly width cells. The padding is unstyled.
+func fit(s string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	s = ansi.Truncate(s, width, "")
+	return s + strings.Repeat(" ", max(width-ansi.StringWidth(s), 0))
+}
+
+// wrap wraps text to width, for when Markdown cannot be rendered.
+func wrap(text string, width int) []string {
+	return strings.Split(lipgloss.NewStyle().Width(width).Render(text), "\n")
+}

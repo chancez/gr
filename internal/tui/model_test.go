@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/git"
@@ -1182,7 +1183,7 @@ func TestSearchHighlights(t *testing.T) {
 	e.press("/")
 	e.typeText("hello")
 	e.press("enter")
-	match := e.m.r.st.searchMatch.Render("hello")
+	match := e.m.r.th.render(surfSearchMatch, sp(elText, "hello"))
 	if !strings.Contains(e.m.render(), match) {
 		t.Errorf("match not highlighted:\n%q", e.m.render())
 	}
@@ -1275,7 +1276,6 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	if got := done.render(th, 30, false, false); !reflect.DeepEqual(cells(got), cells(want)) {
 		t.Errorf("reviewed entry = %q, want it dimmed with a colored badge: %q", got, want)
 	}
-	st := newStyles(true, ThemeDefault)
 
 	e := newTUIEnv(t)
 	e.openNav("All changes")
@@ -1286,7 +1286,7 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	if !strings.Contains(header, "reviewed  collapsed, enter expands") {
 		t.Errorf("file header = %q", header)
 	}
-	key := st.helpKey.Background(st.headingBg).Render("enter")
+	key := th.render(surfPlain, sp(elKey, "enter"))
 	if !strings.Contains(e.m.renderMainRow(e.m.main.cursor, rowState{})[0], key) {
 		t.Error("enter not styled as a key in the file header")
 	}
@@ -1316,13 +1316,14 @@ func TestEditingAResolvedThreadWarns(t *testing.T) {
 
 func TestColorblindTheme(t *testing.T) {
 	for _, dark := range []bool{true, false} {
-		def, cb := newStyles(dark, ThemeDefault), newStyles(dark, ThemeColorblind)
-		if cb.addedBg == def.addedBg || cb.deletedBg == def.deletedBg {
-			t.Errorf("dark %v: colorblind theme keeps the default diff backgrounds", dark)
-		}
-		// No green or red: approvals and additions share the accent's blue.
-		if cb.badgeOpen.GetForeground() != cb.accent {
-			t.Errorf("dark %v: colorblind good color is not blue", dark)
+		ld := lipgloss.LightDark(dark)
+		// Blue and orange stand in for green and red, by role.
+		want := newRoles(dark, ThemeDefault)
+		want.success, want.added = want.accent, want.accent
+		want.danger, want.deleted = ld(orange, lightOrange), ld(orange, lightOrange)
+		want.addedBg, want.deletedBg = ld(paleSky, deepNavy), ld(paleOrange, darkBrown)
+		if got := newRoles(dark, ThemeColorblind); !reflect.DeepEqual(got, want) {
+			t.Errorf("dark %v: colorblind roles = %+v, want %+v", dark, got, want)
 		}
 	}
 }

@@ -130,7 +130,7 @@ func (m *model) helpSections() []helpSection {
 // renderHelp lays the help sections out in columns, the current context's sections first and
 // marked.
 func (m *model) renderHelp() string {
-	st := m.r.st
+	th := m.r.th
 	here := m.helpContext()
 	var sections, rest []helpSection
 	for _, s := range m.helpSections() {
@@ -152,10 +152,11 @@ func (m *model) renderHelp() string {
 		for _, b := range s.bindings {
 			keyWidth = max(keyWidth, ansi.StringWidth(b.Help().Key))
 		}
-		lines := []string{st.heading.Render(title)}
+		lines := []string{th.render(surfPlain, sp(elHeading, title))}
 		for _, b := range s.bindings {
 			h := b.Help()
-			lines = append(lines, st.helpKey.Render(h.Key)+strings.Repeat(" ", keyWidth-ansi.StringWidth(h.Key)+2)+st.helpDesc.Render(h.Desc))
+			lines = append(lines, th.render(surfPlain, sp(elKey, h.Key),
+				sp(elDefault, strings.Repeat(" ", keyWidth-ansi.StringWidth(h.Key)+2)), sp(elKeyDesc, h.Desc)))
 		}
 		blocks = append(blocks, append(lines, ""))
 	}
@@ -189,21 +190,21 @@ func (m *model) renderHelp() string {
 			if y < len(c) {
 				cell = c[y]
 			}
-			line.WriteString(fit(cell, widths[i]+4, nil))
+			line.WriteString(fit(cell, widths[i]+4))
 		}
 		b.WriteString(ansi.Truncate(line.String(), m.width, ""))
 		b.WriteString("\n")
 	}
-	b.WriteString(st.muted.Render("Any key closes this help."))
+	b.WriteString(th.render(surfPlain, sp(elMuted, "Any key closes this help.")))
 	return b.String()
 }
 
 // renderHints draws as many hints as fit in width, always keeping the last two.
 func (m *model) renderHints(bindings []key.Binding, width int) string {
-	st := m.r.st
-	sep := st.muted.Render(" | ")
+	th := m.r.th
+	sep := th.render(surfPlain, sp(elMuted, " | "))
 	item := func(b key.Binding) string {
-		return st.helpKey.Render(b.Help().Key) + " " + st.helpDesc.Render(b.Help().Desc)
+		return th.render(surfPlain, sp(elKey, b.Help().Key), sp(elDefault, " "), sp(elKeyDesc, b.Help().Desc))
 	}
 	n := len(bindings)
 	keep := bindings[max(n-2, 0):]
