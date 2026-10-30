@@ -21,17 +21,25 @@ gr main..feature    # a fixed range
 gr abc123           # one commit
 ```
 
-The sidebar has the overview, the whole diff, each commit, and, after the branch moves, the changes
-since your last review. `?` lists every key. The most used:
+The sidebar lists the overview, the changes since your last review once the branch has moved, each
+commit, and the whole diff, with the selected one's files below. The overview is the conversation:
+every review, its summary, and its threads with the code they are on. `?` lists every key. The most used:
 
 | Key | Action |
 | --- | --- |
 | `j` `k` `d` `u` `g` `G` | move |
-| `tab` | switch between sidebar and diff |
+| `h` `l`, `tab` | sidebar and diff; `ctrl+j` `ctrl+k` between sidebar lists |
+| `}` `{`, `]` `[`, `J` `K`, `)` `(` | next or previous commit, file, hunk, change |
+| `A` | all changes and back |
+| `/`, `n` `N` | search, next or previous match |
+| `t` `T` | next or previous thread |
+| `zo` `zc` `za` `zR` `zM` | open, close, toggle folds; open or close all |
 | `c` | comment on the line, selection, file, or change |
 | `v` | start or end a line selection |
 | `C` | comment on the whole file or commit |
 | `r` `x` `a` | reply, resolve or reopen, mark addressed |
+| `m` `M` | mark the file or commit reviewed |
+| `F` | filter the overview's threads by state |
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |
 
@@ -42,7 +50,7 @@ Comments are Markdown. `ctrl+e` writes one in `$EDITOR`.
 Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name.
 
 ```
-gr threads --unresolved --json             # what the reviewer asked for
+gr threads --state open --json             # what the reviewer asked for, with the code each is on
 gr reply 3 -m "Fixed in the next commit."
 gr address 3                               # for the reviewer to confirm and resolve
 gr threads --commit HEAD --json            # threads on one commit, in any change
