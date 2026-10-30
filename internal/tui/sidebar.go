@@ -340,6 +340,10 @@ func (m *model) sidebarHeights(height int) (views, files int) {
 		return min(len(m.viewsNav.items)+1, height), 0
 	}
 	views = min(len(m.viewsNav.items)+1, max(4, height*2/5))
+	if m.viewsHeight > 0 {
+		// Dragged: the commit list keeps the height it was given, leaving the files a header and a row.
+		views = min(m.viewsHeight, max(height-sidebarGap-2, 2))
+	}
 	return views, max(height-views-sidebarGap, 0)
 }
 

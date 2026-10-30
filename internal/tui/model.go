@@ -118,6 +118,10 @@ type model struct {
 	filter threadFilter
 	// lastSidebar is the sidebar section h returns to.
 	lastSidebar focus
+	// viewsHeight is the commit list's height once its divider is dragged, or 0 for the default.
+	viewsHeight int
+	// draggingSplit is set while the divider between the sidebar lists is dragged.
+	draggingSplit bool
 	// returnView is where the all-changes key goes back to.
 	returnView int
 	// segments holds where each overview row's items start, filled as rows render.
@@ -325,7 +329,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMotionMsg:
 		return m.mouseMotion(msg)
 	case tea.MouseReleaseMsg:
-		m.dragging = false
+		m.dragging, m.draggingSplit = false, false
 		return m, nil
 	case tea.KeyPressMsg:
 		switch m.mode {
@@ -1314,6 +1318,11 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		m.dragging = true
 		return m, nil
 	}
+	if vh, fh := m.sidebarHeights(bh); msg.X < nw && fh > 0 && msg.Y == vh {
+		// The divider between the commit list and the file list: drag to resize them.
+		m.draggingSplit = true
+		return m, nil
+	}
 	if msg.X < nw {
 		l, f, i := m.sidebarAt(msg.Y)
 		vh, fh := m.sidebarHeights(bh)
@@ -1364,6 +1373,10 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	if m.draggingSplit {
+		m.viewsHeight = max(msg.Y, 2)
+		return m, nil
+	}
 	if !m.dragging {
 		return m, nil
 	}

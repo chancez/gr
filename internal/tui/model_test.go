@@ -1351,3 +1351,21 @@ func TestSidebarShowsMoreAboveAndBelow(t *testing.T) {
 		t.Errorf("a list that fits = %q", got)
 	}
 }
+
+func TestDragSidebarSplit(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	_, _, bh := e.m.layoutSizes()
+	vh, _ := e.m.sidebarHeights(bh)
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: vh, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: 2, Y: vh + 6, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: 2, Y: vh + 6, Button: tea.MouseLeft})
+	if got, _ := e.m.sidebarHeights(bh); got != vh+6 {
+		t.Errorf("commit list height after drag = %d, want %d", got, vh+6)
+	}
+	// The divider follows, and clicks below it still reach the file list.
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: vh + 6 + 2, Button: tea.MouseLeft})
+	if e.m.focus != focusFiles || e.m.filesNav.pos != 0 {
+		t.Errorf("click on the first file after resizing: focus %d pos %d", e.m.focus, e.m.filesNav.pos)
+	}
+}
