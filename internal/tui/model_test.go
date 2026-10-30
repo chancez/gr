@@ -1,9 +1,11 @@
 package tui
 
 import (
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -749,5 +751,50 @@ func TestSidebarMarks(t *testing.T) {
 	}
 	if marks(true, true) != "x* " || marks(false, false) != "   " {
 		t.Errorf("marks = %q and %q", marks(true, true), marks(false, false))
+	}
+}
+
+func TestStatusExpires(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.setStatus("submitted")
+	e.m.expireStatus(e.m.statusAt.Add(statusTTL - time.Second))
+	if e.m.status != "submitted" {
+		t.Fatal("status cleared early")
+	}
+	if !strings.Contains(e.screen(), "submitted") || strings.Contains(e.m.renderStatus(), "q quit") {
+		t.Fatal("status not shown in place of the key hints")
+	}
+	e.m.expireStatus(e.m.statusAt.Add(statusTTL))
+	if e.m.status != "" || !strings.Contains(ansi.Strip(e.m.renderStatus()), "c comment") {
+		t.Errorf("after expiry status = %q, bar = %q", e.m.status, ansi.Strip(e.m.renderStatus()))
+	}
+
+	e.m.setError(errors.New("boom"))
+	e.m.expireStatus(e.m.statusAt.Add(statusTTL))
+	if e.m.status != "boom" {
+		t.Error("error expired as fast as a status")
+	}
+	e.m.expireStatus(e.m.statusAt.Add(errorTTL))
+	if e.m.status != "" {
+		t.Error("error never expired")
+	}
+}
+
+func TestKeyHintsFit(t *testing.T) {
+	e := newTUIEnv(t)
+	for _, width := range []int{120, 80} {
+		e.m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
+		bar := strings.TrimRight(ansi.Strip(e.m.renderStatus()), " ")
+		whole := strings.HasSuffix(bar, "...")
+		for _, b := range e.m.keys.ShortHelp() {
+			whole = whole || strings.HasSuffix(bar, b.Help().Key+" "+b.Help().Desc)
+		}
+		if !whole {
+			t.Errorf("width %d: hints cut mid-item: %q", width, bar)
+		}
+	}
+	e.m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+	if bar := ansi.Strip(e.m.renderStatus()); !strings.Contains(bar, "? help | q quit") {
+		t.Errorf("width 140: hints = %q", bar)
 	}
 }

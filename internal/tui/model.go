@@ -114,6 +114,7 @@ type model struct {
 
 	status    string
 	statusErr bool
+	statusAt  time.Time
 	width     int
 	height    int
 
@@ -166,7 +167,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 func (m *model) setTheme(isDark bool) {
 	m.r = newRenderer(isDark)
 	h := help.New()
-	h.ShortSeparator, h.FullSeparator = " | ", "   "
+	h.ShortSeparator, h.FullSeparator, h.Ellipsis = " | ", "   ", "..."
 	h.Styles.ShortKey, h.Styles.FullKey = m.r.st.helpKey, m.r.st.helpKey
 	h.Styles.ShortDesc, h.Styles.FullDesc = m.r.st.helpDesc, m.r.st.helpDesc
 	h.Styles.ShortSeparator, h.Styles.FullSeparator = m.r.st.muted, m.r.st.muted
@@ -219,12 +220,33 @@ func (m *model) refreshCmd() tea.Cmd {
 	}
 }
 
+// How long messages stay in the status bar before the key hints come back.
+const (
+	statusTTL = 5 * time.Second
+	errorTTL  = 10 * time.Second
+)
+
 func (m *model) setStatus(format string, args ...any) {
-	m.status, m.statusErr = fmt.Sprintf(format, args...), false
+	m.status, m.statusErr, m.statusAt = fmt.Sprintf(format, args...), false, time.Now()
 }
 
 func (m *model) setError(err error) {
-	m.status, m.statusErr = err.Error(), true
+	m.status, m.statusErr, m.statusAt = err.Error(), true, time.Now()
+}
+
+// expireStatus clears a message once it has been shown long enough. A pending two-key command
+// keeps its prompt.
+func (m *model) expireStatus(now time.Time) {
+	if m.status == "" || m.pending != "" {
+		return
+	}
+	ttl := statusTTL
+	if m.statusErr {
+		ttl = errorTTL
+	}
+	if now.Sub(m.statusAt) >= ttl {
+		m.status = ""
+	}
 }
 
 func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -253,6 +275,7 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.loadCmd()
 	case tickMsg:
+		m.expireStatus(time.Now())
 		return m, tea.Batch(m.refreshCmd(), tick())
 	case refreshMsg:
 		m.version = msg.version
@@ -1246,6 +1269,8 @@ func (m *model) renderStatus() string {
 	if m.main.anchor >= 0 {
 		left += st.badgeWarn.Render(" selecting")
 	}
+	// Fit the hints in what the left side leaves, dropping trailing ones with "...".
+	m.help.SetWidth(max(m.width-lipgloss.Width(left)-2, 10))
 	right := m.help.ShortHelpView(m.keys.ShortHelp())
 	if m.status != "" {
 		style := st.statusBar

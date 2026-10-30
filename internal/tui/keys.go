@@ -96,13 +96,13 @@ func defaultKeys() keyMap {
 		Comment:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
 		FileComment:  key.NewBinding(key.WithKeys("C"), key.WithHelp("C", "comment on file/commit")),
 		Reply:        key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "reply")),
-		Resolve:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "resolve/reopen")),
+		Resolve:      key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "resolve")),
 		Address:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "mark addressed")),
 		Edit:         key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit my comment")),
 		Delete:       key.NewBinding(key.WithKeys("X"), key.WithHelp("X", "delete my comment")),
-		Reviewed:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mark file/commit reviewed")),
+		Reviewed:     key.NewBinding(key.WithKeys("m"), key.WithHelp("m", "mark reviewed")),
 		CommitDone:   key.NewBinding(key.WithKeys("M"), key.WithHelp("M", "mark commit reviewed")),
-		Submit:       key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "submit review")),
+		Submit:       key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "submit")),
 		Discard:      key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "discard draft")),
 		Split:        key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "split/unified")),
 		Reload:       key.NewBinding(key.WithKeys("R", "ctrl+r"), key.WithHelp("R", "reload")),
@@ -116,7 +116,7 @@ func defaultKeys() keyMap {
 
 // ShortHelp is shown in the status bar.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Comment, k.Reply, k.Resolve, k.Reviewed, k.Submit, k.Focus, k.Help, k.Quit}
+	return []key.Binding{k.Comment, k.Reply, k.Resolve, k.Reviewed, k.Submit, k.Help, k.Quit}
 }
 
 // FullHelp is shown with ?.
