@@ -33,21 +33,25 @@ Sections are in priority order, and so are the items within them.
     commands and their timing, database writes, reloads, and errors, so problems can be diagnosed
     after the fact. A `--debug` flag or `GR_LOG` sets the level.
 
+17. Detect merges more widely: against the default branch as well as the base, with `git cherry`
+    to count commits that landed by patch id (cherry-picks, rebases) and show a partly merged change
+    as "N of M commits landed", by content for squash merges, and from the last recorded head once
+    the branch is deleted.
+
 ## Config
 
-17. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
-18. Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
-19. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
+18. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
+19. Remappable keys. Bindings already live in one keymap in `internal/tui/keys.go`.
+20. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`) and
     override individual colors. gr draws its own diff colors, so git's `color.diff.*` do not apply.
-20. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
-21. Configurable scrolloff and default sidebar width.
+21. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
+22. Configurable scrolloff and default sidebar width.
 
 ## Polish
 
-22. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+23. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
-23. Run git outside the write transaction when re-anchoring, so other writers do not wait on it.
-24. Detect squash merges as merged.
+24. Run git outside the write transaction when re-anchoring, so other writers do not wait on it.
 
 ## Later
 
