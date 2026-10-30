@@ -1,0 +1,2 @@
+# Golden screens hold raw terminal escapes, which a diff would send to the terminal.
+internal/tui/testdata/golden/*.ansi -diff

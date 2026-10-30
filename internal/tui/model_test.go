@@ -27,7 +27,7 @@ type tuiEnv struct {
 	store *store.Store
 }
 
-func newTUIEnv(t *testing.T) *tuiEnv {
+func newTUIEnv(t *testing.T, opts ...store.Option) *tuiEnv {
 	t.Helper()
 	r := gittest.New(t)
 	r.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hi\")", "}"))
@@ -36,7 +36,7 @@ func newTUIEnv(t *testing.T) *tuiEnv {
 	r.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hello\")", "}"))
 	r.Commit("say hello\n\nLonger explanation.")
 
-	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "gr.db"))
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "gr.db"), opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
