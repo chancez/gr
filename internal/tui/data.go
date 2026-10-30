@@ -25,9 +25,11 @@ type changeData struct {
 	draftReviewIDs map[string]bool
 
 	// interdiff is set when there is an earlier revision to compare with.
-	interdiff      []git.FileDiff
-	interdiffFrom  store.Revision
-	interdiffExact bool
+	interdiff     []git.FileDiff
+	interdiffFrom store.Revision
+	// interdiffFromReview is set when interdiffFrom is the revision the viewer last reviewed.
+	interdiffFromReview bool
+	interdiffExact      bool
 }
 
 // draft returns the viewer's draft review, if any.
@@ -82,21 +84,21 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 			d.draftReviewIDs[r.ID] = true
 		}
 	}
-	if from, ok := interdiffBase(d, svc.Author()); ok {
+	if from, fromReview, ok := interdiffBase(d, svc.Author()); ok {
 		files, exact, err := svc.Interdiff(ctx, from, rev)
 		if err != nil {
 			return nil, err
 		}
-		d.interdiff, d.interdiffFrom, d.interdiffExact = files, from, exact
+		d.interdiff, d.interdiffFrom, d.interdiffExact, d.interdiffFromReview = files, from, exact, fromReview
 	}
 	return d, nil
 }
 
 // interdiffBase picks the revision to compare the latest with: the one the viewer last reviewed,
 // else the previous revision.
-func interdiffBase(d *changeData, viewer store.Author) (store.Revision, bool) {
+func interdiffBase(d *changeData, viewer store.Author) (rev store.Revision, fromReview, ok bool) {
 	if len(d.revisions) < 2 {
-		return store.Revision{}, false
+		return store.Revision{}, false, false
 	}
 	byID := map[string]store.Revision{}
 	for _, r := range d.revisions {
@@ -106,11 +108,11 @@ func interdiffBase(d *changeData, viewer store.Author) (store.Revision, bool) {
 		r := d.reviews[i]
 		if r.Author == viewer && r.State == store.ReviewSubmitted && r.RevisionID != d.revision.ID {
 			if rev, ok := byID[r.RevisionID]; ok {
-				return rev, true
+				return rev, true, true
 			}
 		}
 	}
-	return d.revisions[len(d.revisions)-2], true
+	return d.revisions[len(d.revisions)-2], false, true
 }
 
 var errNoDraft = errors.New("no draft review")

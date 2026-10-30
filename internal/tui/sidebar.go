@@ -18,6 +18,11 @@ type navItem struct {
 	// prefix is shown before label and kept when label is truncated. File labels are truncated at
 	// the front, so the file name stays visible.
 	prefix string
+	// badge is right-aligned and kept when label is truncated: marks and thread counts.
+	badge string
+	// heading styles entries that are not commits or files, such as the overview, so they read as
+	// peers of the commit list rather than parents of it.
+	heading bool
 }
 
 // truncateLeft keeps the end of s, marking the cut with "...".
@@ -76,26 +81,37 @@ func (l *navList) render(st styles, title string, width, height int, focused boo
 	rows := height - 1
 	l.scrollTo(rows)
 	for i := l.top; i < len(l.items) && len(out) < height; i++ {
-		it := l.items[i]
-		label := ansi.Truncate(" "+it.label, width, "...")
-		if it.prefix != "" {
-			head := " " + it.prefix
-			label = head + truncateLeft(it.label, width-ansi.StringWidth(head))
-		}
-		line := fit(label, width, nil)
-		if i == l.pos {
-			style := st.navSelected
-			if focused {
-				style = st.navFocused
-			}
-			line = style.Render(fit(ansi.Strip(label), width, nil))
-		}
-		out = append(out, line)
+		out = append(out, l.items[i].render(st, width, i == l.pos, focused))
 	}
 	for len(out) < height {
 		out = append(out, "")
 	}
 	return out
+}
+
+// render draws one entry at width: the label, truncated so the badge always shows at the right.
+func (it navItem) render(st styles, width int, selected, focused bool) string {
+	room := width
+	if it.badge != "" {
+		room -= ansi.StringWidth(it.badge) + 1
+	}
+	label := ansi.Truncate(it.label, room, "...")
+	if it.prefix != "" {
+		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
+	}
+	text := fit(label, room, nil)
+	if it.badge != "" {
+		text += " " + it.badge
+	}
+	switch {
+	case selected && focused:
+		return st.navFocused.Render(fit(text, width, nil))
+	case selected:
+		return st.navSelected.Render(fit(text, width, nil))
+	case it.heading:
+		return st.navHeading.Render(fit(text, width, nil))
+	}
+	return fit(text, width, nil)
 }
 
 func (m *model) viewLabel(v view) string {
@@ -110,12 +126,15 @@ func (m *model) viewLabel(v view) string {
 	case viewCommit:
 		return shortSHA(v.commit.SHA)[:7] + " " + v.commit.Subject()
 	case viewInterdiff:
-		return fmt.Sprintf("Since revision %d", m.data.interdiffFrom.Seq)
+		if m.data.interdiffFromReview {
+			return fmt.Sprintf("Since your review (rev %d)", m.data.interdiffFrom.Seq)
+		}
+		return fmt.Sprintf("Since rev %d", m.data.interdiffFrom.Seq)
 	}
 	return ""
 }
 
-// Sidebar marks, one column each, shown before an item's label.
+// Sidebar marks, shown in an entry's right-aligned badge.
 //
 // TODO: make these configurable, so icons such as checkboxes can replace the ASCII defaults.
 const (
@@ -123,20 +142,18 @@ const (
 	markReviewed = "x"
 	// markDraft is shown where you have draft comments not yet submitted.
 	markDraft = "*"
-	// markNone fills an empty column, keeping labels aligned.
-	markNone = " "
 )
 
-// marks renders the mark columns and a separating space.
+// marks renders the marks that apply, drafts first, or "" when none do.
 func marks(reviewed, draft bool) string {
-	reviewedMark, draftMark := markNone, markNone
-	if reviewed {
-		reviewedMark = markReviewed
-	}
+	var out string
 	if draft {
-		draftMark = markDraft
+		out += markDraft
 	}
-	return reviewedMark + draftMark + " "
+	if reviewed {
+		out += markReviewed
+	}
+	return out
 }
 
 // draftThreads counts the viewer's draft threads in a view, on one path or, if path is empty, on
@@ -171,11 +188,11 @@ func (m *model) buildNav() {
 	}
 	m.viewsNav.items = nil
 	for vi, v := range m.views {
-		prefix := ""
+		it := navItem{label: m.viewLabel(v), view: vi, file: -1, heading: v.kind != viewCommit}
 		if v.kind == viewCommit || v.kind == viewDiff {
-			prefix = marks(m.viewReviewed(v), m.draftThreads(v, "") > 0)
+			it.badge = marks(m.viewReviewed(v), m.draftThreads(v, "") > 0)
 		}
-		m.viewsNav.items = append(m.viewsNav.items, navItem{label: prefix + m.viewLabel(v), view: vi, file: -1})
+		m.viewsNav.items = append(m.viewsNav.items, it)
 	}
 	m.viewsNav.pos = m.current
 
@@ -187,11 +204,13 @@ func (m *model) buildNav() {
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
 	for fi, f := range v.files {
-		prefix := marks(m.fileReviewed(v, fi), m.draftThreads(v, f.Path()) > 0) + statusLetter(f.Status) + " "
+		badge := marks(m.fileReviewed(v, fi), m.draftThreads(v, f.Path()) > 0)
 		if n := counts[f.Path()]; n > 0 {
-			prefix += fmt.Sprintf("(%d) ", n)
+			badge = strings.TrimSpace(fmt.Sprintf("(%d) %s", n, badge))
 		}
-		m.filesNav.items = append(m.filesNav.items, navItem{prefix: prefix, label: fileLabel(f), view: m.current, file: fi})
+		m.filesNav.items = append(m.filesNav.items, navItem{
+			prefix: statusLetter(f.Status) + " ", label: fileLabel(f), badge: badge, view: m.current, file: fi,
+		})
 	}
 	if keep >= 0 && keep < len(m.filesNav.items) {
 		m.filesNav.pos = keep

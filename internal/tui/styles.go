@@ -33,6 +33,7 @@ type styles struct {
 	navSelected  lipgloss.Style
 	navFocused   lipgloss.Style
 	navHeader    lipgloss.Style
+	navHeading   lipgloss.Style
 	paneBorder   lipgloss.Style
 	badgeOpen    lipgloss.Style
 	badgeDone    lipgloss.Style
@@ -85,6 +86,7 @@ func newStyles(isDark bool) styles {
 		navSelected:  lipgloss.NewStyle().Foreground(fg).Background(ld(lipgloss.Color("#eaeef2"), lipgloss.Color("#262c36"))),
 		navFocused:   lipgloss.NewStyle().Foreground(fg).Background(ld(lipgloss.Color("#b6e3ff"), lipgloss.Color("#1f3a5f"))),
 		navHeader:    lipgloss.NewStyle().Bold(true).Foreground(fg),
+		navHeading:   lipgloss.NewStyle().Bold(true).Foreground(fg).Background(ld(lipgloss.Color("#f6f8fa"), lipgloss.Color("#161b22"))),
 		paneBorder:   lipgloss.NewStyle().Foreground(border),
 		badgeOpen:    lipgloss.NewStyle().Foreground(green),
 		badgeDone:    lipgloss.NewStyle().Foreground(purple),

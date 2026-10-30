@@ -402,7 +402,7 @@ func TestDragSidebar(t *testing.T) {
 func TestSidebarTruncates(t *testing.T) {
 	l := navList{items: []navItem{{label: "a very long label that does not fit"}}}
 	got := ansi.Strip(l.render(newStyles(true), "T", 12, 2, false)[1])
-	if got != " a very l..." {
+	if got != "a very lo..." {
 		t.Errorf("truncated label = %q", got)
 	}
 }
@@ -410,7 +410,7 @@ func TestSidebarTruncates(t *testing.T) {
 func TestFileLabelsKeepTheirEnd(t *testing.T) {
 	l := navList{items: []navItem{{prefix: "M ", label: "internal/anchor/anchor_test.go"}}}
 	got := ansi.Strip(l.render(newStyles(true), "T", 20, 2, false)[1])
-	if got != " M ...anchor_test.go" {
+	if got != "M .../anchor_test.go" {
 		t.Errorf("file label = %q", got)
 	}
 }
@@ -479,7 +479,7 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	reviewedItem := false
 	for _, it := range e.m.viewsNav.items {
 		if strings.Contains(it.label, "say hello") {
-			reviewedItem = strings.HasPrefix(it.label, markReviewed)
+			reviewedItem = it.badge == markReviewed
 		}
 	}
 	if !reviewedItem || !strings.Contains(e.screen(), "1/2 commits reviewed") {
@@ -737,20 +737,26 @@ func TestSidebarMarks(t *testing.T) {
 	e.pressRun("ctrl+s")
 
 	for _, it := range e.m.viewsNav.items {
-		if strings.Contains(it.label, "say hello") && !strings.HasPrefix(it.label, marks(false, true)) {
-			t.Errorf("commit label %q lacks the draft mark", it.label)
+		if strings.Contains(it.label, "say hello") && it.badge != markDraft {
+			t.Errorf("commit badge %q, want the draft mark", it.badge)
 		}
 	}
 	for _, it := range e.m.filesNav.items {
-		if strings.Contains(it.label, "main.go") && !strings.HasPrefix(it.prefix, marks(false, true)) {
-			t.Errorf("file prefix %q lacks the draft mark", it.prefix)
+		if strings.Contains(it.label, "main.go") && it.badge != "(1) "+markDraft {
+			t.Errorf("main.go badge %q, want the open thread count and the draft mark", it.badge)
 		}
-		if strings.Contains(it.label, "COMMIT_MSG") && !strings.HasPrefix(it.prefix, marks(false, false)) {
-			t.Errorf("message prefix %q has marks", it.prefix)
+		if strings.Contains(it.label, "COMMIT_MSG") && it.badge != "" {
+			t.Errorf("message badge %q, want none", it.badge)
 		}
 	}
-	if marks(true, true) != "x* " || marks(false, false) != "   " {
+	if marks(true, true) != "*x" || marks(false, false) != "" {
 		t.Errorf("marks = %q and %q", marks(true, true), marks(false, false))
+	}
+
+	// A badge survives truncation.
+	it := navItem{label: "a very long commit subject", badge: "(2) *x"}
+	if got := ansi.Strip(it.render(newStyles(true), 20, false, false)); got != "a very lon... (2) *x" {
+		t.Errorf("rendered = %q", got)
 	}
 }
 
