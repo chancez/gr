@@ -117,13 +117,13 @@ func (e *tuiEnv) typeText(s string) {
 	}
 }
 
-// openNav selects the sidebar item whose label contains s.
+// openNav opens the view whose sidebar label contains s.
 func (e *tuiEnv) openNav(s string) {
 	e.t.Helper()
-	for i, it := range e.m.nav {
+	for i, it := range e.m.viewsNav.items {
 		if strings.Contains(it.label, s) {
-			e.m.navPos = i
-			e.m.openNav()
+			e.m.viewsNav.pos = i
+			e.m.openView()
 			return
 		}
 	}
@@ -147,7 +147,7 @@ func addedLine(r row) bool { return r.kind == rowLine && r.line != nil && r.line
 func TestOverview(t *testing.T) {
 	e := newTUIEnv(t)
 	screen := e.screen()
-	for _, want := range []string{"#1 feature", "Overview", "Files changed (1)", "say hello", "Conversation"} {
+	for _, want := range []string{"#1 feature", "Overview", "All changes", "say hello", "Conversation"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("overview missing %q:\n%s", want, screen)
 		}
@@ -194,7 +194,7 @@ func TestCommentOnLineAndSubmit(t *testing.T) {
 
 func TestRangeSelection(t *testing.T) {
 	e := newTUIEnv(t)
-	e.openNav("Files changed")
+	e.openNav("All changes")
 	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.NewLine == 3 })
 	e.press("v", "j", "j", "j", "c")
 	if !strings.Contains(e.m.compose.title, "main.go:3-5") {
@@ -232,7 +232,7 @@ func TestCommentOnCommitMessageAndThreadActions(t *testing.T) {
 
 func TestSplitView(t *testing.T) {
 	e := newTUIEnv(t)
-	e.openNav("Files changed")
+	e.openNav("All changes")
 	e.press("s")
 	screen := e.screen()
 	if !strings.Contains(screen, `println("hi")`) || !strings.Contains(screen, `println("hello")`) {
@@ -310,5 +310,95 @@ func TestPairLines(t *testing.T) {
 			t.Errorf("pairLines = %v, want %v", got, want)
 			break
 		}
+	}
+}
+
+func TestFocusMovesBetweenPanes(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	if e.m.focus != focusMain {
+		t.Fatalf("initial focus = %d, want main", e.m.focus)
+	}
+	e.press("h")
+	if e.m.focus != focusFiles {
+		t.Errorf("focus after h from main = %d, want files", e.m.focus)
+	}
+	e.press("h")
+	if e.m.focus != focusViews {
+		t.Errorf("focus after h from files = %d, want views", e.m.focus)
+	}
+	e.press("l", "l")
+	if e.m.focus != focusMain {
+		t.Errorf("focus after l l = %d, want main", e.m.focus)
+	}
+
+	// In split mode, h goes to the old side before leaving the pane.
+	e.press("s", "l", "h")
+	if e.m.focus != focusMain || e.m.main.side != "old" {
+		t.Errorf("after h in split: focus %d side %s, want main and old", e.m.focus, e.m.main.side)
+	}
+	e.press("h")
+	if e.m.focus != focusFiles {
+		t.Errorf("focus after h on the old side = %d, want files", e.m.focus)
+	}
+}
+
+func TestPaneHeaders(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	lines := strings.Split(e.screen(), "\n")
+	if !strings.Contains(lines[0], "Change #1") || !strings.Contains(lines[0], "say hello") {
+		t.Errorf("first line lacks the sidebar and main headers: %q", lines[0])
+	}
+	if !strings.Contains(e.screen(), " Files") {
+		t.Errorf("files section header missing:\n%s", e.screen())
+	}
+}
+
+func TestSidebarOrderAndFileList(t *testing.T) {
+	e := newTUIEnv(t)
+	var labels []string
+	for _, it := range e.m.viewsNav.items {
+		labels = append(labels, it.label)
+	}
+	want := []string{"Overview", "say hello", "All changes"}
+	if len(labels) != len(want) {
+		t.Fatalf("views = %q, want %q", labels, want)
+	}
+	for i := range want {
+		if !strings.Contains(labels[i], want[i]) {
+			t.Errorf("views = %q, want %q", labels, want)
+		}
+	}
+	e.openNav("say hello")
+	if got := len(e.m.filesNav.items); got != 2 {
+		t.Errorf("files for the commit = %d, want 2 (message and main.go)", got)
+	}
+}
+
+func TestDragSidebar(t *testing.T) {
+	e := newTUIEnv(t)
+	nw, _, _ := e.m.layoutSizes()
+	e.m.Update(tea.MouseClickMsg{X: nw, Y: 3, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: 3, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: nw + 10, Y: 3, Button: tea.MouseLeft})
+	if got, _, _ := e.m.layoutSizes(); got != nw+10 {
+		t.Errorf("sidebar width after drag = %d, want %d", got, nw+10)
+	}
+}
+
+func TestSidebarTruncates(t *testing.T) {
+	l := navList{items: []navItem{{label: "a very long label that does not fit"}}}
+	got := ansi.Strip(l.render(newStyles(true), "T", 12, 2, false)[1])
+	if got != " a very l..." {
+		t.Errorf("truncated label = %q", got)
+	}
+}
+
+func TestFileLabelsKeepTheirEnd(t *testing.T) {
+	l := navList{items: []navItem{{prefix: "M ", label: "internal/anchor/anchor_test.go"}}}
+	got := ansi.Strip(l.render(newStyles(true), "T", 20, 2, false)[1])
+	if got != " M ...anchor_test.go" {
+		t.Errorf("file label = %q", got)
 	}
 }

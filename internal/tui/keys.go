@@ -19,6 +19,7 @@ type keyMap struct {
 	NextThread   key.Binding
 	PrevThread   key.Binding
 	Focus        key.Binding
+	FocusBack    key.Binding
 	Open         key.Binding
 	Select       key.Binding
 	Comment      key.Binding
@@ -51,13 +52,14 @@ func defaultKeys() keyMap {
 		PageDown:     key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/pgdn", "page down")),
 		Top:          key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
 		Bottom:       key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
-		Left:         key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "old/new side")),
+		Left:         key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "pane or diff side left/right")),
 		Right:        key.NewBinding(key.WithKeys("l", "right")),
 		NextFile:     key.NewBinding(key.WithKeys("]"), key.WithHelp("]/[", "next/prev file")),
 		PrevFile:     key.NewBinding(key.WithKeys("[")),
 		NextThread:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev thread")),
 		PrevThread:   key.NewBinding(key.WithKeys("N")),
-		Focus:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
+		Focus:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
+		FocusBack:    key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "previous pane")),
 		Open:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "open")),
 		Select:       key.NewBinding(key.WithKeys("v", "V"), key.WithHelp("v", "select lines")),
 		Comment:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "comment")),
@@ -88,7 +90,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.NextFile, k.NextThread, k.Left, k.Focus, k.Open, k.Split, k.Reload},
+		{k.NextFile, k.NextThread, k.Left, k.Focus, k.FocusBack, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
 		{k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}

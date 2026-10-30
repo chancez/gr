@@ -35,6 +35,15 @@ type rowState struct {
 	selected bool
 	// side is the cursor's side in split mode.
 	side anchor.Side
+	// dim shows the cursor faintly, when the main pane does not have focus.
+	dim bool
+}
+
+func (r *renderer) cursorBg(state rowState) color.Color {
+	if state.dim {
+		return r.st.dimCursorBg
+	}
+	return r.st.cursorBg
 }
 
 // renderMarkdown renders a comment body, falling back to plain text.
@@ -137,7 +146,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	case rowText:
 		return rw.text(width)
 	case rowCommit:
-		return r.renderCommit(v.commit, width, state.cursor)
+		return r.renderCommit(v.commit, width, state)
 	case rowFile:
 		f := v.files[rw.file]
 		label := " " + statusLetter(f.Status) + " " + fileLabel(f)
@@ -149,7 +158,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		}
 		style := st.fileHeader
 		if state.cursor {
-			style = style.Background(st.cursorBg)
+			style = style.Background(r.cursorBg(state))
 		}
 		return []string{style.Render(fit(label, width, nil))}
 	case rowHunk:
@@ -157,7 +166,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		label := fmt.Sprintf(" @@ -%d,%d +%d,%d @@ %s", h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Section)
 		style := st.hunkHeader
 		if state.cursor {
-			style = style.Background(st.cursorBg)
+			style = style.Background(r.cursorBg(state))
 		}
 		return []string{style.Render(fit(label, width, nil))}
 	case rowLine:
@@ -175,7 +184,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 func (r *renderer) lineBg(kind git.LineKind, state rowState, cursorSide bool) color.Color {
 	switch {
 	case state.cursor && cursorSide:
-		return r.st.cursorBg
+		return r.cursorBg(state)
 	case state.selected && cursorSide:
 		return r.st.selectedBg
 	case kind == git.LineAdded:
@@ -237,12 +246,13 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 	return cell(left, anchor.SideOld, half) + r.st.paneBorder.Render("|") + cell(right, anchor.SideNew, width-half-1)
 }
 
-func (r *renderer) renderCommit(c git.Commit, width int, cursor bool) []string {
+func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []string {
 	st := r.st
 	head := st.commitHeader.Render("commit "+c.SHA) + "  " + st.muted.Render(c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04"))
 	lines := []string{fit(head, width, nil)}
-	if cursor {
-		lines[0] = lipgloss.NewStyle().Background(st.cursorBg).Render(fit(head, width, st.cursorBg))
+	if state.cursor {
+		bg := r.cursorBg(state)
+		lines[0] = lipgloss.NewStyle().Background(bg).Render(fit(head, width, bg))
 	}
 	return lines
 }

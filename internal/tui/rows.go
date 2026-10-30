@@ -36,15 +36,17 @@ func (v view) key() string {
 
 func (v view) readOnly() bool { return v.kind == viewInterdiff }
 
+// buildViews orders the sidebar: the overview, what changed since the last review, the commits
+// oldest first, then the whole diff.
 func buildViews(d *changeData) []view {
-	views := []view{{kind: viewOverview}, {kind: viewDiff, files: d.diffFiles}}
-	for _, c := range d.commits {
-		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA]})
-	}
+	views := []view{{kind: viewOverview}}
 	if d.interdiff != nil {
 		views = append(views, view{kind: viewInterdiff, files: d.interdiff})
 	}
-	return views
+	for _, c := range d.commits {
+		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA]})
+	}
+	return append(views, view{kind: viewDiff, files: d.diffFiles})
 }
 
 type rowKind int

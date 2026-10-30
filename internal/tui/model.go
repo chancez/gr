@@ -38,7 +38,8 @@ type focus int
 
 const (
 	focusMain focus = iota
-	focusNav
+	focusViews
+	focusFiles
 )
 
 type mode int
@@ -70,14 +71,6 @@ type composer struct {
 	verdict   store.Verdict
 }
 
-type navItem struct {
-	label string
-	depth int
-	view  int
-	// file is the file index in the view, or -1 for the view itself.
-	file int
-}
-
 type model struct {
 	ctx      context.Context
 	svc      *review.Service
@@ -89,14 +82,18 @@ type model struct {
 	data    *changeData
 	views   []view
 	current int
-	nav     []navItem
-	navPos  int
-	navTop  int
-	main    pane
-	split   bool
-	focus   focus
-	mode    mode
-	compose composer
+	// viewsNav lists the overview, interdiff, commits, and whole diff. filesNav lists the current
+	// view's files.
+	viewsNav navList
+	filesNav navList
+	// navWidth is the sidebar width once dragged, or 0 for the default.
+	navWidth int
+	dragging bool
+	main     pane
+	split    bool
+	focus    focus
+	mode     mode
+	compose  composer
 
 	status    string
 	statusErr bool
@@ -257,6 +254,11 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.mouseWheel(msg)
 	case tea.MouseClickMsg:
 		return m.mouseClick(msg)
+	case tea.MouseMotionMsg:
+		return m.mouseMotion(msg)
+	case tea.MouseReleaseMsg:
+		m.dragging = false
+		return m, nil
 	case tea.KeyPressMsg:
 		switch m.mode {
 		case modeCompose:
@@ -315,8 +317,11 @@ func (m *model) applyData(d *changeData) {
 }
 
 func (m *model) layoutSizes() (navWidth, mainWidth, bodyHeight int) {
-	navWidth = min(max(m.width/4, 24), 48)
-	if m.width < 60 {
+	navWidth = min(max(m.width/6, 18), 32)
+	if m.navWidth > 0 {
+		navWidth = min(m.navWidth, m.width-20)
+	}
+	if m.width < 50 {
 		navWidth = 0
 	}
 	mainWidth = m.width - navWidth
@@ -332,10 +337,13 @@ func (m *model) layoutSizes() (navWidth, mainWidth, bodyHeight int) {
 
 const composeHeight = 8
 
+// mainHeight is the main pane's row area, below its header line.
+func mainHeight(bodyHeight int) int { return max(bodyHeight-1, 1) }
+
 // relayout recomputes row heights after a size change.
 func (m *model) relayout(resized bool) {
 	_, mw, bh := m.layoutSizes()
-	m.main.height = bh
+	m.main.height = mainHeight(bh)
 	if resized || m.main.width != mw {
 		m.main.width = mw
 		if m.data != nil {
@@ -361,11 +369,12 @@ func (m *model) rebuildMain() {
 	}
 	m.main.anchor = -1
 	_, mw, bh := m.layoutSizes()
-	m.main.width, m.main.height = mw, bh
+	m.main.width, m.main.height = mw, mainHeight(bh)
 	m.main.layout(m.renderMainRow)
 }
 
 func (m *model) renderMainRow(i int, state rowState) []string {
+	state.dim = m.focus != focusMain
 	return m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], m.main.width, state)
 }
 
@@ -377,112 +386,6 @@ func (m *model) setView(i int) {
 	m.main.cursor, m.main.offset = 0, 0
 	m.rebuildMain()
 	m.buildNav()
-}
-
-func (m *model) viewLabel(v view) string {
-	switch v.kind {
-	case viewOverview:
-		return "Overview"
-	case viewDiff:
-		return fmt.Sprintf("Files changed (%d)", len(v.files))
-	case viewCommit:
-		return shortSHA(v.commit.SHA)[:7] + " " + v.commit.Subject()
-	case viewInterdiff:
-		return fmt.Sprintf("Since revision %d", m.data.interdiffFrom.Seq)
-	}
-	return ""
-}
-
-// openThreads counts unresolved current threads per file path in a view.
-func (m *model) openThreads(v view) map[string]int {
-	counts := map[string]int{}
-	for i := range m.data.threads {
-		t := &m.data.threads[i]
-		if t.State != store.ThreadResolved && threadInView(t, v) {
-			counts[t.Location.Path]++
-		}
-	}
-	return counts
-}
-
-func (m *model) buildNav() {
-	if m.data == nil {
-		return
-	}
-	var keep navItem
-	if m.navPos < len(m.nav) {
-		keep = m.nav[m.navPos]
-	}
-	m.nav = nil
-	for vi, v := range m.views {
-		m.nav = append(m.nav, navItem{label: m.viewLabel(v), view: vi, file: -1})
-		if vi != m.current || v.kind == viewOverview {
-			continue
-		}
-		counts := m.openThreads(v)
-		for fi, f := range v.files {
-			label := statusLetter(f.Status) + " " + fileLabel(f)
-			if n := counts[f.Path()]; n > 0 {
-				label += fmt.Sprintf(" (%d)", n)
-			}
-			m.nav = append(m.nav, navItem{label: label, depth: 1, view: vi, file: fi})
-		}
-	}
-	m.navPos = 0
-	for i, it := range m.nav {
-		if it.view == keep.view && it.file == keep.file {
-			m.navPos = i
-		}
-	}
-	if m.views[m.current].key() != m.views[m.nav[m.navPos].view].key() {
-		for i, it := range m.nav {
-			if it.view == m.current && it.file == -1 {
-				m.navPos = i
-			}
-		}
-	}
-}
-
-// openNav shows the selected sidebar item.
-func (m *model) openNav() {
-	if m.navPos >= len(m.nav) {
-		return
-	}
-	it := m.nav[m.navPos]
-	m.setView(it.view)
-	if it.file >= 0 {
-		for i, r := range m.main.rows {
-			if r.kind == rowFile && r.file == it.file {
-				m.main.jump(i)
-				break
-			}
-		}
-	}
-	// setView rebuilt the nav; find the item again.
-	for i, n := range m.nav {
-		if n.view == it.view && n.file == it.file {
-			m.navPos = i
-		}
-	}
-}
-
-// syncNav highlights the sidebar file under the main cursor.
-func (m *model) syncNav() {
-	if m.main.cursor >= len(m.main.rows) {
-		return
-	}
-	file := m.main.rows[m.main.cursor].file
-	for i, it := range m.nav {
-		if it.view == m.current && it.file == file {
-			m.navPos = i
-			return
-		}
-	}
-	for i, it := range m.nav {
-		if it.view == m.current && it.file == -1 {
-			m.navPos = i
-		}
-	}
 }
 
 func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
@@ -498,11 +401,10 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.status = ""
 		return m, nil
 	case key.Matches(msg, k.Focus):
-		if m.focus == focusMain {
-			m.focus = focusNav
-		} else {
-			m.focus = focusMain
-		}
+		m.cycleFocus(1)
+		return m, nil
+	case key.Matches(msg, k.FocusBack):
+		m.cycleFocus(-1)
 		return m, nil
 	case key.Matches(msg, k.Reload):
 		m.setStatus("reloading")
@@ -528,33 +430,87 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if m.data == nil {
 		return m, nil
 	}
-	if m.focus == focusNav {
-		return m.navKey(msg)
+	switch m.focus {
+	case focusViews:
+		return m.navKey(msg, &m.viewsNav, m.openView)
+	case focusFiles:
+		return m.navKey(msg, &m.filesNav, m.openFile)
 	}
 	return m.mainKey(msg)
 }
 
-func (m *model) navKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+// focusOrder is the panes from left to right. The files list is skipped when the view has none.
+func (m *model) focusOrder() []focus {
+	if len(m.filesNav.items) == 0 {
+		return []focus{focusViews, focusMain}
+	}
+	return []focus{focusViews, focusFiles, focusMain}
+}
+
+// cycleFocus moves focus n panes along focusOrder, wrapping around.
+func (m *model) cycleFocus(n int) {
+	order := m.focusOrder()
+	i := 0
+	for j, f := range order {
+		if f == m.focus {
+			i = j
+		}
+	}
+	m.focus = order[(i+n+len(order))%len(order)]
+}
+
+// focusStep moves focus n panes without wrapping, reporting whether it moved.
+func (m *model) focusStep(n int) bool {
+	order := m.focusOrder()
+	for j, f := range order {
+		if f == m.focus {
+			next := min(max(j+n, 0), len(order)-1)
+			m.focus = order[next]
+			return next != j
+		}
+	}
+	m.focus = focusMain
+	return true
+}
+
+func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model, tea.Cmd) {
 	k := m.keys
-	prev := m.navPos
+	_, _, bh := m.layoutSizes()
+	vh, fh := m.sidebarHeights(bh)
+	page := vh - 1
+	if l == &m.filesNav {
+		page = fh - 1
+	}
+	changed := false
 	switch {
 	case key.Matches(msg, k.Up):
-		m.navPos = max(m.navPos-1, 0)
+		changed = l.move(-1)
 	case key.Matches(msg, k.Down):
-		m.navPos = min(m.navPos+1, len(m.nav)-1)
+		changed = l.move(1)
+	case key.Matches(msg, k.HalfPageUp):
+		changed = l.move(-max(page/2, 1))
+	case key.Matches(msg, k.HalfPageDown):
+		changed = l.move(max(page/2, 1))
+	case key.Matches(msg, k.PageUp):
+		changed = l.move(-max(page, 1))
+	case key.Matches(msg, k.PageDown):
+		changed = l.move(max(page, 1))
 	case key.Matches(msg, k.Top):
-		m.navPos = 0
+		changed = l.set(0)
 	case key.Matches(msg, k.Bottom):
-		m.navPos = len(m.nav) - 1
+		changed = l.set(len(l.items) - 1)
+	case key.Matches(msg, k.Left):
+		m.focusStep(-1)
+		return m, nil
 	case key.Matches(msg, k.Open), key.Matches(msg, k.Right):
-		m.openNav()
-		m.focus = focusMain
+		open()
+		m.focusStep(1)
 		return m, nil
 	default:
 		return m.mainKey(msg)
 	}
-	if m.navPos != prev {
-		m.openNav()
+	if changed {
+		open()
 	}
 	return m, nil
 }
@@ -580,7 +536,12 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.Bottom):
 		p.bottom()
 	case key.Matches(msg, k.Left):
-		p.side = anchor.SideOld
+		// In split mode, left first moves to the old side, then to the sidebar.
+		if m.split && p.side == anchor.SideNew {
+			p.side = anchor.SideOld
+		} else {
+			m.focusStep(-1)
+		}
 	case key.Matches(msg, k.Right):
 		p.side = anchor.SideNew
 	case key.Matches(msg, k.NextFile):
@@ -599,7 +560,7 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, k.Open):
 		if m.views[m.current].kind == viewOverview {
-			m.focus = focusNav
+			m.focus = focusViews
 		}
 	case key.Matches(msg, k.Comment):
 		return m.startComment(false)
@@ -945,23 +906,30 @@ func editorCmd(text string) tea.Cmd {
 	})
 }
 
+// sidebarAt maps a sidebar line to a list and its item index.
+func (m *model) sidebarAt(y int) (*navList, focus, int) {
+	_, _, bh := m.layoutSizes()
+	vh, _ := m.sidebarHeights(bh)
+	if y < vh {
+		return &m.viewsNav, focusViews, m.viewsNav.at(y - 1)
+	}
+	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - 1)
+}
+
 func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	nw, _, _ := m.layoutSizes()
-	if msg.X < nw {
-		switch msg.Button {
-		case tea.MouseWheelUp:
-			m.navTop = max(m.navTop-3, 0)
-		case tea.MouseWheelDown:
-			m.navTop = min(m.navTop+3, max(len(m.nav)-1, 0))
-		}
+	delta := 3
+	if msg.Button == tea.MouseWheelUp {
+		delta = -3
+	} else if msg.Button != tea.MouseWheelDown {
 		return m, nil
 	}
-	switch msg.Button {
-	case tea.MouseWheelUp:
-		m.main.scroll(-3)
-	case tea.MouseWheelDown:
-		m.main.scroll(3)
+	if msg.X < nw {
+		l, _, _ := m.sidebarAt(msg.Y)
+		l.top = max(l.top+delta, 0)
+		return m, nil
 	}
+	m.main.scroll(delta)
 	m.syncNav()
 	return m, nil
 }
@@ -974,20 +942,29 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if msg.Y >= bh {
 		return m, nil
 	}
+	if nw > 0 && msg.X == nw {
+		// The divider: drag to resize the sidebar.
+		m.dragging = true
+		return m, nil
+	}
 	if msg.X < nw {
-		i := m.navTop + msg.Y
-		if i < len(m.nav) {
-			m.navPos = i
-			m.openNav()
-			m.focus = focusNav
+		l, f, i := m.sidebarAt(msg.Y)
+		m.focus = f
+		if i >= 0 {
+			l.pos = i
+			if f == focusViews {
+				m.openView()
+			} else {
+				m.openFile()
+			}
 		}
 		return m, nil
 	}
-	i := m.main.rowAt(msg.Y)
+	m.focus = focusMain
+	i := m.main.rowAt(msg.Y - 1)
 	if i < 0 || !m.main.rows[i].selectable() {
 		return m, nil
 	}
-	m.focus = focusMain
 	m.main.cursor = i
 	if m.split && m.main.rows[i].kind == rowLine {
 		if msg.X-nw-1 < mw/2 {
@@ -997,6 +974,15 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.syncNav()
+	return m, nil
+}
+
+func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	if !m.dragging {
+		return m, nil
+	}
+	m.navWidth = min(max(msg.X, 12), m.width-20)
+	m.relayout(false)
 	return m, nil
 }
 
@@ -1026,9 +1012,12 @@ func (m *model) render() string {
 		return msg
 	}
 	nw, mw, bh := m.layoutSizes()
-	mainLines := m.main.visible(m.renderMainRow)
-	navLines := m.renderNav(nw, bh)
+	mainLines := append([]string{m.mainHeader(mw)}, m.main.visible(m.renderMainRow)...)
+	navLines := m.renderSidebar(nw, bh)
 	sep := m.r.st.paneBorder.Render("|")
+	if m.dragging {
+		sep = lipgloss.NewStyle().Foreground(m.r.st.accent).Render("|")
+	}
 	var b strings.Builder
 	for y := range bh {
 		if nw > 0 {
@@ -1054,36 +1043,6 @@ func (m *model) render() string {
 	}
 	b.WriteString(m.renderStatus())
 	return b.String()
-}
-
-func (m *model) renderNav(width, height int) []string {
-	if width == 0 {
-		return nil
-	}
-	if m.navPos < m.navTop {
-		m.navTop = m.navPos
-	} else if m.navPos >= m.navTop+height {
-		m.navTop = m.navPos - height + 1
-	}
-	st := m.r.st
-	var out []string
-	for i := m.navTop; i < len(m.nav) && len(out) < height; i++ {
-		it := m.nav[i]
-		label := strings.Repeat("  ", it.depth) + it.label
-		if it.depth == 0 {
-			label = st.navHeader.Render(label)
-		}
-		line := fit(" "+label, width, nil)
-		if i == m.navPos {
-			style := st.navSelected
-			if m.focus == focusNav {
-				style = st.navFocused
-			}
-			line = style.Render(fit(" "+ansi.Strip(label), width, nil))
-		}
-		out = append(out, line)
-	}
-	return out
 }
 
 func (m *model) renderStatus() string {
