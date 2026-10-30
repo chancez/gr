@@ -125,6 +125,16 @@ CREATE TABLE reviewed (
 -- A summary thread holds a submitted review's summary, so it can be replied to and resolved.
 ALTER TABLE threads ADD COLUMN summary INTEGER NOT NULL DEFAULT 0;
 `,
+	`
+-- Summary threads made by the backfill took the time it ran. Give them, and the summary comment
+-- each starts with, the time their review was submitted.
+UPDATE threads SET created_at = (SELECT submitted_at FROM reviews WHERE reviews.id = threads.review_id),
+	updated_at = (SELECT submitted_at FROM reviews WHERE reviews.id = threads.review_id)
+	WHERE summary = 1;
+UPDATE comments SET created_at = (SELECT submitted_at FROM reviews WHERE reviews.id = comments.review_id),
+	updated_at = (SELECT submitted_at FROM reviews WHERE reviews.id = comments.review_id)
+	WHERE review_id IS NOT NULL AND thread_id IN (SELECT id FROM threads WHERE summary = 1);
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.

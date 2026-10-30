@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // TestMigrateFromFirstVersion opens a database made by the first schema and checks that later
@@ -78,5 +79,9 @@ func TestBackfillSummaryThreads(t *testing.T) {
 	}
 	if len(comments) != 1 || comments[0].Body != "fix things" || comments[0].Author != (Author{Name: "Human", Email: "h@x"}) {
 		t.Errorf("summary comments = %+v", comments)
+	}
+	submitted := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	if !threads[0].CreatedAt.Equal(submitted) || !comments[0].CreatedAt.Equal(submitted) {
+		t.Errorf("summary times = %v and %v, want the review's submission time %v", threads[0].CreatedAt, comments[0].CreatedAt, submitted)
 	}
 }
