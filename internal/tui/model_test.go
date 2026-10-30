@@ -149,7 +149,7 @@ func addedLine(r row) bool { return r.kind == rowLine && r.line != nil && r.line
 func TestOverview(t *testing.T) {
 	e := newTUIEnv(t)
 	screen := e.screen()
-	for _, want := range []string{"#1 feature", "Overview", "All changes", "say h", "Conversation"} {
+	for _, want := range []string{"#1 feature", "Overview", "All changes", "say h", "Threads: 0 open"} {
 		if !strings.Contains(screen, want) {
 			t.Errorf("overview missing %q:\n%s", want, screen)
 		}
@@ -796,5 +796,55 @@ func TestKeyHintsFit(t *testing.T) {
 	e.m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	if bar := ansi.Strip(e.m.renderStatus()); !strings.Contains(bar, "? help | q quit") {
 		t.Errorf("width 140: hints = %q", bar)
+	}
+}
+
+func TestConversationView(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	commit := e.m.data.commits[0].SHA
+	line, err := e.svc.StartThread(ctx, e.chg, review.NewThread{
+		Scope: store.ScopeCommit, Commit: commit, Path: "main.go", StartLine: 4, Body: "why hello?",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictRequestChanges, "Two things."); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SetThreadState(ctx, line.ID, store.ThreadAddressed); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	screen := e.screen()
+	for _, want := range []string{"requested changes", "Two things.", "review summary", "why hello?", `+     println("hello")`, "commit "} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("conversation missing %q:\n%s", want, screen)
+		}
+	}
+	// The summary leads its review.
+	if strings.Index(screen, "Two things.") > strings.Index(screen, "why hello?") {
+		t.Error("summary is not first in its review")
+	}
+
+	// F cycles the filter: all, unresolved, open, addressed.
+	e.press("F", "F")
+	if screen := e.screen(); strings.Contains(screen, "why hello?") || !strings.Contains(screen, "Two things.") {
+		t.Errorf("open filter shows the addressed thread or hides the open summary:\n%s", screen)
+	}
+	e.press("F")
+	if screen := e.screen(); !strings.Contains(screen, "why hello?") || strings.Contains(screen, "Two things.") {
+		t.Errorf("addressed filter:\n%s", screen)
+	}
+
+	// enter opens the line thread in its commit.
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == line.ID })
+	e.press("enter")
+	v := e.m.views[e.m.current]
+	cur := e.m.main.rows[e.m.main.cursor]
+	if v.kind != viewCommit || v.commit.SHA != commit || cur.kind != rowThread || cur.thread.ID != line.ID {
+		t.Errorf("enter opened %q at %+v", e.m.viewLabel(v), cur)
 	}
 }

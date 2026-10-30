@@ -84,6 +84,8 @@ type row struct {
 	collapsed bool
 	// gap is set on a rowGap, and on the lines of an open gap.
 	gap *gap
+	// excerpt is the diff shown above a thread in the overview.
+	excerpt *review.Excerpt
 }
 
 func (r row) selectable() bool { return r.kind != rowText }

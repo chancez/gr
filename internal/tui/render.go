@@ -195,7 +195,11 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		}
 		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
 	case rowThread:
-		return r.renderThread(d, *rw.thread, width, state.cursor)
+		lines := r.renderThread(d, *rw.thread, width, state.cursor)
+		if rw.excerpt != nil {
+			lines = append(r.renderExcerpt(*rw.excerpt, rw.thread.Location, width), lines...)
+		}
+		return lines
 	case rowGap:
 		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
 		style := st.muted
@@ -303,6 +307,26 @@ func stateBadge(st styles, t review.ThreadView, draft bool) string {
 		parts = append(parts, st.badgeWarn.Render("draft"))
 	}
 	return strings.Join(parts, st.muted.Render(", "))
+}
+
+// renderExcerpt draws the diff a thread is about, under a line naming where it is.
+func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
+	st := r.st
+	where := st.fileHeader.Render(fit(" "+describeLocation(loc), width, nil))
+	if !e.Exact {
+		where = st.fileHeader.Render(fit(" "+describeLocation(loc)+"  (outdated: as it was)", width, nil))
+	}
+	out := []string{where}
+	// A one-hunk file sized to the excerpt's last line numbers, so the gutter is as wide as needed.
+	f := git.FileDiff{NewPath: e.Path}
+	if n := len(e.Lines); n > 0 {
+		last := e.Lines[n-1]
+		f.Hunks = []git.Hunk{{OldStart: last.OldLine, NewStart: last.NewLine}}
+	}
+	for _, l := range e.Lines {
+		out = append(out, " "+r.renderUnified(f, l, width-1, rowState{}))
+	}
+	return out
 }
 
 // renderThread draws a thread as a bordered box, indented under the line it is on.

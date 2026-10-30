@@ -94,6 +94,8 @@ type model struct {
 	// search is the last search pattern, and searchInput the prompt while typing one.
 	search      string
 	searchInput textinput.Model
+	// filter selects the threads the overview shows.
+	filter threadFilter
 	// lastSidebar is the sidebar section h returns to.
 	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
@@ -405,7 +407,7 @@ func (m *model) rebuildMain() {
 	}
 	v := m.views[m.current]
 	if v.kind == viewOverview {
-		m.main.rows = buildOverview(m.data, m.r)
+		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
 		m.main.rows = buildRows(m.data, v, rowOptions{
 			split:     m.split,
@@ -669,9 +671,17 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowLine {
 			p.anchor = p.cursor
 		}
+	case key.Matches(msg, k.Filter):
+		if m.views[m.current].kind == viewOverview {
+			m.filter = (m.filter + 1) % filterCount
+			m.rebuildMain()
+			m.setStatus("showing %s threads", m.filter)
+		}
 	case key.Matches(msg, k.Open):
 		if m.views[m.current].kind == viewOverview {
-			m.setFocus(focusViews)
+			if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+				m.openThread(*p.rows[p.cursor].thread)
+			}
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
@@ -736,6 +746,44 @@ func (m *model) toggleAllChanges() {
 			m.returnView = m.current
 			m.viewsNav.pos = i
 			m.openView()
+		}
+	}
+}
+
+// openThread shows a thread in the commit or diff it is anchored to, with the cursor on it.
+func (m *model) openThread(t review.ThreadView) {
+	if t.Outdated {
+		m.setError(errors.New("the code this thread is on changed; it is shown as it was"))
+		return
+	}
+	target := -1
+	for i, v := range m.views {
+		switch {
+		case t.Location.Scope == store.ScopeCommit && v.kind == viewCommit && v.commit.SHA == t.Location.Commit,
+			t.Location.Scope == store.ScopeDiff && v.kind == viewDiff:
+			target = i
+		}
+	}
+	if target < 0 {
+		m.setError(errors.New("this thread is on the whole change"))
+		return
+	}
+	m.viewsNav.pos = target
+	m.openView()
+	v := m.views[m.current]
+	for i, r := range m.main.rows {
+		if r.kind == rowThread && r.thread.ID == t.ID {
+			m.main.jump(i)
+			m.syncNav()
+			return
+		}
+	}
+	// Collapsed files hide their threads: open the file and look again.
+	for f, file := range v.files {
+		if file.Path() == t.Location.Path && m.collapsed(v, f) {
+			m.toggleCollapsed(v, f)
+			m.openThread(t)
+			return
 		}
 	}
 }

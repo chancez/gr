@@ -23,6 +23,7 @@ type keyMap struct {
 	PrevChange   key.Binding
 	NextHunk     key.Binding
 	PrevHunk     key.Binding
+	Filter       key.Binding
 	Fold         key.Binding
 	FoldAll      key.Binding
 	Search       key.Binding
@@ -79,6 +80,7 @@ func defaultKeys() keyMap {
 		PrevChange:   key.NewBinding(key.WithKeys("(")),
 		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
 		PrevHunk:     key.NewBinding(key.WithKeys("K")),
+		Filter:       key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "filter overview threads")),
 		Fold:         key.NewBinding(key.WithKeys("z"), key.WithHelp("zo/zc/za", "open/close/toggle fold")),
 		// Help only: z sequences are handled as a pending prefix.
 		FoldAll:      key.NewBinding(key.WithKeys("zR"), key.WithHelp("zR/zM", "open/close all folds")),
@@ -125,6 +127,6 @@ func (k keyMap) FullHelp() [][]key.Binding {
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
 		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextChange, k.NextThread, k.Search, k.SearchNext, k.Fold, k.FoldAll, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
-		{k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
+		{k.Filter, k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
 }
