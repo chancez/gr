@@ -921,3 +921,44 @@ func TestResolvingKeepsTheCursorStill(t *testing.T) {
 		t.Errorf("cursor moved from screen line %d to %d", before, after)
 	}
 }
+
+func TestOverviewScrollsByLine(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	for _, body := range []string{"first\n\nmore\n\nlines", "second", "third"} {
+		if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	p := &e.m.main
+	for i := range 3 {
+		before := p.offset
+		e.press("j")
+		if p.offset != before+1 {
+			t.Fatalf("j %d moved the view from %d to %d, want one line", i, before, p.offset)
+		}
+	}
+	// Scrolling far enough selects later threads, in order.
+	var seen []int
+	for range 40 {
+		e.press("j")
+		if r := p.rows[p.cursor]; r.kind == rowThread && (len(seen) == 0 || seen[len(seen)-1] != r.thread.Seq) {
+			seen = append(seen, r.thread.Seq)
+		}
+	}
+	if len(seen) < 2 || seen[0] >= seen[len(seen)-1] {
+		t.Errorf("threads selected while scrolling = %v", seen)
+	}
+	// t still jumps between threads.
+	e.press("g", "t")
+	if r := p.rows[p.cursor]; r.kind != rowThread {
+		t.Errorf("t selected %+v", r)
+	}
+}

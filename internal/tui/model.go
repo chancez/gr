@@ -406,6 +406,7 @@ func (m *model) rebuildMain() {
 		return
 	}
 	v := m.views[m.current]
+	m.main.lineMode = v.kind == viewOverview
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
@@ -628,6 +629,34 @@ func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model,
 func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := m.keys
 	p := &m.main
+	if p.lineMode {
+		switch {
+		case key.Matches(msg, k.Up):
+			p.scrollLines(-1)
+			return m, nil
+		case key.Matches(msg, k.Down):
+			p.scrollLines(1)
+			return m, nil
+		case key.Matches(msg, k.HalfPageDown):
+			p.scrollLines(p.height / 2)
+			return m, nil
+		case key.Matches(msg, k.HalfPageUp):
+			p.scrollLines(-p.height / 2)
+			return m, nil
+		case key.Matches(msg, k.PageDown):
+			p.scrollLines(p.height)
+			return m, nil
+		case key.Matches(msg, k.PageUp):
+			p.scrollLines(-p.height)
+			return m, nil
+		case key.Matches(msg, k.Top):
+			p.scrollLines(-p.total)
+			return m, nil
+		case key.Matches(msg, k.Bottom):
+			p.scrollLines(p.total)
+			return m, nil
+		}
+	}
 	switch {
 	case key.Matches(msg, k.Up):
 		p.move(-1)
@@ -1192,7 +1221,11 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		l.top = max(l.top+delta, 0)
 		return m, nil
 	}
-	m.main.scroll(delta)
+	if m.main.lineMode {
+		m.main.scrollLines(delta)
+	} else {
+		m.main.scroll(delta)
+	}
 	m.syncNav()
 	return m, nil
 }

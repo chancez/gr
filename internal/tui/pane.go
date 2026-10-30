@@ -24,6 +24,9 @@ type pane struct {
 	side   anchor.Side
 	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
 	scrolloff int
+	// lineMode scrolls by lines instead of moving between rows, and selects the row at the reading
+	// line. The overview uses it, since its threads are many lines tall.
+	lineMode bool
 	// overscroll lets the view sit past the end of the content, showing blank lines, so content
 	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
 	// scrolls back up.
@@ -213,6 +216,31 @@ func (p *pane) ensureVisible() {
 		p.offset = start + h + so - p.height
 	}
 	p.clamp()
+}
+
+// scrollLines scrolls the view by n lines in line mode and selects the row at the reading line.
+func (p *pane) scrollLines(n int) {
+	p.offset += n
+	p.clamp()
+	p.pickReadingRow()
+}
+
+// pickReadingRow selects the row covering the reading line, scrolloff lines below the top, or the
+// nearest selectable row in view.
+func (p *pane) pickReadingRow() {
+	i := p.rowAt(min(p.margin(), max(p.total-p.offset-1, 0)))
+	if i < 0 {
+		return
+	}
+	if p.rows[i].selectable() {
+		p.cursor = i
+		return
+	}
+	if next := p.nextSelectable(i, 1); next >= 0 && p.starts[next] < p.offset+p.height {
+		p.cursor = next
+	} else if prev := p.nextSelectable(i, -1); prev >= 0 && p.starts[prev]+p.rowHeight(prev) > p.offset {
+		p.cursor = prev
+	}
 }
 
 // cursorY is the screen line the cursor row starts on.
