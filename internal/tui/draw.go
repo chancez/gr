@@ -5,8 +5,9 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
-	"github.com/chancez/gr/internal/termtext"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chancez/gr/internal/termtext"
 )
 
 // span is a piece of a line: text of one element, with props.
