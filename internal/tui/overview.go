@@ -4,13 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
-
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
-	"github.com/chancez/gr/internal/termtext"
 )
 
 // threadFilter selects which threads the overview shows.
@@ -57,22 +53,24 @@ func (d *changeData) excerpt(t review.ThreadView) (review.Excerpt, bool) {
 // its summary and the threads started in it, then the viewer's pending review. Line threads show
 // the diff they are about.
 func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
-	st := r.st
+	th := r.th
 	text := func(f func(width int) []string) row { return row{kind: rowText, file: -1, text: f} }
-	plain := func(lines ...string) row {
+	// plain is lines of spans, one row.
+	plain := func(lines ...[]span) row {
 		return text(func(width int) []string {
 			out := make([]string, len(lines))
 			for i, l := range lines {
-				out[i] = fit(l, width, nil)
+				out[i] = th.draw(surfPlain, width, l...)
 			}
 			return out
 		})
 	}
+	blank := []span{}
 
 	c, rev := d.change, d.revision
 	target := string(c.Kind)
 	if c.Kind == store.KindBranch {
-		target = termtext.Line(c.Branch) + " onto " + termtext.Line(c.BaseBranch)
+		target = c.Branch + " onto " + c.BaseBranch
 	}
 	counts := map[store.ThreadState]int{}
 	for _, t := range d.threads {
@@ -80,15 +78,18 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	rows := []row{
 		plain(
-			st.heading.Render(fmt.Sprintf("#%d %s", c.Seq, termtext.Line(c.Title))),
-			st.muted.Render(fmt.Sprintf("%s, %s, revision %d of %d (%s..%s), %d commits, %d files",
+			[]span{sp(elHeading, fmt.Sprintf("#%d %s", c.Seq, c.Title))},
+			[]span{sp(elMuted, fmt.Sprintf("%s, %s, revision %d of %d (%s..%s), %d commits, %d files",
 				c.State, target, rev.Seq, len(d.revisions), shortSHA(rev.BaseSHA), shortSHA(rev.HeadSHA),
-				len(d.commits), len(d.diffFiles))),
-			"Threads: "+st.badgeOpen.Render(fmt.Sprintf("%d open", counts[store.ThreadOpen]))+", "+
-				st.badgeWarn.Render(fmt.Sprintf("%d addressed", counts[store.ThreadAddressed]))+", "+
-				st.badgeDone.Render(fmt.Sprintf("%d resolved", counts[store.ThreadResolved]))+
-				st.muted.Render("   showing "+filter.String()+"; F filters, o opens a thread in the whole diff, O in its commit"),
-			"",
+				len(d.commits), len(d.diffFiles)))},
+			[]span{
+				sp(elDefault, "Threads: "),
+				sp(elStateOpen, fmt.Sprintf("%d open", counts[store.ThreadOpen])), sp(elDefault, ", "),
+				sp(elStateAddressed, fmt.Sprintf("%d addressed", counts[store.ThreadAddressed])), sp(elDefault, ", "),
+				sp(elStateResolved, fmt.Sprintf("%d resolved", counts[store.ThreadResolved])),
+				sp(elMuted, "   showing "+filter.String()+"; F filters, o opens a thread in the whole diff, O in its commit"),
+			},
+			blank,
 		),
 	}
 
@@ -127,19 +128,23 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	// reviewRow is a review's entry: a full-width header bar of separately colored parts, so the
 	// verdict stands out, with the summary and its replies drawn beneath it. It is selectable, so
 	// the review can be acted on even when it has no threads.
-	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...string) row {
+	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...[]span) row {
 		bar := func(width int) []string {
-			gap := lipgloss.NewStyle().Background(st.headingBg).Render("  ")
-			line := lipgloss.NewStyle().Background(st.headingBg).Render(" ") + strings.Join(parts, gap)
-			return []string{fit(ansi.Truncate(line, width, ""), width, st.headingBg)}
+			spans := []span{sp(elDefault, " ")}
+			for i, p := range parts {
+				if i > 0 {
+					spans = append(spans, sp(elDefault, "  "))
+				}
+				spans = append(spans, p...)
+			}
+			return []string{th.draw(surfPlain, width, spans...)}
 		}
 		return row{kind: rowReview, file: -1, text: bar, review: rv, thread: summary}
 	}
-	on := func(style lipgloss.Style, s string) string { return style.Background(st.headingBg).Render(s) }
 	divider := func(label string) row {
 		return text(func(width int) []string {
 			line := "--- " + label + " "
-			return []string{st.muted.Render(fit(line+strings.Repeat("-", max(width-len(line), 0)), width, nil))}
+			return []string{th.draw(surfPlain, width, sp(elMuted, line+strings.Repeat("-", max(width-len(line), 0))))}
 		})
 	}
 
@@ -158,18 +163,17 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		}
 		seq := revSeq[rv.RevisionID]
 		if lastRev != 0 && seq != lastRev {
-			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(""))
+			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(blank))
 		}
 		lastRev = seq
-		parts := []string{
-			on(st.heading, fmt.Sprintf("Review #%d", rv.Seq)),
-			on(st.author, termtext.Line(rv.Author.Name)),
-			on(verdictStyle(st, rv.Verdict), verdictText(rv.Verdict)),
-			on(st.muted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04"))),
+		parts := [][]span{
+			{sp(elHeading, fmt.Sprintf("Review #%d", rv.Seq))},
+			{sp(elAuthor, rv.Author.Name)},
+			{sp(verdictElement(rv.Verdict), verdictText(rv.Verdict))},
+			{sp(elMuted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04")))},
 		}
 		if summary != nil {
-			parts = append(parts, on(st.muted, "summary")+on(lipgloss.NewStyle(), " ")+
-				on(lipgloss.NewStyle(), spanText(stateSpans(*summary, false))))
+			parts = append(parts, []span{sp(elMuted, "summary"), sp(elDefault, " "+spanText(stateSpans(*summary, false)))})
 		}
 		// A summary the filter leaves out shows only in the bar's state.
 		shownSummary := summary
@@ -187,18 +191,18 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			}))
 		}
 		rows = append(rows, threads...)
-		rows = append(rows, plain(""))
+		rows = append(rows, plain(blank))
 		shown += len(threads) + 1
 	}
 	if draft, ok := d.draft(); ok {
 		threads := threadRows(byReview[draft.ID])
 		if lastRev != 0 && lastRev != rev.Seq {
-			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(""))
+			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(blank))
 		}
 		rows = append(rows, reviewRow(&draft, nil,
-			on(st.heading, "Your pending review"),
-			on(st.badgeWarn.Bold(true), fmt.Sprintf("%d new threads", len(byReview[draft.ID]))),
-			on(st.muted, "S submits it, D discards it"),
+			[]span{sp(elHeading, "Your pending review")},
+			[]span{sp(elDraft, fmt.Sprintf("%d new threads", len(byReview[draft.ID])), strong)},
+			[]span{sp(elMuted, "S submits it, D discards it")},
 		))
 		rows = append(rows, threads...)
 		shown += len(threads) + 1
@@ -208,7 +212,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		if filter != filterAll {
 			msg = "No " + filter.String() + " threads."
 		}
-		rows = append(rows, plain(st.muted.Render(msg)))
+		rows = append(rows, plain([]span{sp(elMuted, msg)}))
 	}
 	return rows
 }
@@ -232,18 +236,14 @@ func verdictText(v store.Verdict) string {
 	return "commented"
 }
 
-// verdictStyle colors a verdict: green for approved, red for requested changes, and the plain
-// foreground for commented, in the theme's colors.
-func verdictStyle(st styles, v store.Verdict) lipgloss.Style {
+// verdictElement is how a verdict is drawn: approved and requested changes in their own colors,
+// commented plainly.
+func verdictElement(v store.Verdict) element {
 	switch v {
 	case store.VerdictApprove:
-		return st.badgeOpen.Bold(true)
+		return elVerdictApprove
 	case store.VerdictRequestChanges:
-		return st.statusErr.Bold(true)
+		return elVerdictRequestChanges
 	}
-	return st.heading
-}
-
-func verdictLabel(st styles, v store.Verdict) string {
-	return verdictStyle(st, v).Render(verdictText(v))
+	return elVerdictComment
 }

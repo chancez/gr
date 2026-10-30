@@ -1261,8 +1261,7 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 	}
 	e.drain(e.m.loadCmd())
 	e.openNav("Overview")
-	st := e.m.r.st
-	verdict := verdictStyle(st, store.VerdictRequestChanges).Background(st.headingBg).Render("requested changes")
+	verdict := e.m.r.th.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
 	if !strings.Contains(e.m.render(), verdict) {
 		t.Error("the review bar's verdict is not in its own color")
 	}
