@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
@@ -114,15 +116,25 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		}
 		return out
 	}
-	reviewHeader := func(rv store.Review) row {
+	revSeq := map[string]int{}
+	for _, rv := range d.revisions {
+		revSeq[rv.ID] = rv.Seq
+	}
+	// reviewBar heads a review: a full-width bar, so each review's threads read as one group.
+	reviewBar := func(label string) row {
 		return text(func(width int) []string {
-			head := st.author.Render(rv.Author.Name) + " " + verdictLabel(st, rv.Verdict) +
-				"  " + st.muted.Render(rv.SubmittedAt.Local().Format("2006-01-02 15:04"))
-			return []string{fit(head, width, nil)}
+			return []string{st.navHeading.Render(fit(" "+ansi.Strip(label), width, nil))}
+		})
+	}
+	divider := func(label string) row {
+		return text(func(width int) []string {
+			line := "--- " + label + " "
+			return []string{st.muted.Render(fit(line+strings.Repeat("-", max(width-len(line), 0)), width, nil))}
 		})
 	}
 
 	shown := 0
+	lastRev := 0
 	for _, rv := range d.reviews {
 		if rv.State != store.ReviewSubmitted {
 			continue
@@ -131,7 +143,13 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		if len(threads) == 0 && filter != filterAll {
 			continue
 		}
-		rows = append(rows, reviewHeader(rv))
+		seq := revSeq[rv.RevisionID]
+		if lastRev != 0 && seq != lastRev {
+			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(""))
+		}
+		lastRev = seq
+		rows = append(rows, reviewBar(fmt.Sprintf("Review #%d  %s %s  on revision %d  %s", rv.Seq, rv.Author.Name,
+			ansi.Strip(verdictLabel(st, rv.Verdict)), seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04"))))
 		if !hasSummary(d, rv.ID) && strings.TrimSpace(rv.Body) != "" {
 			rows = append(rows, text(func(width int) []string {
 				var lines []string
@@ -147,8 +165,11 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	if draft, ok := d.draft(); ok {
 		threads := threadRows(byReview[draft.ID])
-		rows = append(rows, plain(st.badgeWarn.Render(fmt.Sprintf(
-			"Your pending review has %d new threads. S submits it, D discards it.", len(byReview[draft.ID])))))
+		if lastRev != 0 && lastRev != rev.Seq {
+			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(""))
+		}
+		rows = append(rows, reviewBar(fmt.Sprintf("Your pending review  %d new threads  S submits it, D discards it",
+			len(byReview[draft.ID]))))
 		rows = append(rows, threads...)
 		shown += len(threads)
 	}

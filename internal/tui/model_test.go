@@ -1073,3 +1073,45 @@ func TestOverviewLineCursorSelectsThreads(t *testing.T) {
 		t.Errorf("line cursor = %d after reaching the end and a k, want %d", p.line, p.total-2)
 	}
 }
+
+func TestOverviewGroupsReviews(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	start := func(body string) {
+		if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	start("from the first round")
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Write("more.go", "package main\n")
+	e.repo.Commit("more")
+	if _, _, err := e.svc.Sync(ctx, e.chg); err != nil {
+		t.Fatal(err)
+	}
+	start("from the second round")
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictApprove, ""); err != nil {
+		t.Fatal(err)
+	}
+	start("not yet submitted")
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	screen := e.screen()
+	order := []string{
+		"Review #1  Human requested changes  on revision 1", "from the first round",
+		"--- branch updated: revision 1 -> 2", "Review #2  Human approved  on revision 2", "from the second round",
+		"Your pending review  1 new threads", "not yet submitted",
+	}
+	last := -1
+	for _, want := range order {
+		i := strings.Index(screen, want)
+		if i < 0 || i < last {
+			t.Fatalf("%q missing or out of order in:\n%s", want, screen)
+		}
+		last = i
+	}
+}
