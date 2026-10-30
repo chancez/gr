@@ -1606,7 +1606,7 @@ func TestSubmitWithoutSummary(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")
 	e.press("S")
-	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "A R C without one") {
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "A R C skip the summary") {
 		t.Errorf("verdict prompt = %q", ansi.Strip(e.m.renderStatus()))
 	}
 	e.pressRun("A")

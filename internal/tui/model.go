@@ -1723,9 +1723,10 @@ func (m *model) renderStatus() string {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		key := func(k, desc string) string { return st.helpKey.Render(k) + st.helpDesc.Render(desc) }
-		return st.heading.Render("Submit: ") + key("a", "pprove  ") + key("r", "equest changes  ") + key("c", "omment") +
-			st.muted.Render(" with a summary; ") + key("A R C", " without one; ") + st.muted.Render("other keys cancel")
+		return st.heading.Render("Submit review: ") + m.renderHints([]key.Binding{
+			hint("a", "approve"), hint("r", "request changes"), hint("c", "comment"),
+			hint("A R C", "skip the summary"), hint("esc", "cancel"),
+		}, m.width-15)
 	case modeConfirm:
 		return st.statusErr.Render(m.confirm.prompt)
 	}
