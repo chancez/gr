@@ -319,17 +319,27 @@ func TestFocusMovesBetweenPanes(t *testing.T) {
 	if e.m.focus != focusMain {
 		t.Fatalf("initial focus = %d, want main", e.m.focus)
 	}
-	e.press("h")
+	// h goes to the file list by default, and h again stays in the sidebar.
+	e.press("h", "h")
 	if e.m.focus != focusFiles {
-		t.Errorf("focus after h from main = %d, want files", e.m.focus)
+		t.Errorf("focus after h h from main = %d, want files", e.m.focus)
 	}
+	e.press("ctrl+k")
+	if e.m.focus != focusViews {
+		t.Errorf("focus after ctrl+k = %d, want the change list", e.m.focus)
+	}
+	e.press("l")
+	if e.m.focus != focusMain {
+		t.Errorf("focus after l from the change list = %d, want main", e.m.focus)
+	}
+	// h returns to the section used last.
 	e.press("h")
 	if e.m.focus != focusViews {
-		t.Errorf("focus after h from files = %d, want views", e.m.focus)
+		t.Errorf("focus after h = %d, want the change list again", e.m.focus)
 	}
-	e.press("l", "l")
+	e.press("ctrl+j", "l")
 	if e.m.focus != focusMain {
-		t.Errorf("focus after l l = %d, want main", e.m.focus)
+		t.Errorf("focus after ctrl+j l = %d, want main", e.m.focus)
 	}
 
 	// In split mode, h goes to the old side before leaving the pane.

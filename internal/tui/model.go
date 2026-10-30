@@ -89,6 +89,8 @@ type model struct {
 	// navWidth is the sidebar width once dragged, or 0 for the default.
 	navWidth int
 	dragging bool
+	// lastSidebar is the sidebar section h returns to.
+	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
 	returnView int
 	// expanded overrides whether a file is collapsed, keyed by view and path.
@@ -142,7 +144,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, returnView: -1,
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, returnView: -1, lastSidebar: focusFiles,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -414,6 +416,12 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, k.FocusBack):
 		m.cycleFocus(-1)
 		return m, nil
+	case key.Matches(msg, k.SectionDown):
+		m.focusSection(1)
+		return m, nil
+	case key.Matches(msg, k.SectionUp):
+		m.focusSection(-1)
+		return m, nil
 	case key.Matches(msg, k.Reload):
 		m.setStatus("reloading")
 		return m, m.loadCmd()
@@ -480,21 +488,31 @@ func (m *model) cycleFocus(n int) {
 			i = j
 		}
 	}
-	m.focus = order[(i+n+len(order))%len(order)]
+	m.setFocus(order[(i+n+len(order))%len(order)])
 }
 
-// focusStep moves focus n panes without wrapping, reporting whether it moved.
-func (m *model) focusStep(n int) bool {
-	order := m.focusOrder()
-	for j, f := range order {
-		if f == m.focus {
-			next := min(max(j+n, 0), len(order)-1)
-			m.focus = order[next]
-			return next != j
-		}
+// setFocus focuses a pane, remembering the sidebar section so h returns to it.
+func (m *model) setFocus(f focus) {
+	if f == focusFiles && len(m.filesNav.items) == 0 {
+		f = focusViews
 	}
-	m.focus = focusMain
-	return true
+	if f == focusViews || f == focusFiles {
+		m.lastSidebar = f
+	}
+	m.focus = f
+}
+
+// focusSidebar focuses the sidebar section used last, the file list by default.
+func (m *model) focusSidebar() { m.setFocus(m.lastSidebar) }
+
+// focusSection moves between the stacked sidebar sections.
+func (m *model) focusSection(dir int) {
+	switch {
+	case m.focus == focusViews && dir > 0:
+		m.setFocus(focusFiles)
+	case m.focus == focusFiles && dir < 0:
+		m.setFocus(focusViews)
+	}
 }
 
 func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model, tea.Cmd) {
@@ -524,11 +542,10 @@ func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model,
 	case key.Matches(msg, k.Bottom):
 		changed = l.set(len(l.items) - 1)
 	case key.Matches(msg, k.Left):
-		m.focusStep(-1)
 		return m, nil
 	case key.Matches(msg, k.Open), key.Matches(msg, k.Right):
 		open()
-		m.focusStep(1)
+		m.setFocus(focusMain)
 		return m, nil
 	default:
 		return m.mainKey(msg)
@@ -564,7 +581,7 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.split && p.side == anchor.SideNew {
 			p.side = anchor.SideOld
 		} else {
-			m.focusStep(-1)
+			m.focusSidebar()
 		}
 	case key.Matches(msg, k.Right):
 		p.side = anchor.SideNew
@@ -588,7 +605,7 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 	case key.Matches(msg, k.Open):
 		if m.views[m.current].kind == viewOverview {
-			m.focus = focusViews
+			m.setFocus(focusViews)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		}
@@ -1011,7 +1028,7 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.X < nw {
 		l, f, i := m.sidebarAt(msg.Y)
-		m.focus = f
+		m.setFocus(f)
 		if i >= 0 {
 			l.pos = i
 			if f == focusViews {
@@ -1022,7 +1039,7 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	m.focus = focusMain
+	m.setFocus(focusMain)
 	i := m.main.rowAt(msg.Y - 1)
 	if i < 0 || !m.main.rows[i].selectable() {
 		return m, nil
