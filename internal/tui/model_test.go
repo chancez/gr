@@ -767,8 +767,9 @@ func TestStatusExpires(t *testing.T) {
 	if e.m.status != "submitted" {
 		t.Fatal("status cleared early")
 	}
-	if !strings.Contains(e.screen(), "submitted") || strings.Contains(e.m.renderStatus(), "q quit") {
-		t.Fatal("status not shown in place of the key hints")
+	header := ansi.Strip(strings.Split(e.screen(), "\n")[0])
+	if !strings.HasSuffix(header, " submitted ") || !strings.Contains(ansi.Strip(e.m.renderStatus()), "c comment") {
+		t.Fatalf("status not in the title bar beside intact hints: header %q, bar %q", header, ansi.Strip(e.m.renderStatus()))
 	}
 	e.m.expireStatus(e.m.statusAt.Add(statusTTL))
 	if e.m.status != "" || !strings.Contains(ansi.Strip(e.m.renderStatus()), "c comment") {

@@ -294,7 +294,24 @@ func (m *model) mainHeader(width int) string {
 			}
 		}
 	}
-	return paneTitle(st, title, width, m.focus == focusMain)
+	return m.withStatus(paneTitle(st, title, width, m.focus == focusMain), width)
+}
+
+// withStatus overlays the current message at the right of the main pane's title bar, so it does
+// not hide the key hints. The title gives up room first.
+func (m *model) withStatus(title string, width int) string {
+	if m.status == "" {
+		return title
+	}
+	st := m.r.st
+	msg := ansi.Truncate(m.status, max(width/2, 20), "...")
+	style := st.statusMsg
+	if m.statusErr {
+		style = st.statusErrMsg
+	}
+	badge := style.Render(" " + msg + " ")
+	keep := max(width-ansi.StringWidth(badge), 0)
+	return ansi.Truncate(title, keep, "") + badge
 }
 
 // paneTitle draws a pane's title bar.

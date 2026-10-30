@@ -1320,13 +1320,6 @@ func (m *model) renderStatus() string {
 	// Fit the hints in what the left side leaves, dropping trailing ones with "...".
 	m.help.SetWidth(max(m.width-lipgloss.Width(left)-2, 10))
 	right := m.help.ShortHelpView(m.keys.ShortHelp())
-	if m.status != "" {
-		style := st.statusBar
-		if m.statusErr {
-			style = st.statusErr
-		}
-		right = style.Render(m.status)
-	}
 	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
 	return fit(st.statusBar.Render(left)+strings.Repeat(" ", gap)+right, m.width, nil)
 }

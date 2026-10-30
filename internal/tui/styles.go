@@ -39,6 +39,8 @@ type styles struct {
 	badgeDone    lipgloss.Style
 	badgeWarn    lipgloss.Style
 	composeBox   lipgloss.Style
+	statusMsg    lipgloss.Style
+	statusErrMsg lipgloss.Style
 	helpKey      lipgloss.Style
 	helpDesc     lipgloss.Style
 	// paneFocused and paneUnfocused title panes. The focused title is a solid accent bar, distinct
@@ -92,8 +94,12 @@ func newStyles(isDark bool) styles {
 		badgeDone:    lipgloss.NewStyle().Foreground(purple),
 		badgeWarn:    lipgloss.NewStyle().Foreground(yellow),
 		composeBox:   lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).BorderForeground(blue).Padding(0, 1),
-		helpKey:      lipgloss.NewStyle().Bold(true).Foreground(blue),
-		helpDesc:     lipgloss.NewStyle().Foreground(fg),
+		statusMsg: lipgloss.NewStyle().Bold(true).Background(green).
+			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
+		statusErrMsg: lipgloss.NewStyle().Bold(true).Background(red).
+			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
+		helpKey:  lipgloss.NewStyle().Bold(true).Foreground(blue),
+		helpDesc: lipgloss.NewStyle().Foreground(fg),
 		paneFocused: lipgloss.NewStyle().Bold(true).Background(blue).
 			Foreground(ld(lipgloss.Color("#ffffff"), lipgloss.Color("#0d1117"))),
 		paneUnfocused: lipgloss.NewStyle().Bold(true).Foreground(muted).
