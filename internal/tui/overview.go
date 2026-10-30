@@ -169,7 +169,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		}
 		if summary != nil {
 			parts = append(parts, on(st.muted, "summary")+on(lipgloss.NewStyle(), " ")+
-				on(lipgloss.NewStyle(), ansi.Strip(stateBadge(st, *summary, false))))
+				on(lipgloss.NewStyle(), spanText(stateSpans(*summary, false))))
 		}
 		// A summary the filter leaves out shows only in the bar's state.
 		shownSummary := summary

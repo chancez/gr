@@ -305,26 +305,36 @@ func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []strin
 		sp(elMuted, c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
 }
 
-func stateBadge(st styles, t review.ThreadView, draft bool) string {
-	var parts []string
+// stateSpans are a thread's state badge: its state and who set it, outdated, and draft.
+func stateSpans(t review.ThreadView, draft bool) []span {
+	var out []span
 	switch t.State {
 	case store.ThreadOpen:
-		parts = append(parts, st.badgeOpen.Render("open"))
+		out = append(out, sp(elStateOpen, "open"))
 	case store.ThreadAddressed:
-		parts = append(parts, st.badgeWarn.Render("addressed"))
+		out = append(out, sp(elStateAddressed, "addressed"))
 	case store.ThreadResolved:
-		parts = append(parts, st.badgeDone.Render("resolved"))
+		out = append(out, sp(elStateResolved, "resolved"))
 	}
 	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
-		parts[0] += st.muted.Render(" by " + termtext.Line(t.StateBy.Name))
+		out = append(out, sp(elMuted, " by "+t.StateBy.Name))
 	}
 	if t.Outdated {
-		parts = append(parts, st.badgeWarn.Render("outdated"))
+		out = append(out, sp(elMuted, ", "), sp(elOutdated, "outdated"))
 	}
 	if draft {
-		parts = append(parts, st.badgeWarn.Render("draft"))
+		out = append(out, sp(elMuted, ", "), sp(elDraft, "draft"))
 	}
-	return strings.Join(parts, st.muted.Render(", "))
+	return out
+}
+
+// commentHeader is a comment's author and time, and whether it is a draft.
+func commentHeader(d *changeData, c store.Comment) []span {
+	out := []span{sp(elAuthor, c.Author.Name), sp(elMuted, "  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))}
+	if d.isDraft(c.ReviewID) {
+		out = append(out, sp(elDraft, "  draft"))
+	}
+	return out
 }
 
 // renderExcerpt draws the diff a thread is about, under a line naming where it is.
@@ -349,7 +359,6 @@ func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int
 // renderReview draws a review's header bar and, unless collapsed, its summary and the replies to it
 // beneath, unboxed, so a summary reads as part of its review rather than as one more thread.
 func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState) []string {
-	st := r.st
 	lines := rw.text(width)
 	t := rw.thread
 	if t == nil {
@@ -358,23 +367,17 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 	if rw.collapsed {
 		first := ""
 		if len(t.Comments) > 0 {
-			first = termtext.Line(strings.Join(strings.Fields(t.Comments[0].Body), " "))
+			first = strings.Join(strings.Fields(t.Comments[0].Body), " ")
 		}
 		line := fmt.Sprintf("    %d comments  %s", len(t.Comments), first)
-		return append(lines, st.muted.Render(fit(ansi.Truncate(line, width, "..."), width, nil)))
+		return append(lines, r.th.drawCut(surfPlain, width, sp(elMuted, line)))
 	}
 	r.segments = []int{0}
 	for i, c := range t.Comments {
 		if i > 0 {
 			r.segments = append(r.segments, len(lines))
 			lines = append(lines, "")
-		}
-		header := st.author.Render(termtext.Line(c.Author.Name)) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
-		if d.isDraft(c.ReviewID) {
-			header += st.badgeWarn.Render("  draft")
-		}
-		if i > 0 {
-			lines = append(lines, fit("    "+header, width, nil))
+			lines = append(lines, r.th.draw(surfPlain, width, append([]span{sp(elDefault, "    ")}, commentHeader(d, c)...)...))
 		}
 		for _, l := range r.renderMarkdown(c.Body, width-6) {
 			lines = append(lines, "    "+l)
@@ -385,54 +388,46 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
 func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
-	st := r.st
 	where := describeLocation(t.Location)
 	if t.Summary {
 		where = "summary"
 	}
 	first := ""
 	if len(t.Comments) > 0 {
-		first = termtext.Line(t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " "))
+		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	text := fmt.Sprintf("  > %s %s  %s  %d comments  %s", t.Label(), ansi.Strip(stateBadge(st, t, d.isDraft(t.ReviewID))),
+	text := fmt.Sprintf("  > %s %s  %s  %d comments  %s", t.Label(), spanText(stateSpans(t, d.isDraft(t.ReviewID))),
 		where, len(t.Comments), first)
-	style := st.muted
+	surf := surfPlain
 	if state.cursor {
-		style = style.Background(r.cursorBg(state))
+		surf = cursorSurface(state)
 	}
-	return style.Render(fit(ansi.Truncate(text, width, "..."), width, nil))
+	return r.th.drawCut(surf, width, sp(elMuted, text))
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
 func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, cursor bool) ([]string, []int) {
-	st := r.st
 	const indent = 2
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
-	title := st.threadTitle.Render(t.Label()) + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
+	title := []span{sp(elRef, t.Label()), sp(elDefault, " ")}
 	if t.Summary {
 		// A summary belongs to its review, so it is titled as the review's rather than numbered.
-		title = st.threadTitle.Render("Summary") + st.muted.Render(" ("+t.Label()+")") + " " + stateBadge(st, t, d.isDraft(t.ReviewID))
-	} else if loc := describeLocation(t.Location); loc != "" {
-		title += st.muted.Render("  " + loc)
+		title = []span{sp(elRef, "Summary"), sp(elMuted, " ("+t.Label()+")"), sp(elDefault, " ")}
 	}
-	lines := []string{ansi.Truncate(title, inner, "")}
+	title = append(title, stateSpans(t, d.isDraft(t.ReviewID))...)
+	if loc := describeLocation(t.Location); loc != "" && !t.Summary {
+		title = append(title, sp(elMuted, "  "+loc))
+	}
+	lines := []string{ansi.Truncate(r.th.render(surfPlain, title...), inner, "")}
 	var starts []int
 	for _, c := range t.Comments {
 		// The box's top border is the first output line.
 		starts = append(starts, len(lines)+1)
-		header := st.author.Render(termtext.Line(c.Author.Name)) + st.muted.Render("  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))
-		if d.isDraft(c.ReviewID) {
-			header += st.badgeWarn.Render("  draft")
-		}
-		lines = append(lines, "", header)
+		lines = append(lines, "", r.th.render(surfPlain, commentHeader(d, c)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
-	box := st.threadBorder.Width(boxWidth)
-	if cursor {
-		box = box.BorderForeground(st.accent)
-	}
-	out := strings.Split(box.Render(strings.Join(lines, "\n")), "\n")
+	out := strings.Split(r.th.box(boxWidth, cursor).Render(strings.Join(lines, "\n")), "\n")
 	for i := range out {
 		out[i] = strings.Repeat(" ", indent) + out[i]
 	}

@@ -4,6 +4,7 @@ import (
 	"image/color"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/chancez/gr/internal/termtext"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -61,11 +62,34 @@ func (t *theme) draw(s surface, width int, spans ...span) string {
 	return out
 }
 
-// drawCut is draw, but marks a cut with "...".
+// drawCut is draw, but marks a cut with "..." in the last span's style.
 func (t *theme) drawCut(s surface, width int, spans ...span) string {
 	out := t.render(s, spans...)
 	if ansi.StringWidth(out) > width {
-		out = ansi.Truncate(out, width, t.style(elText, 0, s).Render("..."))
+		tail := sp(elText, "...")
+		if n := len(spans); n > 0 && spans[n-1].styled == nil {
+			tail.el, tail.props = spans[n-1].el, spans[n-1].props
+		}
+		out = ansi.Truncate(out, width, t.render(s, tail))
 	}
 	return t.draw(s, width, styledSpan(func(color.Color) string { return out }))
+}
+
+// box is a bordered box width cells wide, its border in the accent when active. The border is
+// layout; only its color comes from the theme.
+func (t *theme) box(width int, active bool) lipgloss.Style {
+	border := t.elements[elBorder]
+	if active {
+		border = t.elements[elBorderActive]
+	}
+	return lipgloss.NewStyle().Border(lipgloss.ASCIIBorder()).BorderForeground(border.GetForeground()).Padding(0, 1).Width(width)
+}
+
+// spanText is the text of spans, without styles.
+func spanText(spans []span) string {
+	var b strings.Builder
+	for _, x := range spans {
+		b.WriteString(x.text)
+	}
+	return b.String()
 }
