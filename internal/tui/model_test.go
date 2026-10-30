@@ -1242,3 +1242,31 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 		t.Error("the review bar's verdict is not in its own color")
 	}
 }
+
+func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
+	st := newStyles(true)
+	done := navItem{label: "M a.go", badge: "(2) *x", done: true}
+	got := done.render(st, 30, false, false)
+	if !strings.Contains(got, st.muted.Render(fit("M a.go", 23, nil))) {
+		t.Errorf("reviewed entry not dimmed: %q", got)
+	}
+	for _, part := range []string{st.badgeOpen.Bold(true).Render(markReviewed), st.badgeWarn.Bold(true).Render(markDraft)} {
+		if !strings.Contains(got, part) {
+			t.Errorf("badge part %q not colored in %q", part, got)
+		}
+	}
+
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	e.pressRun("m")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	header := ansi.Strip(e.m.renderMainRow(e.m.main.cursor, rowState{})[0])
+	if !strings.Contains(header, "reviewed  collapsed, enter expands") {
+		t.Errorf("file header = %q", header)
+	}
+	key := st.helpKey.Background(st.headingBg).Render("enter")
+	if !strings.Contains(e.m.renderMainRow(e.m.main.cursor, rowState{})[0], key) {
+		t.Error("enter not styled as a key in the file header")
+	}
+}

@@ -171,19 +171,22 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
 			label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
 		}
-		if rw.reviewed {
-			label += "  [reviewed]"
-		}
-		if rw.collapsed {
-			label += "  (collapsed, enter expands)"
-		} else if rw.reviewed {
-			label += "  (enter collapses)"
-		}
-		style := st.fileHeader
+		bg := st.headingBg
 		if state.cursor {
-			style = style.Background(r.cursorBg(state))
+			bg = r.cursorBg(state)
 		}
-		return []string{style.Render(fit(label, width, nil))}
+		on := func(style lipgloss.Style, s string) string { return style.Background(bg).Render(s) }
+		line := on(st.fileHeader, label)
+		if rw.reviewed {
+			line += on(st.fileHeader, "  ") + on(st.badgeOpen.Bold(true), "reviewed")
+		}
+		switch {
+		case rw.collapsed:
+			line += on(st.fileHeader, "  ") + on(st.muted, "collapsed, ") + on(st.helpKey, "enter") + on(st.helpDesc, " expands")
+		case rw.reviewed:
+			line += on(st.fileHeader, "  ") + on(st.helpKey, "enter") + on(st.helpDesc, " collapses")
+		}
+		return []string{fit(ansi.Truncate(line, width, ""), width, bg)}
 	case rowHunk:
 		h := rw.hunk
 		label := fmt.Sprintf(" @@ -%d,%d +%d,%d @@ %s", h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Section)

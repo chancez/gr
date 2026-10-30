@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/store"
@@ -23,6 +24,34 @@ type navItem struct {
 	// heading styles entries that are not commits or files, such as the overview, so they read as
 	// peers of the commit list rather than parents of it.
 	heading bool
+	// done dims an entry that is marked reviewed, so finished work recedes at a glance.
+	done bool
+}
+
+// colorBadge colors a badge's parts: the open thread count, the draft mark, and the reviewed
+// mark.
+func colorBadge(st styles, badge string) string {
+	var parts []string
+	for _, p := range strings.Fields(badge) {
+		switch {
+		case strings.HasPrefix(p, "("):
+			parts = append(parts, lipgloss.NewStyle().Foreground(st.accent).Render(p))
+		default:
+			var b strings.Builder
+			for _, r := range p {
+				switch string(r) {
+				case markReviewed:
+					b.WriteString(st.badgeOpen.Bold(true).Render(markReviewed))
+				case markDraft:
+					b.WriteString(st.badgeWarn.Bold(true).Render(markDraft))
+				default:
+					b.WriteRune(r)
+				}
+			}
+			parts = append(parts, b.String())
+		}
+	}
+	return strings.Join(parts, " ")
 }
 
 // truncateLeft keeps the end of s, marking the cut with "...".
@@ -100,18 +129,26 @@ func (it navItem) render(st styles, width int, selected, focused bool) string {
 		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
 	}
 	text := fit(label, room, nil)
+	badge := ""
 	if it.badge != "" {
-		text += " " + it.badge
+		badge = " " + it.badge
 	}
+	// Selected and heading entries take one style over the whole line, so their badge is plain.
 	switch {
 	case selected && focused:
-		return st.navFocused.Render(fit(text, width, nil))
+		return st.navFocused.Render(fit(text+badge, width, nil))
 	case selected:
-		return st.navSelected.Render(fit(text, width, nil))
+		return st.navSelected.Render(fit(text+badge, width, nil))
 	case it.heading:
-		return st.navHeading.Render(fit(text, width, nil))
+		return st.navHeading.Render(fit(text+badge, width, nil))
 	}
-	return fit(text, width, nil)
+	if it.done {
+		text = st.muted.Render(text)
+	}
+	if badge != "" {
+		badge = " " + colorBadge(st, it.badge)
+	}
+	return fit(text+badge, width, nil)
 }
 
 func (m *model) viewLabel(v view) string {
@@ -190,7 +227,8 @@ func (m *model) buildNav() {
 	for vi, v := range m.views {
 		it := navItem{label: m.viewLabel(v), view: vi, file: -1, heading: v.kind != viewCommit}
 		if v.kind == viewCommit || v.kind == viewDiff {
-			it.badge = marks(m.viewReviewed(v), m.draftThreads(v, "") > 0)
+			it.done = m.viewReviewed(v)
+			it.badge = marks(it.done, m.draftThreads(v, "") > 0)
 		}
 		m.viewsNav.items = append(m.viewsNav.items, it)
 	}
@@ -210,6 +248,7 @@ func (m *model) buildNav() {
 		}
 		m.filesNav.items = append(m.filesNav.items, navItem{
 			prefix: statusLetter(f.Status) + " ", label: fileLabel(f), badge: badge, view: m.current, file: fi,
+			done: m.fileReviewed(v, fi),
 		})
 	}
 	if keep >= 0 && keep < len(m.filesNav.items) {
