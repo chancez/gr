@@ -1297,7 +1297,7 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.main.reader {
-		m.main.readerScroll(delta)
+		m.main.readerWheel(delta)
 	} else {
 		m.main.scroll(delta)
 	}

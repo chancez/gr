@@ -268,6 +268,9 @@ func (p *pane) readerNext() {
 	if len(p.items) == 0 {
 		return
 	}
+	if p.pickVisible() {
+		return
+	}
 	cur := p.items[p.item]
 	if cur.end > p.offset+p.height {
 		// Scroll at most to where the item's end shows.
@@ -285,6 +288,9 @@ func (p *pane) readerNext() {
 // previous item.
 func (p *pane) readerPrev() {
 	if len(p.items) == 0 {
+		return
+	}
+	if p.pickVisible() {
 		return
 	}
 	cur := p.items[p.item]
@@ -334,11 +340,29 @@ func (p *pane) readerSelect(i int) {
 	p.placeItem()
 }
 
-// readerScroll scrolls n lines and selects the item at the reading position.
+// readerScroll scrolls n lines and selects the item at the reading position, for paging keys.
 func (p *pane) readerScroll(n int) {
 	p.offset += n
 	p.clamp()
 	p.selectAt(p.offset + p.margin())
+}
+
+// readerWheel scrolls n lines and leaves the selection alone, for the mouse wheel, so scrolling
+// to look around does not lose your place.
+func (p *pane) readerWheel(n int) {
+	p.offset += n
+	p.clamp()
+}
+
+// pickVisible selects the item at the reading position when the selected one has scrolled out of
+// view, as after using the mouse wheel, and reports whether it did.
+func (p *pane) pickVisible() bool {
+	cur := p.items[p.item]
+	if cur.end > p.offset && cur.start < p.offset+p.height {
+		return false
+	}
+	p.selectAt(p.offset + p.margin())
+	return true
 }
 
 // selectAt selects the item covering line, else the first one starting below it, else the last.

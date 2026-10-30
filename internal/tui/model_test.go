@@ -1369,3 +1369,28 @@ func TestDragSidebarSplit(t *testing.T) {
 		t.Errorf("click on the first file after resizing: focus %d pos %d", e.m.focus, e.m.filesNav.pos)
 	}
 }
+
+func TestWheelKeepsTheSelection(t *testing.T) {
+	e, _ := readerEnv(t, 20)
+	p := &e.m.main
+	e.press("g", "j")
+	selected := p.item
+	nw, _, _ := e.m.layoutSizes()
+	wheel := func(b tea.MouseButton) { e.m.Update(tea.MouseWheelMsg{X: nw + 5, Y: 5, Button: b}) }
+	wheel(tea.MouseWheelDown)
+	if p.item != selected {
+		t.Errorf("a wheel step changed the selection from %d to %d", selected, p.item)
+	}
+	// Scroll the selection out of view, then j picks the comment at the top instead of jumping back.
+	for range 20 {
+		wheel(tea.MouseWheelDown)
+	}
+	offset := p.offset
+	e.press("j")
+	if p.offset != offset {
+		t.Errorf("j after the wheel scrolled from %d to %d, want the view kept", offset, p.offset)
+	}
+	if it := p.items[p.item]; it.end <= p.offset || it.start >= p.offset+p.height {
+		t.Errorf("j selected item %d, which is out of view", p.item)
+	}
+}
