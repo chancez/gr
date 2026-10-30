@@ -705,6 +705,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowLine {
 			p.anchor = p.cursor
 		}
+	case key.Matches(msg, k.OpenThread):
+		if m.views[m.current].kind == viewOverview && p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+			m.openThread(*p.rows[p.cursor].thread)
+		}
 	case key.Matches(msg, k.Filter):
 		if m.views[m.current].kind == viewOverview {
 			m.filter = (m.filter + 1) % filterCount
@@ -712,11 +716,7 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setStatus("showing %s threads", m.filter)
 		}
 	case key.Matches(msg, k.Open):
-		if m.views[m.current].kind == viewOverview {
-			if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
-				m.openThread(*p.rows[p.cursor].thread)
-			}
-		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
+		if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
 			m.fold(foldOpen)
@@ -1298,7 +1298,7 @@ func (m *model) render() string {
 		return ""
 	}
 	if m.mode == modeHelp {
-		return m.help.FullHelpView(m.keys.FullHelp())
+		return m.renderHelp()
 	}
 	if m.data == nil {
 		msg := "loading..."
@@ -1367,9 +1367,8 @@ func (m *model) renderStatus() string {
 	if m.main.anchor >= 0 {
 		left += st.badgeWarn.Render(" selecting")
 	}
-	// Fit the hints in what the left side leaves, dropping trailing ones with "...".
-	m.help.SetWidth(max(m.width-lipgloss.Width(left)-2, 10))
-	right := m.help.ShortHelpView(m.keys.ShortHelp())
+	// Fit the hints in what the left side leaves, keeping help and quit.
+	right := m.renderHints(m.shortHelp(), max(m.width-lipgloss.Width(left)-2, 10))
 	gap := max(m.width-lipgloss.Width(left)-lipgloss.Width(right)-1, 1)
 	return fit(st.statusBar.Render(left)+strings.Repeat(" ", gap)+right, m.width, nil)
 }

@@ -24,6 +24,7 @@ type keyMap struct {
 	NextHunk     key.Binding
 	PrevHunk     key.Binding
 	Filter       key.Binding
+	OpenThread   key.Binding
 	Fold         key.Binding
 	FoldAll      key.Binding
 	Search       key.Binding
@@ -80,7 +81,8 @@ func defaultKeys() keyMap {
 		PrevChange:   key.NewBinding(key.WithKeys("(")),
 		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
 		PrevHunk:     key.NewBinding(key.WithKeys("K")),
-		Filter:       key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "filter overview threads")),
+		Filter:       key.NewBinding(key.WithKeys("F"), key.WithHelp("F", "filter threads")),
+		OpenThread:   key.NewBinding(key.WithKeys("o"), key.WithHelp("o", "open thread in its diff")),
 		Fold:         key.NewBinding(key.WithKeys("z"), key.WithHelp("zo/zc/za", "open/close/toggle fold")),
 		// Help only: z sequences are handled as a pending prefix.
 		FoldAll:      key.NewBinding(key.WithKeys("zR"), key.WithHelp("zR/zM", "open/close all folds")),
@@ -113,20 +115,5 @@ func defaultKeys() keyMap {
 		Cancel:       key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 		Save:         key.NewBinding(key.WithKeys("ctrl+s"), key.WithHelp("ctrl+s", "save")),
 		ExternalEdit: key.NewBinding(key.WithKeys("ctrl+e"), key.WithHelp("ctrl+e", "open $EDITOR")),
-	}
-}
-
-// ShortHelp is shown in the status bar.
-func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Comment, k.Reply, k.Resolve, k.Reviewed, k.Submit, k.Help, k.Quit}
-}
-
-// FullHelp is shown with ?.
-func (k keyMap) FullHelp() [][]key.Binding {
-	return [][]key.Binding{
-		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextChange, k.NextThread, k.Search, k.SearchNext, k.Fold, k.FoldAll, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
-		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
-		{k.Filter, k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
 }

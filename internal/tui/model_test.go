@@ -768,11 +768,11 @@ func TestStatusExpires(t *testing.T) {
 		t.Fatal("status cleared early")
 	}
 	header := ansi.Strip(strings.Split(e.screen(), "\n")[0])
-	if !strings.HasSuffix(header, " submitted ") || !strings.Contains(ansi.Strip(e.m.renderStatus()), "c comment") {
+	if !strings.HasSuffix(header, " submitted ") || !strings.Contains(ansi.Strip(e.m.renderStatus()), "q quit") {
 		t.Fatalf("status not in the title bar beside intact hints: header %q, bar %q", header, ansi.Strip(e.m.renderStatus()))
 	}
 	e.m.expireStatus(e.m.statusAt.Add(statusTTL))
-	if e.m.status != "" || !strings.Contains(ansi.Strip(e.m.renderStatus()), "c comment") {
+	if e.m.status != "" || !strings.Contains(ansi.Strip(e.m.renderStatus()), "q quit") {
 		t.Errorf("after expiry status = %q, bar = %q", e.m.status, ansi.Strip(e.m.renderStatus()))
 	}
 
@@ -792,12 +792,8 @@ func TestKeyHintsFit(t *testing.T) {
 	for _, width := range []int{120, 80} {
 		e.m.Update(tea.WindowSizeMsg{Width: width, Height: 40})
 		bar := strings.TrimRight(ansi.Strip(e.m.renderStatus()), " ")
-		whole := strings.HasSuffix(bar, "...")
-		for _, b := range e.m.keys.ShortHelp() {
-			whole = whole || strings.HasSuffix(bar, b.Help().Key+" "+b.Help().Desc)
-		}
-		if !whole {
-			t.Errorf("width %d: hints cut mid-item: %q", width, bar)
+		if !strings.HasSuffix(bar, "? help | q quit") {
+			t.Errorf("width %d: help and quit not kept: %q", width, bar)
 		}
 	}
 	e.m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
@@ -846,9 +842,9 @@ func TestConversationView(t *testing.T) {
 		t.Errorf("addressed filter:\n%s", screen)
 	}
 
-	// enter opens the line thread in its commit.
+	// o opens the line thread in its commit.
 	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == line.ID })
-	e.press("enter")
+	e.press("o")
 	v := e.m.views[e.m.current]
 	cur := e.m.main.rows[e.m.main.cursor]
 	if v.kind != viewCommit || v.commit.SHA != commit || cur.kind != rowThread || cur.thread.ID != line.ID {
@@ -960,5 +956,62 @@ func TestOverviewScrollsByLine(t *testing.T) {
 	e.press("g", "t")
 	if r := p.rows[p.cursor]; r.kind != rowThread {
 		t.Errorf("t selected %+v", r)
+	}
+}
+
+func TestContextualHelp(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
+	bar := func() string { return ansi.Strip(e.m.renderStatus()) }
+
+	e.openNav("Overview")
+	if !strings.Contains(bar(), "o open in diff") || !strings.Contains(bar(), "enter expand") {
+		t.Errorf("overview hints = %q", bar())
+	}
+	e.press("h")
+	if !strings.Contains(bar(), "enter/l open") {
+		t.Errorf("sidebar hints = %q", bar())
+	}
+	e.press("l")
+	e.openNav("say hello")
+	e.cursorTo(addedLine)
+	if !strings.Contains(bar(), "c comment") || !strings.Contains(bar(), "v select lines") {
+		t.Errorf("diff line hints = %q", bar())
+	}
+
+	e.press("?")
+	help := ansi.Strip(e.m.render())
+	for _, want := range []string{"Diff (here)", "Overview", "Sidebar", "Folds", "zo/zc/za"} {
+		if !strings.Contains(help, want) {
+			t.Errorf("help missing %q:\n%s", want, help)
+		}
+	}
+	if strings.Index(help, "Diff (here)") > strings.Index(help, "Sidebar") {
+		t.Error("the current context is not listed first")
+	}
+}
+
+func TestOverviewEnterExpandsResolved(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "done?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SetThreadState(ctx, v.ID, store.ThreadResolved); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	if !e.m.main.rows[e.m.main.cursor].collapsed {
+		t.Fatal("resolved thread not collapsed")
+	}
+	e.press("enter")
+	if e.m.main.rows[e.m.main.cursor].collapsed {
+		t.Error("enter did not expand the resolved thread in the overview")
 	}
 }
