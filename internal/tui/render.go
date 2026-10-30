@@ -50,16 +50,21 @@ type rowState struct {
 func (r *renderer) hunkMarker(state rowState) string {
 	if state.activeHunk {
 		// A solid cell rather than "|", which would merge with the pane divider beside it.
-		return lipgloss.NewStyle().Background(r.st.accent).Render(" ")
+		return r.th.draw(surfActiveHunk, 1)
 	}
 	return " "
 }
 
-func (r *renderer) cursorBg(state rowState) color.Color {
+// cursorSurface is the cursor's surface, faint when the main pane does not have focus.
+func cursorSurface(state rowState) surface {
 	if state.dim {
-		return r.st.dimCursorBg
+		return surfCursorDim
 	}
-	return r.st.cursorBg
+	return surfCursor
+}
+
+func (r *renderer) cursorBg(state rowState) color.Color {
+	return r.th.surfaces[cursorSurface(state)].bg
 }
 
 // renderMarkdown renders a comment body, falling back to plain text.
@@ -158,7 +163,6 @@ func fileLabel(f git.FileDiff) string {
 
 // renderRow draws one row at width. d supplies thread draft state.
 func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state rowState) []string {
-	st := r.st
 	r.segments = nil
 	switch rw.kind {
 	case rowText:
@@ -174,30 +178,29 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
 			label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
 		}
-		bg := st.headingBg
+		surf := surfPlain
 		if state.cursor {
-			bg = r.cursorBg(state)
+			surf = cursorSurface(state)
 		}
-		on := func(style lipgloss.Style, s string) string { return style.Background(bg).Render(s) }
-		line := on(st.fileHeader, label)
+		spans := []span{sp(elPath, label)}
 		if rw.reviewed {
-			line += on(st.fileHeader, "  ") + on(st.badgeOpen.Bold(true), "reviewed")
+			spans = append(spans, sp(elPath, "  "), sp(elReviewed, "reviewed", strong))
 		}
 		switch {
 		case rw.collapsed:
-			line += on(st.fileHeader, "  ") + on(st.muted, "collapsed, ") + on(st.helpKey, "enter") + on(st.helpDesc, " expands")
+			spans = append(spans, sp(elPath, "  "), sp(elMuted, "collapsed, "), sp(elKey, "enter"), sp(elKeyDesc, " expands"))
 		case rw.reviewed:
-			line += on(st.fileHeader, "  ") + on(st.helpKey, "enter") + on(st.helpDesc, " collapses")
+			spans = append(spans, sp(elPath, "  "), sp(elKey, "enter"), sp(elKeyDesc, " collapses"))
 		}
-		return []string{fit(ansi.Truncate(line, width, ""), width, bg)}
+		return []string{r.th.draw(surf, width, spans...)}
 	case rowHunk:
 		h := rw.hunk
 		label := fmt.Sprintf(" @@ -%d,%d +%d,%d @@ %s", h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Section)
-		style := st.hunkHeader
+		surf := surfHunk
 		if state.cursor {
-			style = style.Background(r.cursorBg(state))
+			surf = cursorSurface(state)
 		}
-		return []string{r.hunkMarker(state) + style.Render(fit(label, width-1, nil))}
+		return []string{r.hunkMarker(state) + r.th.draw(surf, width-1, sp(elHunkRange, label))}
 	case rowLine:
 		f := v.files[rw.file]
 		if rw.line != nil {
@@ -223,37 +226,44 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return r.renderReview(d, rw, width, state)
 	case rowGap:
 		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
-		style := st.muted
+		surf := surfPlain
 		if state.cursor {
-			style = style.Background(r.cursorBg(state))
+			surf = cursorSurface(state)
 		}
-		return []string{" " + style.Render(fit(label, width-1, nil))}
+		return []string{" " + r.th.draw(surf, width-1, sp(elMuted, label))}
 	}
 	return nil
 }
 
-func (r *renderer) lineBg(kind git.LineKind, state rowState, cursorSide bool) color.Color {
+// lineSurface is where a diff line sits: the cursor or selection on the cursor's side, or its
+// added or deleted color.
+func lineSurface(kind git.LineKind, state rowState, cursorSide bool) surface {
 	switch {
 	case state.cursor && cursorSide:
-		return r.cursorBg(state)
+		return cursorSurface(state)
 	case state.selected && cursorSide:
-		return r.st.selectedBg
+		return surfSelected
 	case kind == git.LineAdded:
-		return r.st.addedBg
+		return surfAdded
 	case kind == git.LineDeleted:
-		return r.st.deletedBg
+		return surfDeleted
 	}
-	return nil
+	return surfPlain
 }
 
-func (r *renderer) mark(kind git.LineKind, bg color.Color) string {
+func mark(kind git.LineKind) span {
 	switch kind {
 	case git.LineAdded:
-		return r.st.addedMark.Background(bg).Render("+")
+		return sp(elMarkAdded, "+")
 	case git.LineDeleted:
-		return r.st.deletedMark.Background(bg).Render("-")
+		return sp(elMarkDeleted, "-")
 	}
-	return lipgloss.NewStyle().Background(bg).Render(" ")
+	return sp(elDefault, " ")
+}
+
+// code is a line's text, highlighted.
+func (r *renderer) code(f git.FileDiff, l git.Line) span {
+	return styledSpan(func(bg color.Color) string { return r.hl.line(f.Path(), expandTabs(l.Text), bg) })
 }
 
 func num(n, width int) string {
@@ -265,14 +275,8 @@ func num(n, width int) string {
 
 func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState) string {
 	gw := gutterWidth(f)
-	bg := r.lineBg(l.Kind, state, true)
-	gutter := r.st.gutter
-	if bg != nil {
-		gutter = gutter.Background(bg)
-	}
-	prefix := gutter.Render(num(l.OldLine, gw)+" "+num(l.NewLine, gw)+" ") + r.mark(l.Kind, bg) + lipgloss.NewStyle().Background(bg).Render(" ")
-	text := r.hl.line(f.Path(), expandTabs(l.Text), bg)
-	return fit(prefix+text, width, bg)
+	return r.th.draw(lineSurface(l.Kind, state, true), width,
+		sp(elGutter, num(l.OldLine, gw)+" "+num(l.NewLine, gw)+" "), mark(l.Kind), sp(elDefault, " "), r.code(f, l))
 }
 
 func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int, state rowState) string {
@@ -280,32 +284,25 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 	half := (width - 1) / 2
 	cell := func(l *git.Line, side anchor.Side, w int) string {
 		if l == nil {
-			return fit("", w, nil)
+			return r.th.draw(surfPlain, w)
 		}
 		n := l.NewLine
 		if side == anchor.SideOld {
 			n = l.OldLine
 		}
-		bg := r.lineBg(l.Kind, state, state.side == side)
-		gutter := r.st.gutter
-		if bg != nil {
-			gutter = gutter.Background(bg)
-		}
-		prefix := gutter.Render(num(n, gw)+" ") + r.mark(l.Kind, bg) + lipgloss.NewStyle().Background(bg).Render(" ")
-		return fit(prefix+r.hl.line(f.Path(), expandTabs(l.Text), bg), w, bg)
+		return r.th.draw(lineSurface(l.Kind, state, state.side == side), w,
+			sp(elGutter, num(n, gw)+" "), mark(l.Kind), sp(elDefault, " "), r.code(f, *l))
 	}
-	return cell(left, anchor.SideOld, half) + r.st.paneBorder.Render("|") + cell(right, anchor.SideNew, width-half-1)
+	return cell(left, anchor.SideOld, half) + r.th.render(surfPlain, sp(elBorder, "|")) + cell(right, anchor.SideNew, width-half-1)
 }
 
 func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []string {
-	st := r.st
-	head := st.commitHeader.Render("commit "+c.SHA) + "  " + st.muted.Render(termtext.Line(c.AuthorName+" <"+c.AuthorEmail+">")+"  "+c.AuthorTime.Format("2006-01-02 15:04"))
-	lines := []string{fit(head, width, nil)}
+	surf := surfPlain
 	if state.cursor {
-		bg := r.cursorBg(state)
-		lines[0] = lipgloss.NewStyle().Background(bg).Render(fit(head, width, bg))
+		surf = cursorSurface(state)
 	}
-	return lines
+	return []string{r.th.draw(surf, width, sp(elSHA, "commit "+c.SHA), sp(elDefault, "  "),
+		sp(elMuted, c.AuthorName+" <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
 }
 
 func stateBadge(st styles, t review.ThreadView, draft bool) string {
@@ -332,12 +329,11 @@ func stateBadge(st styles, t review.ThreadView, draft bool) string {
 
 // renderExcerpt draws the diff a thread is about, under a line naming where it is.
 func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
-	st := r.st
-	where := st.fileHeader.Render(fit(" "+describeLocation(loc), width, nil))
+	where := " " + describeLocation(loc)
 	if !e.Exact {
-		where = st.fileHeader.Render(fit(" "+describeLocation(loc)+"  (outdated: as it was)", width, nil))
+		where += "  (outdated: as it was)"
 	}
-	out := []string{where}
+	out := []string{r.th.draw(surfHeading, width, sp(elPath, where))}
 	// A one-hunk file sized to the excerpt's last line numbers, so the gutter is as wide as needed.
 	f := git.FileDiff{NewPath: e.Path}
 	if n := len(e.Lines); n > 0 {
