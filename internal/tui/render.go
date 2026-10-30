@@ -137,9 +137,9 @@ func statusLetter(s git.FileStatus) string {
 
 func fileLabel(f git.FileDiff) string {
 	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
-		return termtext.Line(f.OldPath) + " -> " + termtext.Line(f.NewPath)
+		return f.OldPath + " -> " + f.NewPath
 	}
-	return termtext.Line(f.Path())
+	return f.Path()
 }
 
 // renderRow draws one row at width. d supplies thread draft state.
@@ -428,7 +428,7 @@ func describeLocation(l store.Location) string {
 		parts = append(parts, "commit "+shortSHA(l.Commit))
 	}
 	if l.Path != "" {
-		loc := termtext.Line(l.Path)
+		loc := l.Path
 		if l.StartLine > 0 {
 			loc += ":" + strconv.Itoa(l.StartLine)
 			if l.EndLine != l.StartLine {

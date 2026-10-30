@@ -12,13 +12,14 @@ import (
 	"strings"
 	"time"
 
+	"image/color"
+
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
-	"image/color"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -371,12 +372,12 @@ const (
 )
 
 func (m *model) setStatus(format string, args ...any) {
-	m.status, m.statusErr, m.statusAt = termtext.Line(fmt.Sprintf(format, args...)), false, time.Now()
+	m.status, m.statusErr, m.statusAt = fmt.Sprintf(format, args...), false, time.Now()
 }
 
 func (m *model) setError(err error) {
 	slog.Warn("tui error", "err", err)
-	m.status, m.statusErr, m.statusAt = termtext.Line(err.Error()), true, time.Now()
+	m.status, m.statusErr, m.statusAt = err.Error(), true, time.Now()
 }
 
 // expireStatus clears a message once it has been shown long enough. A pending two-key command
