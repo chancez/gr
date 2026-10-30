@@ -581,3 +581,32 @@ func TestActiveHunkMarker(t *testing.T) {
 		t.Errorf("marked rows = %q, want the second hunk's header and its 7 lines", marked)
 	}
 }
+
+func TestChangeNavigation(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(12)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	// Two runs of changes in one hunk: line 3, and lines 6 and 7.
+	lines[2], lines[5], lines[6] = "changed 3", "changed 6", "changed 7"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("edit")
+	e.drain(e.m.loadCmd())
+	e.openNav("edit")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+
+	var starts []string
+	for range 3 {
+		e.press(")")
+		r := e.m.main.rows[e.m.main.cursor]
+		starts = append(starts, r.line.Text)
+	}
+	want := []string{"line 3", "line 6", "line 6"}
+	if strings.Join(starts, ",") != strings.Join(want, ",") {
+		t.Errorf(") visited %q, want %q", starts, want)
+	}
+	e.press("(")
+	if r := e.m.main.rows[e.m.main.cursor]; r.line.Text != "line 3" {
+		t.Errorf("( went to %q, want line 3", r.line.Text)
+	}
+}

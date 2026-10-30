@@ -19,6 +19,8 @@ type keyMap struct {
 	AllChanges   key.Binding
 	NextCommit   key.Binding
 	PrevCommit   key.Binding
+	NextChange   key.Binding
+	PrevChange   key.Binding
 	NextHunk     key.Binding
 	PrevHunk     key.Binding
 	NextThread   key.Binding
@@ -58,7 +60,7 @@ func defaultKeys() keyMap {
 		HalfPageUp:   key.NewBinding(key.WithKeys("ctrl+u", "u"), key.WithHelp("u", "half page up")),
 		HalfPageDown: key.NewBinding(key.WithKeys("ctrl+d", "d"), key.WithHelp("d", "half page down")),
 		PageUp:       key.NewBinding(key.WithKeys("pgup", "ctrl+b", "b"), key.WithHelp("b/pgup", "page up")),
-		PageDown:     key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/pgdn", "page down")),
+		PageDown:     key.NewBinding(key.WithKeys("pgdown", "ctrl+f", "f", "space"), key.WithHelp("f/space", "page down")),
 		Top:          key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "top")),
 		Bottom:       key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "bottom")),
 		Left:         key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h/l", "sidebar/diff, or diff side")),
@@ -68,6 +70,8 @@ func defaultKeys() keyMap {
 		AllChanges:   key.NewBinding(key.WithKeys("A"), key.WithHelp("A", "all changes and back")),
 		NextCommit:   key.NewBinding(key.WithKeys("}"), key.WithHelp("}/{", "next/prev commit")),
 		PrevCommit:   key.NewBinding(key.WithKeys("{")),
+		NextChange:   key.NewBinding(key.WithKeys(")"), key.WithHelp(")/(", "next/prev change")),
+		PrevChange:   key.NewBinding(key.WithKeys("(")),
 		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
 		PrevHunk:     key.NewBinding(key.WithKeys("K")),
 		NextThread:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev thread")),
@@ -108,7 +112,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextThread, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
+		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextChange, k.NextThread, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
 		{k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}

@@ -589,6 +589,10 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.jumpTo(1, func(r row) bool { return r.kind == rowFile })
 	case key.Matches(msg, k.PrevFile):
 		m.jumpTo(-1, func(r row) bool { return r.kind == rowFile })
+	case key.Matches(msg, k.NextChange):
+		m.jumpToIndex(1, m.isChangeStart)
+	case key.Matches(msg, k.PrevChange):
+		m.jumpToIndex(-1, m.isChangeStart)
 	case key.Matches(msg, k.NextHunk):
 		m.jumpTo(1, func(r row) bool { return r.kind == rowHunk })
 	case key.Matches(msg, k.PrevHunk):
@@ -686,13 +690,45 @@ func (m *model) stepCommit(dir int) bool {
 }
 
 func (m *model) jumpTo(dir int, match func(row) bool) {
+	m.jumpToIndex(dir, func(i int) bool { return match(m.main.rows[i]) })
+}
+
+func (m *model) jumpToIndex(dir int, match func(i int) bool) {
 	p := &m.main
 	for i := p.cursor + dir; i >= 0 && i < len(p.rows); i += dir {
-		if match(p.rows[i]) {
+		if match(i) {
 			p.jump(i)
 			return
 		}
 	}
+}
+
+// isChange reports whether a row shows an added or deleted line.
+func isChange(r row) bool {
+	if r.kind != rowLine {
+		return false
+	}
+	changed := func(l *git.Line) bool { return l != nil && l.Kind != git.LineContext }
+	if r.line != nil {
+		return changed(r.line)
+	}
+	return changed(r.left) || changed(r.right)
+}
+
+// isChangeStart reports whether row i starts a run of added and deleted lines. Threads between
+// changed lines do not split a run.
+func (m *model) isChangeStart(i int) bool {
+	rows := m.main.rows
+	if !isChange(rows[i]) {
+		return false
+	}
+	for j := i - 1; j >= 0; j-- {
+		if rows[j].kind == rowThread {
+			continue
+		}
+		return !isChange(rows[j]) || rows[j].hunk != rows[i].hunk
+	}
+	return true
 }
 
 func (m *model) cursorThread() (review.ThreadView, bool) {
