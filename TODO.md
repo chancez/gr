@@ -11,6 +11,8 @@
 
 ## TUI
 
+- A conversation view like GitHub's: every review, thread, and reply in order, each thread shown with
+  only the diff hunk or context around its anchor rather than whole files.
 - Comment on lines outside diff hunks, by expanding context.
 - Load commit diffs lazily. Every diff is loaded up front, so large branches are slow to open.
 - Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
