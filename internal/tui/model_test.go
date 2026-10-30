@@ -571,12 +571,17 @@ func TestActiveHunkMarker(t *testing.T) {
 	}
 	// The bar marks the second hunk's lines only: lines 25 to 30.
 	var marked []string
-	for _, l := range strings.Split(screen, "\n") {
-		_, main, ok := strings.Cut(l, "|")
-		if ok && strings.HasPrefix(main, "|") {
-			marked = append(marked, strings.TrimSpace(main[1:]))
+	e.m.main.visible(func(i int, state rowState) []string {
+		if state.activeHunk {
+			r := e.m.main.rows[i]
+			text := "@@"
+			if r.line != nil {
+				text = r.line.Text
+			}
+			marked = append(marked, text)
 		}
-	}
+		return e.m.renderMainRow(i, state)
+	})
 	if len(marked) != 8 || !strings.HasPrefix(marked[0], "@@") || !strings.Contains(marked[len(marked)-1], "line 30") {
 		t.Errorf("marked rows = %q, want the second hunk's header and its 7 lines", marked)
 	}
@@ -642,5 +647,81 @@ func TestSearch(t *testing.T) {
 	e.press("N")
 	if e.m.main.cursor != second {
 		t.Errorf("N went to %d, want %d", e.m.main.cursor, second)
+	}
+}
+
+func TestGaps(t *testing.T) {
+	f := git.FileDiff{OldPath: "f", NewPath: "f", Hunks: []git.Hunk{
+		{OldStart: 5, OldLines: 3, NewStart: 5, NewLines: 4},
+		// Deletes old lines 20 and 21, after new line 20.
+		{OldStart: 20, OldLines: 2, NewStart: 20, NewLines: 0},
+	}}
+	got := gaps(f)
+	want := []gap{
+		{index: 0, start: 1, end: 4, offset: 0},
+		{index: 1, start: 9, end: 20, offset: -1},
+		{index: 2, start: 21, offset: 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("gaps = %+v, want %+v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("gaps = %+v, want %+v", got, want)
+		}
+	}
+	if gaps(git.FileDiff{NewPath: "added", Hunks: f.Hunks}) != nil {
+		t.Error("an added file has gaps")
+	}
+}
+
+func TestFolds(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(30)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	lines[1], lines[27] = "changed 2", "changed 28"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("edit both ends")
+	e.drain(e.m.loadCmd())
+	e.openNav("edit both ends")
+
+	// Lines 6 to 24 sit between the hunks, and there is nothing after line 30.
+	if !strings.Contains(e.screen(), "... 19 unchanged lines") {
+		t.Fatalf("no fold between hunks:\n%s", e.screen())
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowGap && r.gap.index == 1 })
+	e.press("z", "o")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowLine || r.line.Text != "line 6" || r.line.OldLine != 6 {
+		t.Fatalf("after zo, cursor on %+v, want line 6", r)
+	}
+	if strings.Contains(e.screen(), "19 unchanged") {
+		t.Error("fold still shown after zo")
+	}
+	e.press("c")
+	if !strings.Contains(e.m.status, "cannot be commented") {
+		t.Errorf("commenting on folded context: status %q", e.m.status)
+	}
+	e.press("j", "z", "c")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowGap {
+		t.Errorf("after zc, cursor on %+v, want the closed fold", r)
+	}
+
+	// The trailing fold opens to nothing when the last hunk reaches the end of the file.
+	e.press("z", "R")
+	for _, r := range e.m.main.rows {
+		if r.kind == rowGap {
+			t.Errorf("fold left closed after zR: %+v", *r.gap)
+		}
+	}
+	e.press("z", "M")
+	for _, r := range e.m.main.rows {
+		if r.kind == rowLine {
+			t.Fatalf("line shown after zM: %+v", r)
+		}
+	}
+	e.press("z", "R")
+	if !strings.Contains(e.screen(), "line 15") {
+		t.Errorf("zR did not open the file and its folds:\n%s", e.screen())
 	}
 }

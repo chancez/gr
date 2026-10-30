@@ -24,6 +24,8 @@ type view struct {
 	kind   viewKind
 	commit git.Commit
 	files  []git.FileDiff
+	// newRev is the revision the new side of files is read from, for folded context.
+	newRev string
 }
 
 func (v view) key() string {
@@ -40,14 +42,15 @@ func (v view) readOnly() bool { return v.kind == viewInterdiff }
 // buildViews orders the sidebar: the overview, what changed since the last review, the commits
 // oldest first, then the whole diff.
 func buildViews(d *changeData) []view {
+	head := d.revision.HeadSHA
 	views := []view{{kind: viewOverview}}
 	if d.interdiff != nil {
-		views = append(views, view{kind: viewInterdiff, files: d.interdiff})
+		views = append(views, view{kind: viewInterdiff, files: d.interdiff, newRev: head})
 	}
 	for _, c := range d.commits {
-		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA]})
+		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA], newRev: c.SHA})
 	}
-	return append(views, view{kind: viewDiff, files: d.diffFiles})
+	return append(views, view{kind: viewDiff, files: d.diffFiles, newRev: head})
 }
 
 type rowKind int
@@ -60,6 +63,8 @@ const (
 	rowHunk
 	rowLine
 	rowThread
+	// rowGap is a closed fold of unchanged lines.
+	rowGap
 )
 
 // row is one selectable or static block of the main pane.
@@ -77,6 +82,8 @@ type row struct {
 	// reviewed and collapsed describe a rowFile.
 	reviewed  bool
 	collapsed bool
+	// gap is set on a rowGap, and on the lines of an open gap.
+	gap *gap
 }
 
 func (r row) selectable() bool { return r.kind != rowText }
@@ -99,6 +106,8 @@ func (r row) key(files []git.FileDiff) string {
 	case rowLine:
 		old, new := lineNumbers(r)
 		return fmt.Sprintf("line:%s:%d:%d", path, old, new)
+	case rowGap:
+		return fmt.Sprintf("gap:%s:%d", path, r.gap.index)
 	}
 	return ""
 }
@@ -130,6 +139,10 @@ type rowOptions struct {
 	collapsed func(file int) bool
 	// reviewed reports whether a file is marked reviewed.
 	reviewed func(file int) bool
+	// gapOpen reports whether a fold of unchanged lines is open.
+	gapOpen func(file, gap int) bool
+	// content returns a file's new-side lines, for open folds.
+	content func(file int) []string
 }
 
 // buildRows lays out a file view, placing each thread after the line it ends on.
@@ -191,8 +204,29 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 			}
 			threadRows(fi, ts)
 		}
+		fileGaps := gaps(*f)
+		gapRows := func(before int) {
+			for gi := range fileGaps {
+				g := &fileGaps[gi]
+				if g.index != before {
+					continue
+				}
+				if opts.gapOpen == nil || !opts.gapOpen(fi, g.index) || opts.content == nil {
+					rows = append(rows, row{kind: rowGap, file: fi, gap: g})
+					continue
+				}
+				for _, l := range gapLines(*g, opts.content(fi)) {
+					if split {
+						rows = append(rows, row{kind: rowLine, file: fi, left: &l, right: &l, gap: g})
+					} else {
+						rows = append(rows, row{kind: rowLine, file: fi, line: &l, gap: g})
+					}
+				}
+			}
+		}
 		for hi := range f.Hunks {
 			h := &f.Hunks[hi]
+			gapRows(hi)
 			rows = append(rows, row{kind: rowHunk, file: fi, hunk: h})
 			if split {
 				for _, p := range pairLines(h.Lines) {
@@ -213,6 +247,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 				after(anchor.SideNew, f.NewPath, l.NewLine)
 			}
 		}
+		gapRows(len(f.Hunks))
 		// Threads whose lines are not in this diff, which should not happen for current threads.
 		for _, t := range lineThreads {
 			loc := t.Location

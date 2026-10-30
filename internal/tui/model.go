@@ -98,6 +98,12 @@ type model struct {
 	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
 	returnView int
+	// openGaps holds the open folds of unchanged lines, keyed by gapKey.
+	openGaps map[string]bool
+	// contents caches files' lines by revision and path, for open folds.
+	contents map[string][]string
+	// pending is the first key of a two-key command, such as z in zo.
+	pending string
 	// expanded overrides whether a file is collapsed, keyed by view and path.
 	expanded map[string]bool
 	main     pane
@@ -149,7 +155,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 	}
 	m := &model{
 		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, returnView: -1, lastSidebar: focusFiles,
+		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, contents: map[string][]string{}, returnView: -1, lastSidebar: focusFiles,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -382,6 +388,8 @@ func (m *model) rebuildMain() {
 			split:     m.split,
 			collapsed: func(f int) bool { return m.collapsed(v, f) },
 			reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
+			gapOpen:   func(f, g int) bool { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
+			content:   func(f int) []string { return m.fileContent(v, f) },
 		})
 	}
 	m.main.anchor = -1
@@ -407,6 +415,9 @@ func (m *model) setView(i int) {
 
 func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := m.keys
+	if m.pending != "" {
+		return m.pendingKey(msg)
+	}
 	switch {
 	case key.Matches(msg, k.Quit):
 		return m, tea.Quit
@@ -459,6 +470,12 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch {
+	case key.Matches(msg, k.Fold):
+		if m.data != nil && m.views[m.current].kind != viewOverview {
+			m.pending = "z"
+			m.setStatus("z: o open, c close, a toggle, R open all, M close all")
+		}
+		return m, nil
 	case key.Matches(msg, k.Search):
 		if m.data == nil {
 			return m, nil
@@ -634,6 +651,8 @@ func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.setFocus(focusViews)
 		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
 			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
+		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
+			m.fold(foldOpen)
 		}
 	case key.Matches(msg, k.Comment):
 		return m.startComment(false)
@@ -817,6 +836,9 @@ func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error
 	}
 	if cur.file < 0 {
 		return nt, "", errors.New("move to a file or line to comment")
+	}
+	if cur.gap != nil {
+		return nt, "", errors.New("unchanged lines outside the diff cannot be commented on yet")
 	}
 	f := v.files[cur.file]
 	if cur.kind == rowFile || cur.kind == rowHunk || cur.kind == rowThread || whole {

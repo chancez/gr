@@ -44,7 +44,8 @@ type rowState struct {
 // hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
 func (r *renderer) hunkMarker(state rowState) string {
 	if state.activeHunk {
-		return lipgloss.NewStyle().Bold(true).Foreground(r.st.accent).Render("|")
+		// A solid cell rather than "|", which would merge with the pane divider beside it.
+		return lipgloss.NewStyle().Background(r.st.accent).Render(" ")
 	}
 	return " "
 }
@@ -195,6 +196,13 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
 	case rowThread:
 		return r.renderThread(d, *rw.thread, width, state.cursor)
+	case rowGap:
+		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
+		style := st.muted
+		if state.cursor {
+			style = style.Background(r.cursorBg(state))
+		}
+		return []string{" " + style.Render(fit(label, width-1, nil))}
 	}
 	return nil
 }
