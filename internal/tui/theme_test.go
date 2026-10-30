@@ -9,7 +9,11 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"charm.land/lipgloss/v2"
+
+	"github.com/chancez/gr/internal/store"
 )
 
 func TestThemeDraw(t *testing.T) {
@@ -91,5 +95,22 @@ func TestStylesComeFromTheRegistry(t *testing.T) {
 			}
 			return true
 		})
+	}
+}
+
+// A light background, learned after the screen is first drawn, recolors what is already built.
+func TestLightBackgroundRecolorsBuiltRows(t *testing.T) {
+	e := newTUIEnv(t)
+	if _, err := e.svc.Submit(t.Context(), e.chg, store.VerdictRequestChanges, "fix"); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#ffffff")})
+	light, dark := newTheme(false, ThemeDefault), newTheme(true, ThemeDefault)
+	want := light.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
+	stale := dark.render(surfPlain, sp(elVerdictRequestChanges, "requested changes"))
+	if out := e.m.render(); !strings.Contains(out, want) || strings.Contains(out, stale) {
+		t.Errorf("the overview keeps the dark theme's colors on a light background:\n%q", out)
 	}
 }

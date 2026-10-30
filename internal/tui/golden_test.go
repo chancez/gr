@@ -11,6 +11,7 @@ import (
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/chancez/gr/internal/gittest"
 	"github.com/chancez/gr/internal/review"
@@ -221,7 +222,11 @@ func TestGoldenScreens(t *testing.T) {
 	for _, theme := range []string{"dark", "light"} {
 		t.Run(theme, func(t *testing.T) {
 			e := goldenEnv(t)
-			e.m.setTheme(theme == "dark")
+			background := lipgloss.Color("#ffffff")
+			if theme == "dark" {
+				background = lipgloss.Color("#000000")
+			}
+			e.m.Update(tea.BackgroundColorMsg{Color: background})
 
 			e.openNav("Overview")
 			e.golden(theme + "-overview")
@@ -256,7 +261,7 @@ func TestGoldenScreens(t *testing.T) {
 	t.Run("colorblind", func(t *testing.T) {
 		e := goldenEnv(t)
 		e.m.theme = ThemeColorblind
-		e.m.setTheme(true)
+		e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#000000")})
 		e.openNav("All changes")
 		e.golden("colorblind-diff")
 	})

@@ -417,6 +417,8 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.BackgroundColorMsg:
 		m.setTheme(msg.IsDark())
+		// Rows drawn so far hold the old theme's renderer.
+		m.rebuildMain()
 		m.relayout(true)
 		return m, nil
 	case dataMsg:
