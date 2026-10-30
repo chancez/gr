@@ -3,6 +3,7 @@ package review_test
 import (
 	"errors"
 	"path/filepath"
+	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -648,4 +649,85 @@ func TestSubmitRefusesEmptyReviews(t *testing.T) {
 	if _, err := h.Submit(ctx, change, store.VerdictRequestChanges, ""); err != nil {
 		t.Errorf("review with only a draft reply: %v", err)
 	}
+}
+
+func TestDeletes(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	h, a := e.service(human), e.service(agent)
+	ctx := t.Context()
+	change, _ := e.ensure(h, "")
+
+	mine, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "mine"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	replied, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "will get a reply"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictComment, "summary"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := a.Reply(ctx, change, replied.ID, "a reply", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Others' threads, and threads others replied to, are refused.
+	if err := a.DeleteThread(ctx, mine.ID); err == nil {
+		t.Error("deleted someone else's thread")
+	}
+	if err := h.DeleteThread(ctx, replied.ID); err == nil {
+		t.Error("deleted a thread with someone else's reply")
+	}
+	if err := h.DeleteReview(ctx, change, 1); err == nil {
+		t.Error("deleted a review whose thread has someone else's reply")
+	}
+	// A thread only you wrote in goes, through its first comment.
+	if err := h.DeleteComment(ctx, mine.Comments[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.ThreadByRef(ctx, change, strconv.Itoa(mine.Seq)); err == nil {
+		t.Error("thread survived deleting its first comment")
+	}
+	// Deleting the summary thread clears the review's summary.
+	if err := h.DeleteThread(ctx, mustRef(t, h, change, "r1").ID); err != nil {
+		t.Fatal(err)
+	}
+	reviews, err := h.Reviews(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reviews[0].Body != "" {
+		t.Errorf("review summary after deleting its thread = %q", reviews[0].Body)
+	}
+
+	// A second review only you wrote in can be deleted, threads and all.
+	gone, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "second round"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.DeleteReview(ctx, change, 2); err == nil {
+		t.Error("deleted someone else's review")
+	}
+	if err := h.DeleteReview(ctx, change, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.ThreadByRef(ctx, change, strconv.Itoa(gone.Seq)); err == nil {
+		t.Error("the deleted review's thread survived")
+	}
+}
+
+func mustRef(t *testing.T, s *review.Service, change store.Change, ref string) review.ThreadView {
+	t.Helper()
+	v, err := s.ThreadByRef(t.Context(), change, ref)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return v
 }

@@ -410,19 +410,45 @@ func (a *app) editCommand() *cobra.Command {
 }
 
 func (a *app) deleteCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "delete <comment-id>",
-		Short: "Delete one of your comments; deleting a draft thread's first comment deletes the thread",
-		Args:  cobra.ExactArgs(1),
+	var cf changeFlags
+	var thread string
+	cmd := &cobra.Command{
+		Use:   "delete <comment-id> | --thread <ref>",
+		Short: "Delete one of your comments, or a thread you started",
+		Long: `Delete one of your comments, or with --thread a thread you started. Deleting a thread's first
+comment deletes the thread. A thread with replies from others cannot be deleted, so no one else's
+words are lost; edit your comment instead.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
-			svc, err := a.service(ctx)
+			if (thread == "") == (len(args) == 0) {
+				return fmt.Errorf("pass a comment id or --thread, one of them")
+			}
+			if thread == "" {
+				svc, err := a.service(ctx)
+				if err != nil {
+					return err
+				}
+				return svc.DeleteComment(ctx, args[0])
+			}
+			svc, change, _, err := a.resolveChange(ctx, cf, "")
 			if err != nil {
 				return err
 			}
-			return svc.DeleteComment(ctx, args[0])
+			t, err := svc.ThreadByRef(ctx, change, thread)
+			if err != nil {
+				return err
+			}
+			if err := svc.DeleteThread(ctx, t.ID); err != nil {
+				return err
+			}
+			fmt.Fprintf(a.stderr, "deleted thread %s\n", t.Label())
+			return nil
 		},
 	}
+	cf.register(cmd)
+	cmd.Flags().StringVar(&thread, "thread", "", "delete this thread, by ref")
+	return cmd
 }
 
 func (a *app) submitCommand() *cobra.Command {
@@ -479,18 +505,29 @@ func (a *app) submitCommand() *cobra.Command {
 
 func (a *app) discardCommand() *cobra.Command {
 	var cf changeFlags
+	var reviewSeq int
 	cmd := &cobra.Command{
 		Use:   "discard [target]",
-		Short: "Discard your draft review and everything in it",
-		Args:  cobra.MaximumNArgs(1),
+		Short: "Discard your draft review, or with --review delete a review you submitted",
+		Long: `Discard your draft review and everything in it. With --review N, delete review N, one you
+submitted, with its threads; that is refused when anyone else commented in them.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, change, _, err := a.resolveChange(cmd.Context(), cf, firstArg(args))
 			if err != nil {
 				return err
 			}
+			if reviewSeq > 0 {
+				if err := svc.DeleteReview(cmd.Context(), change, reviewSeq); err != nil {
+					return err
+				}
+				fmt.Fprintf(a.stderr, "deleted review #%d\n", reviewSeq)
+				return nil
+			}
 			return svc.Discard(cmd.Context(), change)
 		},
 	}
 	cf.register(cmd)
+	cmd.Flags().IntVar(&reviewSeq, "review", 0, "delete this submitted review of yours, by number")
 	return cmd
 }

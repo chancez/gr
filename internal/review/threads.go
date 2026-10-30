@@ -269,19 +269,81 @@ func (s *Service) DeleteComment(ctx context.Context, commentID string) error {
 			return err
 		}
 		if len(comments) > 0 && comments[0].ID == c.ID {
-			if c.ReviewID != t.ReviewID {
-				return errors.New("cannot delete the first comment of a thread")
+			// The first comment is the thread's start: deleting it deletes the thread.
+			return s.deleteThread(ctx, tx, t)
+		}
+		return tx.DeleteComment(ctx, c.ID)
+	})
+}
+
+// DeleteThread deletes a thread the author started, with its comments.
+func (s *Service) DeleteThread(ctx context.Context, threadID string) error {
+	return s.store.Tx(ctx, func(tx *store.Tx) error {
+		t, err := tx.GetThread(ctx, threadID)
+		if err != nil {
+			return err
+		}
+		return s.deleteThread(ctx, tx, t)
+	})
+}
+
+// deleteThread deletes a thread when the author started it and nobody else has commented in it, so
+// no one else's words are lost. Deleting a summary thread clears its review's summary.
+func (s *Service) deleteThread(ctx context.Context, tx *store.Tx, t store.Thread) error {
+	review, err := tx.GetReview(ctx, t.ReviewID)
+	if err != nil {
+		return err
+	}
+	if review.Author != s.author {
+		return fmt.Errorf("thread %s was started by %s, not %s", t.Label(), review.Author, s.author)
+	}
+	others, err := tx.CountOthersComments(ctx, t.ID, s.author)
+	if err != nil {
+		return err
+	}
+	if others > 0 {
+		return fmt.Errorf("thread %s has replies from others, so it cannot be deleted; edit your comment instead", t.Label())
+	}
+	if t.Summary {
+		if err := tx.SetSubmittedReviewBody(ctx, review.ID, ""); err != nil {
+			return err
+		}
+	}
+	return tx.DeleteThread(ctx, t.ID)
+}
+
+// DeleteReview deletes one of the author's submitted reviews with its threads and comments. It
+// refuses when anyone else has commented in its threads, so no one else's words are lost. A draft
+// is discarded with Discard.
+func (s *Service) DeleteReview(ctx context.Context, change store.Change, reviewSeq int) error {
+	return s.store.Tx(ctx, func(tx *store.Tx) error {
+		review, err := tx.ReviewBySeq(ctx, change.ID, reviewSeq)
+		if err != nil {
+			return err
+		}
+		if review.Author != s.author {
+			return fmt.Errorf("review #%d is by %s, not %s", review.Seq, review.Author, s.author)
+		}
+		if review.State != store.ReviewSubmitted {
+			return fmt.Errorf("review #%d is your draft; discard it instead", review.Seq)
+		}
+		threads, err := tx.ListThreads(ctx, store.ThreadFilter{ChangeID: change.ID, AllDrafts: true})
+		if err != nil {
+			return err
+		}
+		for _, t := range threads {
+			if t.ReviewID != review.ID {
+				continue
 			}
-			review, err := tx.GetReview(ctx, t.ReviewID)
+			others, err := tx.CountOthersComments(ctx, t.ID, s.author)
 			if err != nil {
 				return err
 			}
-			if review.State != store.ReviewDraft {
-				return errors.New("cannot delete the first comment of a submitted thread")
+			if others > 0 {
+				return fmt.Errorf("review #%d's thread %s has replies from others, so the review cannot be deleted", review.Seq, t.Label())
 			}
-			return tx.DeleteThread(ctx, t.ID)
 		}
-		return tx.DeleteComment(ctx, c.ID)
+		return tx.DeleteReview(ctx, review.ID)
 	})
 }
 

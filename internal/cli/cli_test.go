@@ -116,3 +116,25 @@ func TestParseLines(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteCommands(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "comment", "-m", "first")
+	e.run(human, "submit", "-m", "summary")
+	e.run(human, "comment", "-m", "second")
+	e.run(human, "submit", "--request-changes")
+
+	e.run(human, "delete", "--thread", "1")
+	e.run(human, "discard", "--review", "2")
+	var got []threadJSON
+	if err := json.Unmarshal([]byte(e.run(human, "threads", "--json")), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Ref != "r1" {
+		t.Errorf("threads after deleting #1 and review 2 = %+v, want only r1", got)
+	}
+}

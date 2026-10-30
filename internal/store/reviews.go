@@ -83,6 +83,13 @@ func (q queries) SetReviewBody(ctx context.Context, id, body string) error {
 		`UPDATE reviews SET body = ?, updated_at = ? WHERE id = ? AND state = 'draft'`, body, formatTime(q.now()), id)
 }
 
+// SetSubmittedReviewBody replaces a submitted review's summary, as when its summary thread is
+// deleted.
+func (q queries) SetSubmittedReviewBody(ctx context.Context, id, body string) error {
+	return q.execOne(ctx, "review "+id,
+		`UPDATE reviews SET body = ?, updated_at = ? WHERE id = ? AND state = 'submitted'`, body, formatTime(q.now()), id)
+}
+
 // SubmitReview publishes a draft review against a revision.
 func (q queries) SubmitReview(ctx context.Context, id, revisionID string, verdict Verdict, body string) error {
 	now := formatTime(q.now())
@@ -100,7 +107,16 @@ func (q queries) CountReviewComments(ctx context.Context, reviewID string) (int,
 	return n, err
 }
 
-// DeleteReview discards a draft review with its threads and comments.
+// DeleteReview deletes a review with its threads and comments.
 func (q queries) DeleteReview(ctx context.Context, id string) error {
-	return q.execOne(ctx, "draft review "+id, `DELETE FROM reviews WHERE id = ? AND state = 'draft'`, id)
+	return q.execOne(ctx, "review "+id, `DELETE FROM reviews WHERE id = ?`, id)
+}
+
+// CountOthersComments counts comments in a thread by anyone but author, drafts included.
+func (q queries) CountOthersComments(ctx context.Context, threadID string, author Author) (int, error) {
+	var n int
+	err := q.q.QueryRowContext(ctx,
+		`SELECT count(*) FROM comments WHERE thread_id = ? AND NOT (author_name = ? AND author_email = ?)`,
+		threadID, author.Name, author.Email).Scan(&n)
+	return n, err
 }
