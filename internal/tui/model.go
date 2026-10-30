@@ -13,6 +13,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -50,6 +51,7 @@ const (
 	modeVerdict
 	modeConfirmDiscard
 	modeHelp
+	modeSearch
 )
 
 type composeKind int
@@ -89,6 +91,9 @@ type model struct {
 	// navWidth is the sidebar width once dragged, or 0 for the default.
 	navWidth int
 	dragging bool
+	// search is the last search pattern, and searchInput the prompt while typing one.
+	search      string
+	searchInput textinput.Model
 	// lastSidebar is the sidebar section h returns to.
 	lastSidebar focus
 	// returnView is where the all-changes key goes back to.
@@ -276,6 +281,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeHelp:
 			m.mode = modeNormal
 			return m, nil
+		case modeSearch:
+			return m.searchKey(msg)
 		}
 		return m.normalKey(msg)
 	}
@@ -452,6 +459,21 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	switch {
+	case key.Matches(msg, k.Search):
+		if m.data == nil {
+			return m, nil
+		}
+		return m, m.openSearch()
+	case key.Matches(msg, k.SearchNext):
+		if m.data != nil {
+			m.searchStep(1)
+		}
+		return m, nil
+	case key.Matches(msg, k.SearchPrev):
+		if m.data != nil {
+			m.searchStep(-1)
+		}
+		return m, nil
 	case key.Matches(msg, k.AllChanges):
 		m.toggleAllChanges()
 		return m, nil
@@ -1163,6 +1185,8 @@ func (m *model) render() string {
 func (m *model) renderStatus() string {
 	st := m.r.st
 	switch m.mode {
+	case modeSearch:
+		return m.searchInput.View()
 	case modeVerdict:
 		return st.heading.Render("Submit review: ") + "[a]pprove  [r]equest changes  [c]omment  " + st.muted.Render("any other key cancels")
 	case modeConfirmDiscard:

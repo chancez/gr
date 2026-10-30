@@ -610,3 +610,37 @@ func TestChangeNavigation(t *testing.T) {
 		t.Errorf("( went to %q, want line 3", r.line.Text)
 	}
 }
+
+func TestSearch(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.press("/")
+	if e.m.mode != modeSearch {
+		t.Fatalf("mode after / = %d, want search", e.m.mode)
+	}
+	e.typeText("PRINTLN")
+	e.press("enter")
+	if !strings.Contains(e.m.status, "no match") {
+		t.Errorf("uppercase pattern matched case-insensitively: %q", e.m.status)
+	}
+	e.press("/")
+	e.typeText("println")
+	e.press("enter")
+	first := e.m.main.cursor
+	if r := e.m.main.rows[first]; r.line == nil || !strings.Contains(r.line.Text, "println") {
+		t.Fatalf("cursor after search on %+v", r)
+	}
+	if !strings.Contains(e.m.status, "match 1 of 2") {
+		t.Errorf("status = %q", e.m.status)
+	}
+	e.press("n")
+	second := e.m.main.cursor
+	e.press("n")
+	if second == first || e.m.main.cursor != first || !strings.Contains(e.m.status, "wrapped") {
+		t.Errorf("n did not visit both matches and wrap: %d %d %d %q", first, second, e.m.main.cursor, e.m.status)
+	}
+	e.press("N")
+	if e.m.main.cursor != second {
+		t.Errorf("N went to %d, want %d", e.m.main.cursor, second)
+	}
+}

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -269,4 +270,32 @@ func pairLines(lines []git.Line) [][2]*git.Line {
 		}
 	}
 	return pairs
+}
+
+// searchText is the text of a row that search matches against.
+func (r row) searchText(files []git.FileDiff) string {
+	switch r.kind {
+	case rowFile:
+		return fileLabel(files[r.file])
+	case rowHunk:
+		return r.hunk.Section
+	case rowLine:
+		if r.line != nil {
+			return r.line.Text
+		}
+		var parts []string
+		for _, l := range []*git.Line{r.left, r.right} {
+			if l != nil {
+				parts = append(parts, l.Text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	case rowThread:
+		var parts []string
+		for _, c := range r.thread.Comments {
+			parts = append(parts, c.Author.Name, c.Body)
+		}
+		return strings.Join(parts, "\n")
+	}
+	return ""
 }

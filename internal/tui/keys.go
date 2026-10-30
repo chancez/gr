@@ -23,6 +23,9 @@ type keyMap struct {
 	PrevChange   key.Binding
 	NextHunk     key.Binding
 	PrevHunk     key.Binding
+	Search       key.Binding
+	SearchNext   key.Binding
+	SearchPrev   key.Binding
 	NextThread   key.Binding
 	PrevThread   key.Binding
 	Focus        key.Binding
@@ -74,8 +77,11 @@ func defaultKeys() keyMap {
 		PrevChange:   key.NewBinding(key.WithKeys("(")),
 		NextHunk:     key.NewBinding(key.WithKeys("J"), key.WithHelp("J/K", "next/prev hunk")),
 		PrevHunk:     key.NewBinding(key.WithKeys("K")),
-		NextThread:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev thread")),
-		PrevThread:   key.NewBinding(key.WithKeys("N")),
+		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+		SearchNext:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match")),
+		SearchPrev:   key.NewBinding(key.WithKeys("N")),
+		NextThread:   key.NewBinding(key.WithKeys("t"), key.WithHelp("t/T", "next/prev thread")),
+		PrevThread:   key.NewBinding(key.WithKeys("T")),
 		Focus:        key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "next pane")),
 		FocusBack:    key.NewBinding(key.WithKeys("shift+tab"), key.WithHelp("shift+tab", "previous pane")),
 		SectionDown:  key.NewBinding(key.WithKeys("ctrl+j"), key.WithHelp("ctrl+j/k", "files/changes list")),
@@ -112,7 +118,7 @@ func (k keyMap) ShortHelp() []key.Binding {
 func (k keyMap) FullHelp() [][]key.Binding {
 	return [][]key.Binding{
 		{k.Up, k.Down, k.HalfPageDown, k.HalfPageUp, k.PageDown, k.PageUp, k.Top, k.Bottom},
-		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextChange, k.NextThread, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
+		{k.AllChanges, k.NextCommit, k.NextFile, k.NextHunk, k.NextChange, k.NextThread, k.Search, k.SearchNext, k.Left, k.Focus, k.FocusBack, k.SectionDown, k.Open, k.Split, k.Reload},
 		{k.Select, k.Comment, k.FileComment, k.Reply, k.Resolve, k.Address, k.Edit, k.Delete},
 		{k.Reviewed, k.CommitDone, k.Submit, k.Discard, k.Save, k.ExternalEdit, k.Cancel, k.Help, k.Quit},
 	}
