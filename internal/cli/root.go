@@ -12,6 +12,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui"
 )
 
 // app holds global flags and the lazily opened service.
@@ -45,15 +46,28 @@ func Execute(ctx context.Context) int {
 
 func (a *app) rootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:   "gr",
 		Short: "Local code review for git",
+		Use:   "gr [target]",
 		Long: `gr reviews branches, commit ranges, and single commits locally, with GitHub-style
 reviews: threads on the change, a commit, a file, or lines, batched into a review with a verdict.
 
+Run without a command to review in the TUI. A target is a branch (default: the current one), a
+range A..B, or a commit.
+
 Commands that act on a change take --change to pick one by number or id prefix. Without it, they
 use the change for the current branch, creating it if needed.`,
+		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
+	}
+	var cf changeFlags
+	cf.register(root)
+	root.RunE = func(cmd *cobra.Command, args []string) error {
+		svc, change, _, err := a.resolveChange(cmd.Context(), cf, firstArg(args))
+		if err != nil {
+			return err
+		}
+		return tui.Run(cmd.Context(), svc, change)
 	}
 	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)

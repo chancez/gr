@@ -1,0 +1,314 @@
+package tui
+
+import (
+	"path/filepath"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/gittest"
+	"github.com/chancez/gr/internal/review"
+	"github.com/chancez/gr/internal/store"
+)
+
+type tuiEnv struct {
+	t     *testing.T
+	repo  *gittest.Repo
+	svc   *review.Service
+	m     *model
+	chg   store.Change
+	store *store.Store
+}
+
+func newTUIEnv(t *testing.T) *tuiEnv {
+	t.Helper()
+	r := gittest.New(t)
+	r.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hi\")", "}"))
+	r.Commit("root")
+	r.Git("checkout", "-q", "-b", "feature")
+	r.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hello\")", "}"))
+	r.Commit("say hello\n\nLonger explanation.")
+
+	st, err := store.Open(t.Context(), filepath.Join(t.TempDir(), "gr.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { st.Close() })
+	g, err := git.Open(t.Context(), r.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc, err := review.Open(t.Context(), st, g, store.Author{Name: "Human", Email: "h@example.com"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := svc.ParseTarget(t.Context(), "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	chg, _, err := svc.EnsureChange(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := newModel(t.Context(), svc, chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.close)
+	e := &tuiEnv{t: t, repo: r, svc: svc, m: m, chg: chg, store: st}
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	e.drain(m.loadCmd())
+	return e
+}
+
+// drain runs a command that is known to finish quickly and feeds its message back, following the
+// chain of data loads it starts.
+func (e *tuiEnv) drain(cmd tea.Cmd) {
+	e.t.Helper()
+	for cmd != nil {
+		msg := cmd()
+		switch msg.(type) {
+		case dataMsg, opMsg:
+			_, cmd = e.m.Update(msg)
+		default:
+			return
+		}
+	}
+}
+
+func keyMsg(s string) tea.KeyPressMsg {
+	switch s {
+	case "enter":
+		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "tab":
+		return tea.KeyPressMsg{Code: tea.KeyTab}
+	}
+	if rest, ok := strings.CutPrefix(s, "ctrl+"); ok {
+		return tea.KeyPressMsg{Code: rune(rest[0]), Mod: tea.ModCtrl}
+	}
+	r := rune(s[0])
+	return tea.KeyPressMsg{Code: r, Text: s}
+}
+
+// press sends keys, ignoring the commands they return.
+func (e *tuiEnv) press(keys ...string) {
+	for _, k := range keys {
+		e.m.Update(keyMsg(k))
+	}
+}
+
+// pressRun sends one key and drains its command.
+func (e *tuiEnv) pressRun(k string) {
+	e.t.Helper()
+	_, cmd := e.m.Update(keyMsg(k))
+	e.drain(cmd)
+}
+
+func (e *tuiEnv) screen() string { return ansi.Strip(e.m.render()) }
+
+func (e *tuiEnv) typeText(s string) {
+	for _, r := range s {
+		e.m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+}
+
+// openNav selects the sidebar item whose label contains s.
+func (e *tuiEnv) openNav(s string) {
+	e.t.Helper()
+	for i, it := range e.m.nav {
+		if strings.Contains(it.label, s) {
+			e.m.navPos = i
+			e.m.openNav()
+			return
+		}
+	}
+	e.t.Fatalf("no nav item %q", s)
+}
+
+func (e *tuiEnv) cursorTo(match func(row) bool) {
+	e.t.Helper()
+	for i, r := range e.m.main.rows {
+		if match(r) {
+			e.m.main.cursor = i
+			e.m.main.ensureVisible()
+			return
+		}
+	}
+	e.t.Fatal("no matching row")
+}
+
+func addedLine(r row) bool { return r.kind == rowLine && r.line != nil && r.line.Kind == git.LineAdded }
+
+func TestOverview(t *testing.T) {
+	e := newTUIEnv(t)
+	screen := e.screen()
+	for _, want := range []string{"#1 feature", "Overview", "Files changed (1)", "say hello", "Conversation"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("overview missing %q:\n%s", want, screen)
+		}
+	}
+}
+
+func TestCommentOnLineAndSubmit(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+	e.press("c")
+	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, "main.go:4") {
+		t.Fatalf("composer not open on main.go:4: mode %d title %q", e.m.mode, e.m.compose.title)
+	}
+	e.typeText("Why the change?")
+	e.pressRun("ctrl+s")
+
+	threads, err := e.svc.Threads(t.Context(), e.chg, review.ThreadFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 || threads[0].Comments[0].Body != "Why the change?" || threads[0].Location.StartLine != 4 {
+		t.Fatalf("threads after commenting = %+v", threads)
+	}
+	if screen := e.screen(); !strings.Contains(screen, "Why the change?") || !strings.Contains(screen, "draft") {
+		t.Errorf("thread not shown inline as a draft:\n%s", screen)
+	}
+
+	e.press("S")
+	if e.m.mode != modeVerdict {
+		t.Fatalf("mode after S = %d, want verdict", e.m.mode)
+	}
+	e.press("r")
+	e.typeText("Needs work")
+	e.pressRun("ctrl+s")
+	reviews, err := e.svc.Reviews(t.Context(), e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reviews) != 1 || reviews[0].State != store.ReviewSubmitted || reviews[0].Verdict != store.VerdictRequestChanges || reviews[0].Body != "Needs work" {
+		t.Errorf("reviews after submit = %+v", reviews)
+	}
+}
+
+func TestRangeSelection(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("Files changed")
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.NewLine == 3 })
+	e.press("v", "j", "j", "j", "c")
+	if !strings.Contains(e.m.compose.title, "main.go:3-5") {
+		t.Errorf("range comment title = %q, want main.go:3-5", e.m.compose.title)
+	}
+}
+
+func TestCommentOnCommitMessageAndThreadActions(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 0 })
+	e.press("c")
+	e.typeText("subject nit")
+	e.pressRun("ctrl+s")
+
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	e.press("r")
+	e.typeText("reply")
+	e.pressRun("ctrl+s")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread })
+	e.pressRun("x")
+
+	threads, err := e.svc.Threads(t.Context(), e.chg, review.ThreadFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 {
+		t.Fatalf("threads = %+v", threads)
+	}
+	got := threads[0]
+	if got.Location.Path != review.CommitMsgPath || got.State != store.ThreadResolved || len(got.Comments) != 2 {
+		t.Errorf("thread = %+v", got)
+	}
+}
+
+func TestSplitView(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("Files changed")
+	e.press("s")
+	screen := e.screen()
+	if !strings.Contains(screen, `println("hi")`) || !strings.Contains(screen, `println("hello")`) {
+		t.Fatalf("split view missing a side:\n%s", screen)
+	}
+	for _, line := range strings.Split(screen, "\n") {
+		if strings.Contains(line, `println("hi")`) && !strings.Contains(line, `println("hello")`) {
+			t.Errorf("old and new lines are not side by side: %q", line)
+		}
+	}
+}
+
+func TestLiveRefresh(t *testing.T) {
+	e := newTUIEnv(t)
+	// Another process comments.
+	other, err := review.Open(t.Context(), e.store, e.svc.Git(), store.Author{Name: "agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeChange, Body: "from the agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := other.Submit(t.Context(), e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	msg := e.m.refreshCmd()().(refreshMsg)
+	if !msg.changed {
+		t.Fatal("refresh did not notice another connection's write")
+	}
+	_, cmd := e.m.Update(msg)
+	e.drain(cmd)
+	if !strings.Contains(e.screen(), "from the agent") {
+		t.Errorf("refreshed overview missing the agent's comment:\n%s", e.screen())
+	}
+
+	// A new commit on the branch is noticed too.
+	e.repo.Write("new.go", "package main\n")
+	e.repo.Commit("add file")
+	msg = e.m.refreshCmd()().(refreshMsg)
+	if !msg.changed {
+		t.Fatal("refresh did not notice the branch moving")
+	}
+	_, cmd = e.m.Update(msg)
+	e.drain(cmd)
+	if e.m.data.revision.Seq != 2 {
+		t.Errorf("revision after the branch moved = %d, want 2", e.m.data.revision.Seq)
+	}
+}
+
+func TestPairLines(t *testing.T) {
+	lines := []git.Line{
+		{Kind: git.LineContext, Text: "a"},
+		{Kind: git.LineDeleted, Text: "b"},
+		{Kind: git.LineDeleted, Text: "c"},
+		{Kind: git.LineAdded, Text: "B"},
+		{Kind: git.LineContext, Text: "d"},
+		{Kind: git.LineAdded, Text: "e"},
+	}
+	var got [][2]string
+	for _, p := range pairLines(lines) {
+		var pair [2]string
+		for i, l := range p {
+			if l != nil {
+				pair[i] = l.Text
+			}
+		}
+		got = append(got, pair)
+	}
+	want := [][2]string{{"a", "a"}, {"b", "B"}, {"c", ""}, {"d", "d"}, {"", "e"}}
+	if len(got) != len(want) {
+		t.Fatalf("pairLines = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("pairLines = %v, want %v", got, want)
+			break
+		}
+	}
+}
