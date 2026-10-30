@@ -1,0 +1,23 @@
+{
+  "skill_name": "gr-review",
+  "evals": [
+    {
+      "id": 4,
+      "name": "review-branch",
+      "scenario": "review",
+      "prompt": "Use gr to review the feature branch and leave comments.",
+      "expected_output": "A submitted review requesting changes, with line comments on the off-by-ones in last (xs[len(xs)]) and window (range(len(xs) - n)), and a comment on the vague commit message \"update stuff\".",
+      "files": [
+        "../gr/evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "A review is submitted, with no draft left",
+        "The verdict requests changes",
+        "A comment is on stats.py line 10, last's xs[len(xs)]",
+        "A comment is on stats.py line 15, window's range(len(xs) - n)",
+        "A comment is on the commit message"
+      ]
+    }
+  ]
+}
