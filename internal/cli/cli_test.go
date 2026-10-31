@@ -273,3 +273,26 @@ func TestChangeBase(t *testing.T) {
 		t.Errorf("after change base parent 1, change list = %q, want %q", got, want)
 	}
 }
+
+func TestChangeDelete(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "review")
+	e.run(human, "change", "abandon")
+	e.run(human, "change", "delete", "1")
+	if got := e.run(human, "change", "list", "--all"); got != "" {
+		t.Errorf("change list after deleting = %q, want none", got)
+	}
+	e.run(human, "comment", "-m", "hm")
+	e.run(human, "submit")
+	if err := e.runErr(human, "change", "delete"); !strings.Contains(err.Error(), "force deletes them") {
+		t.Errorf("deleting a reviewed change: %v, want it to need --force", err)
+	}
+	e.run(human, "change", "delete", "--force")
+	if got := e.run(human, "change", "list", "--all"); got != "" {
+		t.Errorf("change list after deleting with --force = %q, want none", got)
+	}
+}

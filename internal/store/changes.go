@@ -163,6 +163,25 @@ func (q queries) SetChangeBase(ctx context.Context, id, base string) error {
 		`UPDATE changes SET base_branch = ?, updated_at = ? WHERE id = ?`, base, formatTime(q.now()), id)
 }
 
+// CountChangeContent counts a change's reviews and threads, drafts included.
+func (q queries) CountChangeContent(ctx context.Context, id string) (reviews, threads int, err error) {
+	err = q.q.QueryRowContext(ctx,
+		`SELECT (SELECT count(*) FROM reviews WHERE change_id = ?), (SELECT count(*) FROM threads WHERE change_id = ?)`,
+		id, id).Scan(&reviews, &threads)
+	return reviews, threads, err
+}
+
+// DeleteChange deletes a change with everything on it: its reviews, threads, comments, reviewed
+// marks, and revisions. Reviews and threads point at revisions, so they go first.
+func (q queries) DeleteChange(ctx context.Context, id string) error {
+	for _, table := range []string{"reviewed", "threads", "reviews", "revisions"} {
+		if _, err := q.q.ExecContext(ctx, `DELETE FROM `+table+` WHERE change_id = ?`, id); err != nil {
+			return err
+		}
+	}
+	return q.execOne(ctx, "change "+id, `DELETE FROM changes WHERE id = ?`, id)
+}
+
 const revisionColumns = `id, change_id, seq, base_sha, head_sha, created_at`
 
 func scanRevision(row interface{ Scan(...any) error }) (Revision, error) {

@@ -798,3 +798,35 @@ func TestSetBase(t *testing.T) {
 		}
 	}
 }
+
+// Deleting a change takes everything on it, but a change with reviews needs force.
+func TestDeleteChange(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	empty, _ := e.ensure(s, "")
+	if err := s.DeleteChange(ctx, empty, false); err != nil {
+		t.Fatalf("deleting a change with no reviews: %v", err)
+	}
+	reviewed, _ := e.ensure(s, "")
+	if _, err := s.StartThread(ctx, reviewed, review.NewThread{Scope: store.ScopeChange, Body: "hm"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Submit(ctx, reviewed, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	err := s.DeleteChange(ctx, reviewed, false)
+	if want := "change #1 has 1 review and 1 thread; force deletes them with it"; err == nil || err.Error() != want {
+		t.Errorf("deleting a reviewed change without force: %v, want %q", err, want)
+	}
+	if err := s.DeleteChange(ctx, reviewed, true); err != nil {
+		t.Fatalf("deleting a reviewed change with force: %v", err)
+	}
+	changes, err := s.ListChanges(ctx)
+	if err != nil || len(changes) != 0 {
+		t.Errorf("changes after deleting both = %v, %v; want none", changes, err)
+	}
+}

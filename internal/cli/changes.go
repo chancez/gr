@@ -159,7 +159,32 @@ re-anchor onto it.
 	}
 	bf.register(base)
 
-	cmd.AddCommand(a.changeListCommand(), show, title, base,
+	var df changeRef
+	var force bool
+	del := &cobra.Command{
+		Use:   "delete [change]",
+		Short: "Delete a change with its revisions, reviews, and threads",
+		Long: `Delete a change with its revisions, reviews, and threads. A change with reviews is deleted only
+with --force. Abandoning keeps a change listed; deleting removes it.
+
+` + changeArgHelp,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, change, _, err := a.findChange(cmd.Context(), df, firstArg(args), false)
+			if err != nil {
+				return err
+			}
+			if err := svc.DeleteChange(cmd.Context(), change, force); err != nil {
+				return err
+			}
+			fmt.Fprintf(a.stderr, "deleted change #%d\n", change.Seq)
+			return nil
+		},
+	}
+	df.register(del)
+	del.Flags().BoolVar(&force, "force", false, "delete a change that has reviews")
+
+	cmd.AddCommand(a.changeListCommand(), show, title, base, del,
 		setState("abandon", "Abandon a change", store.ChangeAbandoned),
 		setState("merged", "Mark a change merged, as when it landed somewhere other than its base", store.ChangeMerged),
 		setState("reopen", "Reopen an abandoned or merged change", store.ChangeOpen))

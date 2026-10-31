@@ -370,6 +370,30 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 	return s.Sync(ctx, change)
 }
 
+// DeleteChange deletes a change and everything on it. A change with reviews, anyone's drafts
+// included, is deleted only with force, since its reviews and threads go with it.
+func (s *Service) DeleteChange(ctx context.Context, change store.Change, force bool) error {
+	return s.store.Tx(ctx, func(tx *store.Tx) error {
+		reviews, threads, err := tx.CountChangeContent(ctx, change.ID)
+		if err != nil {
+			return err
+		}
+		if reviews > 0 && !force {
+			return fmt.Errorf("change #%d has %s and %s; force deletes them with it",
+				change.Seq, plural(reviews, "review", "reviews"), plural(threads, "thread", "threads"))
+		}
+		slog.Info("change deleted", "change", change.Seq, "reviews", reviews, "threads", threads)
+		return tx.DeleteChange(ctx, change.ID)
+	})
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
+}
+
 // ListChanges lists this repository's changes, newest first.
 func (s *Service) ListChanges(ctx context.Context, states ...store.ChangeState) ([]store.Change, error) {
 	return s.store.ListChanges(ctx, s.repo.ID, states...)
