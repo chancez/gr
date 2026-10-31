@@ -23,9 +23,11 @@ type Repo struct {
 // Epoch is the timestamp of the first commit. Each later commit is one second after the previous.
 var Epoch = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// New creates an empty repository with main as its initial branch.
+// New creates an empty repository with main as its initial branch. It isolates the test's git from
+// the environment, as Isolate does.
 func New(t testing.TB) *Repo {
 	t.Helper()
+	Isolate(t)
 	// Resolve symlinks so Dir matches what git rev-parse --show-toplevel reports on macOS.
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
@@ -34,6 +36,23 @@ func New(t testing.TB) *Repo {
 	r := &Repo{t: t, Dir: dir}
 	r.Git("init", "-q", "-b", "main")
 	return r
+}
+
+// Isolate keeps git, run by the test or by the code under test, away from the user's repositories
+// and settings for the rest of the test. Variables such as GIT_DIR, set when tests run from a git
+// hook, would point git at another repository, so every GIT_ variable is unset, and the global and
+// system config are ignored.
+func Isolate(t testing.TB) {
+	t.Helper()
+	for _, kv := range os.Environ() {
+		if k, v, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "GIT_") {
+			// Setenv restores the variable after the test; Unsetenv then removes it.
+			t.Setenv(k, v)
+			os.Unsetenv(k)
+		}
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
 }
 
 // Git runs git in the repository and returns its trimmed stdout.
@@ -47,8 +66,6 @@ func (r *Repo) gitEnv(env []string, args ...string) string {
 	cmd := exec.Command("git", args...)
 	cmd.Dir = r.Dir
 	cmd.Env = append(os.Environ(),
-		"GIT_CONFIG_GLOBAL=/dev/null",
-		"GIT_CONFIG_NOSYSTEM=1",
 		"GIT_AUTHOR_NAME=Test",
 		"GIT_AUTHOR_EMAIL=test@example.com",
 		"GIT_COMMITTER_NAME=Test",
