@@ -38,6 +38,8 @@ type app struct {
 
 	store *store.Store
 	svc   *review.Service
+	// notice is something gr decided for the user, shown when the TUI opens.
+	notice string
 }
 
 // Execute runs gr with os.Args and returns the exit code.
@@ -85,7 +87,7 @@ commands only find one, and take a change number such as 4 directly.`,
 		if err != nil {
 			return err
 		}
-		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME")})
+		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME"), Notice: a.notice})
 	}
 	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)
@@ -230,6 +232,10 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	c, rev, err := svc.EnsureChange(ctx, target)
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
+	}
+	if target.Stacked {
+		a.notice = fmt.Sprintf("change #%d is based on %s, the branch it is stacked on; gr change base or B in the TUI moves it", c.Seq, c.BaseBranch)
+		fmt.Fprintln(a.stderr, a.notice)
 	}
 	return a.moveBase(ctx, svc, c, rev, f.base)
 }

@@ -296,3 +296,25 @@ func TestChangeDelete(t *testing.T) {
 		t.Errorf("change list after deleting with --force = %q, want none", got)
 	}
 }
+
+// A new change on a stacked branch is based on its parent, and gr says so.
+func TestStackedBranchNotice(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "parent")
+	e.repo.Commit("parent")
+	e.repo.Git("checkout", "-q", "-b", "child")
+	e.repo.Commit("child")
+	var stdout, stderr bytes.Buffer
+	a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr, logPath: e.log}
+	defer a.close()
+	cmd := a.rootCommand()
+	cmd.SetArgs([]string{"--db", e.db, "-C", e.repo.Dir, "--author", "Human", "review"})
+	if err := cmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	want := "change #1 is based on parent, the branch it is stacked on; gr change base or B in the TUI moves it\n"
+	if stderr.String() != want {
+		t.Errorf("stderr = %q, want %q", stderr.String(), want)
+	}
+}

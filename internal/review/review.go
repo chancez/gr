@@ -73,6 +73,9 @@ type Target struct {
 	// Branch and BaseBranch are set for branch targets.
 	Branch     string
 	BaseBranch string
+	// Stacked is set when BaseBranch was chosen as the branch Branch is stacked on, rather than
+	// given or the default branch.
+	Stacked bool
 	// Base and Head are set for range and commit targets. Base is empty for a root commit.
 	Base string
 	Head string
@@ -124,15 +127,27 @@ func (s *Service) ParseTarget(ctx context.Context, spec, base string) (Target, e
 				return Target{}, err
 			}
 		}
+		stacked := false
 		if base == "" {
 			if base, err = s.git.DefaultBranch(ctx); err != nil {
 				return Target{}, err
+			}
+			// A branch stacked on another, as a pull request on another's branch, is reviewed
+			// against its parent, so only its own commits show.
+			if base != branch {
+				parents, err := s.git.StackParents(ctx, branch, base)
+				if err != nil {
+					return Target{}, err
+				}
+				if len(parents) > 0 {
+					base, stacked = parents[0], true
+				}
 			}
 		}
 		if base == branch {
 			return Target{}, fmt.Errorf("branch %s is its own base; pass a different base branch", branch)
 		}
-		return Target{Kind: store.KindBranch, Branch: branch, BaseBranch: base}, nil
+		return Target{Kind: store.KindBranch, Branch: branch, BaseBranch: base, Stacked: stacked}, nil
 	}
 	sha, err := s.git.ResolveCommit(ctx, spec)
 	if err != nil {

@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -323,5 +324,46 @@ func TestDefaultBranchFromRemotes(t *testing.T) {
 				t.Errorf("DefaultBranch = %q, %v; want %q, error %v", got, err, tc.want, tc.wantErr)
 			}
 		})
+	}
+}
+
+// A branch stacked on another names it as its parent, nearest first; branches already on the base,
+// and branches at the same commit, are not parents.
+func TestStackParents(t *testing.T) {
+	r := gittest.New(t)
+	r.Commit("root")
+	r.Git("branch", "landed")
+	r.Git("checkout", "-q", "-b", "grandparent")
+	r.Commit("gp")
+	r.Git("checkout", "-q", "-b", "parent")
+	r.Commit("p")
+	r.Git("checkout", "-q", "-b", "child")
+	r.Commit("c")
+	r.Git("branch", "copy")
+	got, err := open(t, r.Dir).StackParents(t.Context(), "child", "main")
+	if want := []string{"parent", "grandparent"}; err != nil || !slices.Equal(got, want) {
+		t.Errorf("StackParents = %q, %v; want %q", got, err, want)
+	}
+	got, err = open(t, r.Dir).StackParents(t.Context(), "grandparent", "main")
+	if err != nil || len(got) != 0 {
+		t.Errorf("StackParents of a branch on main = %q, %v; want none", got, err)
+	}
+}
+
+// A branch based on a newer upstream main than the local main has no parents among the branches
+// that landed upstream since.
+func TestStackParentsIgnoresWhatLandedUpstream(t *testing.T) {
+	r := gittest.New(t)
+	r.Commit("root")
+	r.Git("checkout", "-q", "-b", "landed")
+	r.Commit("landed upstream")
+	r.Git("remote", "add", "work", "https://example.com/work.git")
+	r.Git("update-ref", "refs/remotes/work/main", "landed")
+	r.Git("branch", "--set-upstream-to=work/main", "main")
+	r.Git("checkout", "-q", "-b", "feature")
+	r.Commit("feature")
+	got, err := open(t, r.Dir).StackParents(t.Context(), "feature", "main")
+	if err != nil || len(got) != 0 {
+		t.Errorf("StackParents = %q, %v; want none, since landed is on main's upstream", got, err)
 	}
 }

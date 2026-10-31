@@ -771,7 +771,14 @@ func TestSetBase(t *testing.T) {
 	child := e.repo.Commit("child")
 	s := e.service(human)
 	ctx := t.Context()
-	change, _ := e.ensure(s, "")
+	target, err := s.ParseTarget(ctx, "", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	change, _, err := s.EnsureChange(ctx, target)
+	if err != nil {
+		t.Fatal(err)
+	}
 	tv, err := s.StartThread(ctx, change, review.NewThread{Scope: store.ScopeCommit, Commit: child, Path: "c.txt", StartLine: 1, Body: "c?"})
 	if err != nil {
 		t.Fatal(err)
@@ -828,5 +835,27 @@ func TestDeleteChange(t *testing.T) {
 	changes, err := s.ListChanges(ctx)
 	if err != nil || len(changes) != 0 {
 		t.Errorf("changes after deleting both = %v, %v; want none", changes, err)
+	}
+}
+
+// A new branch stacked on another is based on it, so only its own commits are reviewed.
+func TestStackedBranchIsBasedOnItsParent(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "parent")
+	e.repo.Commit("parent")
+	e.repo.Git("checkout", "-q", "-b", "child")
+	e.repo.Commit("child")
+	s := e.service(human)
+	got, err := s.ParseTarget(t.Context(), "", "")
+	want := review.Target{Kind: store.KindBranch, Branch: "child", BaseBranch: "parent", Stacked: true}
+	if err != nil || got != want {
+		t.Errorf("ParseTarget = %+v, %v; want %+v", got, err, want)
+	}
+	// Given a base, gr uses it.
+	got, err = s.ParseTarget(t.Context(), "", "main")
+	want = review.Target{Kind: store.KindBranch, Branch: "child", BaseBranch: "main"}
+	if err != nil || got != want {
+		t.Errorf("ParseTarget with a base = %+v, %v; want %+v", got, err, want)
 	}
 }

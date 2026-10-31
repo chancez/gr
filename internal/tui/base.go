@@ -8,8 +8,8 @@ import (
 	"github.com/chancez/gr/internal/store"
 )
 
-// openBase offers the repo's branches to move a branch change onto: its current base and the
-// default branch first, then local branches, then remote ones.
+// openBase offers the repo's branches to move a branch change onto: its current base, the branches
+// it is stacked on, and the default branch first, then local branches, then remote ones.
 func (m *model) openBase() tea.Cmd {
 	c := m.data.change
 	if c.Kind != store.KindBranch {
@@ -23,9 +23,20 @@ func (m *model) openBase() tea.Cmd {
 	}
 	notes := map[string]string{c.BaseBranch: "current"}
 	order := []string{c.BaseBranch}
-	if def, err := m.svc.Git().DefaultBranch(m.ctx); err == nil && notes[def] == "" {
-		notes[def] = "default"
-		order = append(order, def)
+	add := func(b, note string) {
+		if notes[b] == "" {
+			notes[b] = note
+			order = append(order, b)
+		}
+	}
+	if def, err := m.svc.Git().DefaultBranch(m.ctx); err == nil {
+		// The branches this one is stacked on come first, nearest first.
+		if parents, err := m.svc.Git().StackParents(m.ctx, c.Branch, def); err == nil {
+			for _, p := range parents {
+				add(p, "stacked on")
+			}
+		}
+		add(def, "default")
 	}
 	var items []pickerItem
 	for _, b := range order {

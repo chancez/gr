@@ -42,6 +42,8 @@ var Themes = look.Themes
 type Options struct {
 	// Theme is a built-in palette, one of Themes. Empty is ThemeDefault.
 	Theme string
+	// Notice is shown in the status bar when the TUI opens, such as a base gr chose.
+	Notice string
 }
 
 // Run opens the TUI on a change.
@@ -55,6 +57,9 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 	}
 	m.theme = opts.Theme
 	m.setTheme(true)
+	if opts.Notice != "" {
+		m.setStatus("%s", opts.Notice)
+	}
 	defer m.close()
 	_, err = tea.NewProgram(m, tea.WithContext(ctx)).Run()
 	return err

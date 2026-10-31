@@ -163,6 +163,52 @@ func (r *Repo) Branches(ctx context.Context) ([]string, error) {
 	return names, nil
 }
 
+// StackParents lists the local branches branch is stacked on, nearest first: those whose commits
+// branch contains, that have commits not yet on base or the branch base tracks, and that are not at
+// branch's own commit. The tracked branch counts because a local base is often behind it, and
+// branches that landed upstream since are not parents.
+func (r *Repo) StackParents(ctx context.Context, branch, base string) ([]string, error) {
+	args := []string{"for-each-ref", "--format=%(refname:short) %(objectname)",
+		"--merged=refs/heads/" + branch, "--no-merged=" + base}
+	if upstream, err := r.line(ctx, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", base+"@{upstream}"); err == nil && upstream != "" {
+		args = append(args, "--no-merged="+upstream)
+	}
+	out, err := r.run(ctx, append(args, "refs/heads")...)
+	if err != nil {
+		return nil, err
+	}
+	head, err := r.ResolveCommit(ctx, "refs/heads/"+branch)
+	if err != nil {
+		return nil, err
+	}
+	type parent struct {
+		name     string
+		distance int
+	}
+	var parents []parent
+	for line := range strings.Lines(string(out)) {
+		name, sha, _ := strings.Cut(strings.TrimSpace(line), " ")
+		if name == branch || sha == head {
+			continue
+		}
+		n, err := r.line(ctx, "rev-list", "--count", sha+".."+head)
+		if err != nil {
+			return nil, err
+		}
+		d, err := strconv.Atoi(n)
+		if err != nil {
+			return nil, err
+		}
+		parents = append(parents, parent{name, d})
+	}
+	slices.SortStableFunc(parents, func(a, b parent) int { return a.distance - b.distance })
+	names := make([]string, len(parents))
+	for i, p := range parents {
+		names[i] = p.name
+	}
+	return names, nil
+}
+
 // BranchExists reports whether refs/heads/name exists.
 func (r *Repo) BranchExists(ctx context.Context, name string) (bool, error) {
 	_, err := r.run(ctx, "show-ref", "--verify", "--quiet", "refs/heads/"+name)
