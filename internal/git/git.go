@@ -159,17 +159,35 @@ func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 	return r.line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
 }
 
-// DefaultBranch guesses the branch changes are based on: origin's HEAD, then main, then master.
+// DefaultBranch guesses the branch changes are based on: the base remote's HEAD, or its branch
+// named by init.defaultBranch, main, or master. Failing that, a local branch by one of those names.
+// A remote branch is named by its local branch when one of that name exists, as "main" rather than
+// "origin/main".
 func (r *Repo) DefaultBranch(ctx context.Context) (string, error) {
-	if ref, err := r.line(ctx, "symbolic-ref", "--quiet", "--short", "refs/remotes/origin/HEAD"); err == nil {
-		if name, ok := strings.CutPrefix(ref, "origin/"); ok {
-			if exists, err := r.BranchExists(ctx, name); err == nil && exists {
-				return name, nil
+	remote, err := r.baseRemote(ctx)
+	if err != nil {
+		return "", err
+	}
+	names, err := r.defaultNames(ctx)
+	if err != nil {
+		return "", err
+	}
+	ref := ""
+	if remote != "" {
+		if ref, err = r.line(ctx, "symbolic-ref", "--quiet", "--short", "refs/remotes/"+remote+"/HEAD"); err != nil {
+			ref = ""
+			for _, name := range names {
+				if r.refExists(ctx, "refs/remotes/"+remote+"/"+name) {
+					ref = remote + "/" + name
+					break
+				}
 			}
 		}
-		return ref, nil
 	}
-	for _, name := range []string{"main", "master"} {
+	if ref != "" {
+		names = []string{strings.TrimPrefix(ref, remote+"/")}
+	}
+	for _, name := range names {
 		exists, err := r.BranchExists(ctx, name)
 		if err != nil {
 			return "", err
@@ -178,7 +196,67 @@ func (r *Repo) DefaultBranch(ctx context.Context) (string, error) {
 			return name, nil
 		}
 	}
-	return "", errors.New("cannot determine the default branch; pass a base branch")
+	if ref != "" {
+		return ref, nil
+	}
+	return "", errors.New("cannot determine the default branch; pass a base branch, or set git config checkout.defaultRemote")
+}
+
+// baseRemote picks the remote whose default branch changes are based on, or "" when there is none
+// to pick. Git's settings decide first: checkout.defaultRemote, then clone.defaultRemoteName. Then
+// origin, upstream, the only remote, or the one remote that is not remote.pushDefault.
+func (r *Repo) baseRemote(ctx context.Context) (string, error) {
+	out, err := r.run(ctx, "remote")
+	if err != nil {
+		return "", err
+	}
+	remotes := strings.Fields(string(out))
+	if len(remotes) == 0 {
+		return "", nil
+	}
+	var candidates []string
+	for _, key := range []string{"checkout.defaultRemote", "clone.defaultRemoteName"} {
+		name, err := r.Config(ctx, key)
+		if err != nil {
+			return "", err
+		}
+		candidates = append(candidates, name)
+	}
+	candidates = append(candidates, "origin", "upstream")
+	for _, name := range candidates {
+		if slices.Contains(remotes, name) {
+			return name, nil
+		}
+	}
+	if len(remotes) == 1 {
+		return remotes[0], nil
+	}
+	push, err := r.Config(ctx, "remote.pushDefault")
+	if err != nil {
+		return "", err
+	}
+	if others := slices.DeleteFunc(slices.Clone(remotes), func(name string) bool { return name == push }); len(others) == 1 {
+		return others[0], nil
+	}
+	return "", nil
+}
+
+// defaultNames are the names a default branch goes by: init.defaultBranch, then main and master.
+func (r *Repo) defaultNames(ctx context.Context) ([]string, error) {
+	names := []string{"main", "master"}
+	name, err := r.Config(ctx, "init.defaultBranch")
+	if err != nil {
+		return nil, err
+	}
+	if name != "" && !slices.Contains(names, name) {
+		names = append([]string{name}, names...)
+	}
+	return names, nil
+}
+
+func (r *Repo) refExists(ctx context.Context, ref string) bool {
+	_, err := r.run(ctx, "show-ref", "--verify", "--quiet", ref)
+	return err == nil
 }
 
 // MergeBase returns the best common ancestor of a and b.

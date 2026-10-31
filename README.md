@@ -21,6 +21,11 @@ gr main..feature    # a fixed range
 gr abc123           # one commit
 ```
 
+The default branch is the base remote's HEAD, or its `main` or `master`. The base remote is
+`checkout.defaultRemote` or `clone.defaultRemoteName` when set, then `origin`, `upstream`, the only
+remote, or the one that is not `remote.pushDefault`. `--base` overrides it, and a change remembers
+its base.
+
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:
 every review, its summary, and its threads with the code they are on. `?` lists every key. The most used:

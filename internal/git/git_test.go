@@ -188,3 +188,140 @@ func TestCommitDiff(t *testing.T) {
 		t.Errorf("BlobID(missing) = %q, %v; want empty", id, err)
 	}
 }
+
+// TestDefaultBranchFromRemotes covers how the base is found from remotes: git's settings first,
+// then origin, upstream, the only remote, or the one that is not the push remote.
+func TestDefaultBranchFromRemotes(t *testing.T) {
+	type remote struct {
+		name     string
+		branches []string
+		// head is the branch the remote's HEAD points at, or "" for none.
+		head string
+	}
+	for name, tc := range map[string]struct {
+		remotes []remote
+		local   []string
+		config  map[string]string
+		want    string
+		wantErr bool
+	}{
+		"origin's HEAD, checked out locally": {
+			remotes: []remote{{name: "origin", branches: []string{"main"}, head: "main"}},
+			local:   []string{"main"},
+			want:    "main",
+		},
+		"the only remote": {
+			remotes: []remote{{name: "work", branches: []string{"trunk"}, head: "trunk"}},
+			want:    "work/trunk",
+		},
+		"the only remote, its default checked out": {
+			remotes: []remote{{name: "work", branches: []string{"trunk"}, head: "trunk"}},
+			local:   []string{"trunk"},
+			want:    "trunk",
+		},
+		"origin before another remote": {
+			remotes: []remote{
+				{name: "fork", branches: []string{"mine"}, head: "mine"},
+				{name: "origin", branches: []string{"main"}, head: "main"},
+			},
+			want: "origin/main",
+		},
+		"origin before upstream": {
+			remotes: []remote{
+				{name: "origin", branches: []string{"fork-main"}, head: "fork-main"},
+				{name: "upstream", branches: []string{"main"}, head: "main"},
+			},
+			want: "origin/fork-main",
+		},
+		"checkout.defaultRemote before origin": {
+			remotes: []remote{
+				{name: "origin", branches: []string{"fork-main"}, head: "fork-main"},
+				{name: "upstream", branches: []string{"main"}, head: "main"},
+			},
+			config: map[string]string{"checkout.defaultRemote": "upstream"},
+			want:   "upstream/main",
+		},
+		"clone.defaultRemoteName names the remote": {
+			remotes: []remote{
+				{name: "a", branches: []string{"a-main"}, head: "a-main"},
+				{name: "b", branches: []string{"b-main"}, head: "b-main"},
+			},
+			config: map[string]string{"clone.defaultRemoteName": "b"},
+			want:   "b/b-main",
+		},
+		"upstream when there is no origin": {
+			remotes: []remote{
+				{name: "a", branches: []string{"a-main"}, head: "a-main"},
+				{name: "upstream", branches: []string{"develop"}, head: "develop"},
+			},
+			want: "upstream/develop",
+		},
+		"the remote that is not the push remote": {
+			remotes: []remote{
+				{name: "fork", branches: []string{"mine"}, head: "mine"},
+				{name: "theirs", branches: []string{"main"}, head: "main"},
+			},
+			config: map[string]string{"remote.pushDefault": "fork"},
+			want:   "theirs/main",
+		},
+		"a remote without a recorded HEAD": {
+			remotes: []remote{{name: "work", branches: []string{"main"}}},
+			want:    "work/main",
+		},
+		"init.defaultBranch on a remote without a HEAD": {
+			remotes: []remote{{name: "work", branches: []string{"main", "trunk"}}},
+			config:  map[string]string{"init.defaultBranch": "trunk"},
+			want:    "work/trunk",
+		},
+		"no remotes": {
+			local: []string{"master"},
+			want:  "master",
+		},
+		"several remotes and nothing to choose by": {
+			remotes: []remote{
+				{name: "a", branches: []string{"main"}, head: "main"},
+				{name: "b", branches: []string{"main"}, head: "main"},
+			},
+			wantErr: true,
+		},
+		"several remotes and nothing to choose by, but a local main": {
+			remotes: []remote{
+				{name: "a", branches: []string{"trunk"}, head: "trunk"},
+				{name: "b", branches: []string{"trunk"}, head: "trunk"},
+			},
+			local: []string{"main"},
+			want:  "main",
+		},
+		"a remote with nothing fetched, and a local main": {
+			remotes: []remote{{name: "origin"}},
+			local:   []string{"main"},
+			want:    "main",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := gittest.New(t)
+			sha := r.Commit("base")
+			r.Git("checkout", "-q", "-b", "feature")
+			r.Git("branch", "-q", "-D", "main")
+			for _, b := range tc.local {
+				r.Git("branch", "-q", b, sha)
+			}
+			for _, rem := range tc.remotes {
+				r.Git("remote", "add", rem.name, "https://example.com/"+rem.name+".git")
+				for _, b := range rem.branches {
+					r.Git("update-ref", "refs/remotes/"+rem.name+"/"+b, sha)
+				}
+				if rem.head != "" {
+					r.Git("symbolic-ref", "refs/remotes/"+rem.name+"/HEAD", "refs/remotes/"+rem.name+"/"+rem.head)
+				}
+			}
+			for k, v := range tc.config {
+				r.Git("config", k, v)
+			}
+			got, err := open(t, r.Dir).DefaultBranch(t.Context())
+			if (err != nil) != tc.wantErr || got != tc.want {
+				t.Errorf("DefaultBranch = %q, %v; want %q, error %v", got, err, tc.want, tc.wantErr)
+			}
+		})
+	}
+}
