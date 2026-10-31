@@ -15,8 +15,7 @@ what is being colored.
 ## Decision
 
 The TUI is drawn from **elements**, much like components in React, on **surfaces**, from one
-registry with these layers: the palette in `palette.go`, the rest in `theme.go`, and the functions
-that draw lines in `draw.go`.
+registry, the `internal/tui/look` package, with these layers.
 
 - **Palette.** The available colors, named by how they look, such as `ink`, `snow`, and
   `lightBlue`. They carry no meaning.
@@ -43,14 +42,21 @@ that draw lines in `draw.go`.
   example "the sha, then the subject, then the author", without any colors. One function draws
   that line on a surface at a width: it styles each element, applies the surface, and pads to the
   width with the surface's background.
+- **Values are typed.** A span is made only by a constructor for one kind of value, which takes
+  the value itself: `look.Author(store.Author)`, `look.SHA(sha).Short()`, `look.Verdict(v)`,
+  `look.Time(t)`. The constructor picks the element and the format, so a sha cannot be drawn as an
+  author or a date in a second format. Elements are unexported from `look`, so the compiler, not
+  convention, keeps the rest of the TUI from pairing a value with the wrong one. Free text has its
+  own constructors, such as `look.Muted`. `SHA` is local to `look`; a gr-wide sha type in `git`
+  and `store` would carry the same guarantee further, at the cost of touching storage and JSON.
 - **Foreign renderers plug in.** Syntax highlighting and Markdown keep their own styling and join a
   line as already-styled pieces. Highlighting takes the surface's background; Markdown only sits on
   the plain surface.
 - **Layout stays in code.** Borders, padding, indents, and widths are not styles. Only their colors
   come from the registry.
-- **Enforced.** A test fails when code outside the registry's files creates a style or sets a
-  color, other than the two foreign renderers. A new kind of thing on screen gets an element before it can be
-  drawn.
+- **Enforced.** A test fails when code outside `look` creates a style or sets a color, other than
+  syntax highlighting. A new kind of thing on screen gets an element and a constructor before it
+  can be drawn.
 - **Names match the config.** Roles, elements, and surfaces have names, such as `danger`, `author`,
   `verdict.approve`, and `surface.cursor`, which the config file will use to override them: a role
   to change a color everywhere it means the same thing, an element to change one kind of text.
