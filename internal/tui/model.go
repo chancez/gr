@@ -104,6 +104,10 @@ type composer struct {
 	threadID  string
 	commentID string
 	verdict   store.Verdict
+	// initial is the text the box opened with, so closing it unchanged asks nothing.
+	initial string
+	// closing is set while esc asks what to do with unsaved text.
+	closing bool
 }
 
 type model struct {
@@ -1245,7 +1249,41 @@ func (m *model) startComment(whole bool) (tea.Model, tea.Cmd) {
 		m.setError(err)
 		return m, nil
 	}
+	// Commenting where your draft already is continues it, rather than starting a second one.
+	if t, c, ok := m.draftAt(nt); ok {
+		return m, m.openComposer(composer{kind: composeEdit, threadID: t.ID, commentID: c.ID,
+			title: fmt.Sprintf("Edit your draft %s", t.Label())}, c.Body)
+	}
 	return m, m.openComposer(composer{kind: composeThread, title: title, thread: nt}, "")
+}
+
+// draftAt finds your draft thread exactly where nt would start one, and its comment. Comments on
+// the change as a whole are not matched, since several are normal.
+func (m *model) draftAt(nt review.NewThread) (review.ThreadView, store.Comment, bool) {
+	if nt.Scope == store.ScopeChange {
+		return review.ThreadView{}, store.Comment{}, false
+	}
+	end := nt.EndLine
+	if end == 0 {
+		end = nt.StartLine
+	}
+	sideOf := func(s anchor.Side) anchor.Side {
+		if s == "" {
+			return anchor.SideNew
+		}
+		return s
+	}
+	for _, t := range m.data.threads {
+		l := t.Location
+		if t.Summary || !m.data.isDraft(t.ReviewID) || len(t.Comments) != 1 || t.Comments[0].Author != m.svc.Author() {
+			continue
+		}
+		if l.Scope == nt.Scope && l.Commit == nt.Commit && l.Path == nt.Path && sideOf(l.Side) == sideOf(nt.Side) &&
+			l.StartLine == nt.StartLine && l.EndLine == end {
+			return t, t.Comments[0], true
+		}
+	}
+	return review.ThreadView{}, store.Comment{}, false
 }
 
 func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error) {
@@ -1387,8 +1425,9 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 func (m *model) openComposer(c composer, initial string) tea.Cmd {
 	c.area = textarea.New()
 	c.area.ShowLineNumbers = false
-	c.area.Placeholder = "Markdown. ctrl+s to save, ctrl+e for $EDITOR, esc to cancel."
+	c.area.Placeholder = "Markdown. ctrl+s to save, ctrl+e for $EDITOR, esc to close."
 	c.area.SetStyles(m.composeStyles())
+	c.initial = initial
 	c.area.SetValue(initial)
 	m.compose = c
 	m.mode = modeCompose
@@ -1411,9 +1450,17 @@ func (m *model) closeComposer() {
 
 func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	k := m.keys
+	if m.compose.closing {
+		return m.closingKey(msg)
+	}
 	switch {
 	case key.Matches(msg, k.Cancel):
-		m.closeComposer()
+		// Closing with unsaved text asks first, so a reflexive esc cannot lose a comment.
+		if v := m.compose.area.Value(); strings.TrimSpace(v) == "" || v == m.compose.initial {
+			m.closeComposer()
+		} else {
+			m.compose.closing = true
+		}
 		return m, nil
 	case key.Matches(msg, k.ExternalEdit):
 		return m, editorCmd(m.compose.area.Value())
@@ -1423,6 +1470,20 @@ func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.compose.area, cmd = m.compose.area.Update(msg)
 	return m, cmd
+}
+
+// closingKey answers the unsaved comment prompt: s saves, d discards, and anything else, esc
+// included, goes back to editing.
+func (m *model) closingKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.compose.closing = false
+	switch msg.String() {
+	case "s":
+		return m.saveCompose()
+	case "d":
+		m.closeComposer()
+		m.setStatus("comment discarded")
+	}
+	return m, nil
 }
 
 func (m *model) saveCompose() (tea.Model, tea.Cmd) {
@@ -1765,6 +1826,12 @@ func (m *model) renderStatus() string {
 		}, m.width-15)
 	case modeConfirm:
 		return th.Render(look.Plain, look.Error(m.confirm.prompt))
+	case modeCompose:
+		if m.compose.closing {
+			return th.Render(look.Plain, look.Warning("Unsaved comment: ")) + m.renderHints([]key.Binding{
+				hint("s", "save it"), hint("d", "discard it"), hint("esc", "keep editing"),
+			}, m.width-17)
+		}
 	}
 	d := m.data
 	text := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)
