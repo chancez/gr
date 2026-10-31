@@ -160,7 +160,8 @@ func (s *Service) branchRevision(ctx context.Context, branch, baseBranch string)
 	return base, head, nil
 }
 
-// EnsureChange finds the open change for a target or creates it, then syncs it.
+// EnsureChange finds the open change for a target or creates it, then syncs it. A branch's open
+// change found to be merged is marked so, and a new change takes its place.
 func (s *Service) EnsureChange(ctx context.Context, t Target) (store.Change, store.Revision, error) {
 	base, head := t.Base, t.Head
 	if t.Kind == store.KindBranch {
@@ -199,7 +200,15 @@ func (s *Service) EnsureChange(ctx context.Context, t Target) (store.Change, sto
 	if created {
 		return change, revision, nil
 	}
-	return s.Sync(ctx, change)
+	synced, revision, err := s.Sync(ctx, change)
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	if synced.State != store.ChangeOpen {
+		// The branch landed since gr last looked: work on it from here is a new change.
+		return s.EnsureChange(ctx, t)
+	}
+	return synced, revision, nil
 }
 
 func (s *Service) defaultTitle(ctx context.Context, t Target, base, head string) string {

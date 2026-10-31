@@ -731,3 +731,28 @@ func mustRef(t *testing.T, s *review.Service, change store.Change, ref string) r
 	}
 	return v
 }
+
+// A change merged since gr last looked is marked merged when the branch is next opened, and the
+// branch's change from then on is a new one, rather than the merged change.
+func TestEnsureMovesPastAMergedChange(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	first, _ := e.ensure(s, "")
+
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	e.repo.Git("checkout", "-q", "feature")
+	next, _ := e.ensure(s, "")
+	merged, err := e.store.ChangeBySeq(ctx, first.RepoID, first.Seq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if merged.State != store.ChangeMerged || next.Seq != 2 || next.State != store.ChangeOpen {
+		t.Errorf("after merging: change 1 %s, opened change %d %s; want change 1 merged and change 2 open",
+			merged.State, next.Seq, next.State)
+	}
+}
