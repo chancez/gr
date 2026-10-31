@@ -3,9 +3,11 @@ package tui
 import (
 	"fmt"
 
-	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"unicode"
+
+	"github.com/chancez/gr/internal/tui/look"
+	"github.com/charmbracelet/x/ansi"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
@@ -129,7 +131,7 @@ func (m *model) highlightMatches(line string) string {
 	at := 0
 	for _, sp := range spans {
 		b.WriteString(ansi.Cut(line, at, sp[0]))
-		b.WriteString(m.r.th.render(surfSearchMatch, span{el: elText, text: ansi.Strip(ansi.Cut(line, sp[0], sp[1]))}))
+		b.WriteString(m.r.th.Render(look.SearchMatch, look.Text(ansi.Strip(ansi.Cut(line, sp[0], sp[1])))))
 		at = sp[1]
 	}
 	b.WriteString(ansi.Cut(line, at, ansi.StringWidth(line)))

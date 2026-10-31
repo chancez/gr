@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -152,11 +153,11 @@ func (m *model) renderHelp() string {
 		for _, b := range s.bindings {
 			keyWidth = max(keyWidth, ansi.StringWidth(b.Help().Key))
 		}
-		lines := []string{th.render(surfPlain, sp(elHeading, title))}
+		lines := []string{th.Render(look.Plain, look.Heading(title))}
 		for _, b := range s.bindings {
 			h := b.Help()
-			lines = append(lines, th.render(surfPlain, sp(elKey, h.Key),
-				sp(elDefault, strings.Repeat(" ", keyWidth-ansi.StringWidth(h.Key)+2)), sp(elKeyDesc, h.Desc)))
+			lines = append(lines, th.Render(look.Plain, look.Key(h.Key),
+				look.Default(strings.Repeat(" ", keyWidth-ansi.StringWidth(h.Key)+2)), look.KeyDesc(h.Desc)))
 		}
 		blocks = append(blocks, append(lines, ""))
 	}
@@ -190,21 +191,21 @@ func (m *model) renderHelp() string {
 			if y < len(c) {
 				cell = c[y]
 			}
-			line.WriteString(fit(cell, widths[i]+4))
+			line.WriteString(look.Fit(cell, widths[i]+4))
 		}
 		b.WriteString(ansi.Truncate(line.String(), m.width, ""))
 		b.WriteString("\n")
 	}
-	b.WriteString(th.render(surfPlain, sp(elMuted, "Any key closes this help.")))
+	b.WriteString(th.Render(look.Plain, look.Muted("Any key closes this help.")))
 	return b.String()
 }
 
 // renderHints draws as many hints as fit in width, always keeping the last two.
 func (m *model) renderHints(bindings []key.Binding, width int) string {
 	th := m.r.th
-	sep := th.render(surfPlain, sp(elMuted, " | "))
+	sep := th.Render(look.Plain, look.Muted(" | "))
 	item := func(b key.Binding) string {
-		return th.render(surfPlain, sp(elKey, b.Help().Key), sp(elDefault, " "), sp(elKeyDesc, b.Help().Desc))
+		return th.Render(look.Plain, look.Hint(b.Help().Key, b.Help().Desc)...)
 	}
 	n := len(bindings)
 	keep := bindings[max(n-2, 0):]

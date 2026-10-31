@@ -5,7 +5,6 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -15,60 +14,13 @@ import (
 
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
-func TestThemeDraw(t *testing.T) {
-	th := newTheme(true, ThemeDefault)
-	p := th.roles
-	bg := lipgloss.NewStyle().Background(p.cursorBg)
-	for name, tc := range map[string]struct {
-		got  string
-		want string
-	}{
-		"soft surface keeps element colors and pads with its background": {
-			got:  th.draw(surfCursor, 8, sp(elAuthor, "Ann"), sp(elMuted, " x")),
-			want: bg.Bold(true).Foreground(lavender).Render("Ann") + bg.Foreground(p.muted).Render(" x") + bg.Foreground(p.text).Render("   "),
-		},
-		"solid surface draws every element in its own foreground": {
-			got:  th.render(surfPaneFocused, sp(elAuthor, "Ann")),
-			want: lipgloss.NewStyle().Foreground(p.onSolid).Background(p.accent).Bold(true).Render("Ann"),
-		},
-		"dim mutes and unbolds": {
-			got:  th.render(surfPlain, sp(elAuthor, "Ann", dim)),
-			want: lipgloss.NewStyle().Foreground(p.muted).Render("Ann"),
-		},
-		"text is made safe": {
-			got:  th.render(surfPlain, sp(elText, "a\x1b[5m")),
-			want: lipgloss.NewStyle().Foreground(p.text).Render("a^[[5m"),
-		},
-		"cut marks the cut on the surface": {
-			got:  th.drawCut(surfCursor, 5, sp(elText, "abcdefgh")),
-			want: bg.Foreground(p.text).Render("ab") + bg.Foreground(p.text).Render("..."),
-		},
-	} {
-		if !reflect.DeepEqual(cells(tc.got), cells(tc.want)) {
-			t.Errorf("%s:\ngot  %q\nwant %q", name, tc.got, tc.want)
-		}
-	}
-}
-
-func TestEveryElementAndSurfaceIsNamed(t *testing.T) {
-	for i, n := range elementNames {
-		if n == "" {
-			t.Errorf("element %d has no name", i)
-		}
-	}
-	for i, n := range surfaceNames {
-		if n == "" {
-			t.Errorf("surface %d has no name", i)
-		}
-	}
-}
-
-// TestStylesComeFromTheRegistry enforces ADR 8: only the registry creates styles or sets colors.
+// TestStylesComeFromTheRegistry enforces ADR 8: only the look package creates styles or sets colors.
 // Syntax highlighting is a foreign renderer, styled by its own theme.
 func TestStylesComeFromTheRegistry(t *testing.T) {
-	allowed := map[string]bool{"palette.go": true, "theme.go": true, "draw.go": true, "highlight.go": true}
+	allowed := map[string]bool{"highlight.go": true}
 	// lipgloss functions that make styles and colors, and style methods that set colors.
 	constructors := map[string]bool{"NewStyle": true, "Color": true, "LightDark": true}
 	setters := map[string]bool{"Foreground": true, "Background": true, "BorderForeground": true, "BorderBackground": true}
@@ -92,7 +44,7 @@ func TestStylesComeFromTheRegistry(t *testing.T) {
 			}
 			pkg, _ := sel.X.(*ast.Ident)
 			if setters[sel.Sel.Name] || constructors[sel.Sel.Name] && pkg != nil && pkg.Name == "lipgloss" {
-				t.Errorf("%s: %s outside the registry; add an element or surface to theme.go", fset.Position(sel.Pos()), sel.Sel.Name)
+				t.Errorf("%s: %s outside the registry; add an element and a constructor to the look package", fset.Position(sel.Pos()), sel.Sel.Name)
 			}
 			return true
 		})
@@ -108,9 +60,9 @@ func TestLightBackgroundRecolorsBuiltRows(t *testing.T) {
 	e.drain(e.m.loadCmd())
 	e.openNav("Overview")
 	e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#ffffff")})
-	light, dark := newTheme(false, ThemeDefault), newTheme(true, ThemeDefault)
-	want := light.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
-	stale := dark.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
+	light, dark := look.New(false, ThemeDefault), look.New(true, ThemeDefault)
+	want := light.Render(look.HeadingBar, look.Verdict(store.VerdictRequestChanges))
+	stale := dark.Render(look.HeadingBar, look.Verdict(store.VerdictRequestChanges))
 	if out := e.m.render(); !strings.Contains(out, want) || strings.Contains(out, stale) {
 		t.Errorf("the overview keeps the dark theme's colors on a light background:\n%q", out)
 	}
@@ -128,8 +80,8 @@ func TestFinishedReviewsDim(t *testing.T) {
 		t.Fatal(err)
 	}
 	th := e.m.r.th
-	dimHeader := th.render(surfHeading, sp(elHeading, "Review #1", dim))
-	header := th.render(surfHeading, sp(elHeading, "Review #1"))
+	dimHeader := th.Render(look.HeadingBar, look.Heading("Review #1").With(look.Dim))
+	header := th.Render(look.HeadingBar, look.Heading("Review #1"))
 	for _, tc := range []struct {
 		state store.ThreadState
 		want  string

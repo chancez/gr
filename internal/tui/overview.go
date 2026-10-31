@@ -7,6 +7,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 // threadFilter selects which threads the overview shows.
@@ -56,16 +57,16 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	th := r.th
 	text := func(f func(width int) []string) row { return row{kind: rowText, file: -1, text: f} }
 	// plain is lines of spans, one row.
-	plain := func(lines ...[]span) row {
+	plain := func(lines ...[]look.Span) row {
 		return text(func(width int) []string {
 			out := make([]string, len(lines))
 			for i, l := range lines {
-				out[i] = th.draw(surfPlain, width, l...)
+				out[i] = th.Draw(look.Plain, width, l...)
 			}
 			return out
 		})
 	}
-	blank := []span{}
+	blank := []look.Span{}
 
 	c, rev := d.change, d.revision
 	target := string(c.Kind)
@@ -78,18 +79,18 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	rows := []row{
 		plain(
-			[]span{sp(elHeading, fmt.Sprintf("#%d %s", c.Seq, c.Title))},
-			[]span{
-				sp(elMuted, fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
-				sp(elSHA, shortSHA(rev.BaseSHA)), sp(elMuted, ".."), sp(elSHA, shortSHA(rev.HeadSHA)),
-				sp(elMuted, fmt.Sprintf("), %d commits, %d files", len(d.commits), len(d.diffFiles))),
+			[]look.Span{look.Heading(fmt.Sprintf("#%d %s", c.Seq, c.Title))},
+			[]look.Span{
+				look.Muted(fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
+				look.SHA(rev.BaseSHA).Short(), look.Muted(".."), look.SHA(rev.HeadSHA).Short(),
+				look.Muted(fmt.Sprintf("), %d commits, %d files", len(d.commits), len(d.diffFiles))),
 			},
-			[]span{
-				sp(elDefault, "Threads: "),
-				sp(elStateOpen, fmt.Sprintf("%d open", counts[store.ThreadOpen])), sp(elDefault, ", "),
-				sp(elStateAddressed, fmt.Sprintf("%d addressed", counts[store.ThreadAddressed])), sp(elDefault, ", "),
-				sp(elStateResolved, fmt.Sprintf("%d resolved", counts[store.ThreadResolved])),
-				sp(elMuted, "   showing "+filter.String()+"; F filters, o opens a thread in the whole diff, O in its commit"),
+			[]look.Span{
+				look.Default("Threads: "),
+				look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),
+				look.StateCount(store.ThreadAddressed, counts[store.ThreadAddressed]), look.Default(", "),
+				look.StateCount(store.ThreadResolved, counts[store.ThreadResolved]),
+				look.Muted("   showing " + filter.String() + "; F filters, o opens a thread in the whole diff, O in its commit"),
 			},
 			blank,
 		),
@@ -141,23 +142,23 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		}
 		return n > 0
 	}
-	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...[]span) row {
+	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...[]look.Span) row {
 		bar := func(width int) []string {
-			spans := []span{sp(elDefault, " ")}
+			spans := []look.Span{look.Default(" ")}
 			for i, p := range parts {
 				if i > 0 {
-					spans = append(spans, sp(elDefault, "  "))
+					spans = append(spans, look.Default("  "))
 				}
 				spans = append(spans, p...)
 			}
-			return []string{th.draw(surfHeading, width, dimmed(spans, finished(rv.ID))...)}
+			return []string{th.Draw(look.HeadingBar, width, look.DimIf(finished(rv.ID), spans...)...)}
 		}
 		return row{kind: rowReview, file: -1, text: bar, review: rv, thread: summary}
 	}
 	divider := func(label string) row {
 		return text(func(width int) []string {
 			line := "--- " + label + " "
-			return []string{th.draw(surfPlain, width, sp(elMuted, line+strings.Repeat("-", max(width-len(line), 0))))}
+			return []string{th.Draw(look.Plain, width, look.Muted(line+strings.Repeat("-", max(width-len(line), 0))))}
 		})
 	}
 
@@ -179,14 +180,14 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(blank))
 		}
 		lastRev = seq
-		parts := [][]span{
-			{sp(elHeading, fmt.Sprintf("Review #%d", rv.Seq))},
-			{sp(elAuthor, rv.Author.Name)},
-			{sp(verdictElement(rv.Verdict), verdictText(rv.Verdict))},
-			{sp(elMuted, fmt.Sprintf("revision %d  %s", seq, rv.SubmittedAt.Local().Format("2006-01-02 15:04")))},
+		parts := [][]look.Span{
+			{look.Heading(fmt.Sprintf("Review #%d", rv.Seq))},
+			{look.Author(rv.Author)},
+			{look.Verdict(rv.Verdict)},
+			{look.Muted(fmt.Sprintf("revision %d  ", seq)), look.Time(rv.SubmittedAt)},
 		}
 		if summary != nil {
-			parts = append(parts, append([]span{sp(elMuted, "summary"), sp(elDefault, " ")}, stateSpans(*summary, false)...))
+			parts = append(parts, append([]look.Span{look.Muted("summary"), look.Default(" ")}, look.State(*summary, false)...))
 		}
 		// A summary the filter leaves out shows only in the bar's state.
 		shownSummary := summary
@@ -213,9 +214,9 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(blank))
 		}
 		rows = append(rows, reviewRow(&draft, nil,
-			[]span{sp(elHeading, "Your pending review")},
-			[]span{sp(elDraft, fmt.Sprintf("%d new threads", len(byReview[draft.ID])), strong)},
-			[]span{sp(elMuted, "S submits it, D discards it")},
+			[]look.Span{look.Heading("Your pending review")},
+			[]look.Span{look.Draft(fmt.Sprintf("%d new threads", len(byReview[draft.ID]))).With(look.Strong)},
+			[]look.Span{look.Muted("S submits it, D discards it")},
 		))
 		rows = append(rows, threads...)
 		shown += len(threads) + 1
@@ -225,7 +226,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		if filter != filterAll {
 			msg = "No " + filter.String() + " threads."
 		}
-		rows = append(rows, plain([]span{sp(elMuted, msg)}))
+		rows = append(rows, plain([]look.Span{look.Muted(msg)}))
 	}
 	return rows
 }
@@ -237,26 +238,4 @@ func hasSummary(d *changeData, reviewID string) bool {
 		}
 	}
 	return false
-}
-
-func verdictText(v store.Verdict) string {
-	switch v {
-	case store.VerdictApprove:
-		return "approved"
-	case store.VerdictRequestChanges:
-		return "requested changes"
-	}
-	return "commented"
-}
-
-// verdictElement is how a verdict is drawn: approved and requested changes in their own colors,
-// commented plainly.
-func verdictElement(v store.Verdict) element {
-	switch v {
-	case store.VerdictApprove:
-		return elVerdictApprove
-	case store.VerdictRequestChanges:
-		return elVerdictRequestChanges
-	}
-	return elVerdictComment
 }

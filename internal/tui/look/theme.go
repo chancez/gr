@@ -1,14 +1,17 @@
-package tui
+// Package look is the TUI's registry of ADR 8. A theme assigns the palette's colors to roles, for a
+// light or dark background, and styles every element and surface from the roles.
+//
+// Code that draws builds lines of spans and says which surface they sit on. A span is made only by
+// this package's constructors, each for one kind of value, such as Author or SHA, so a value is
+// always drawn as its own element. Elements are unexported, so nothing else can pair a value with
+// the wrong one.
+package look
 
 import (
 	"image/color"
 
 	"charm.land/lipgloss/v2"
 )
-
-// This file is the registry of ADR 8. A theme assigns the palette's colors to roles, for a light or
-// dark background, and styles every element and surface from the roles. Code that draws builds
-// lines of spans, says which surface they sit on, and leaves the colors to the theme.
 
 // roles are what a theme's colors are for. Elements and surfaces are styled from roles, so a theme
 // that changes what danger looks like changes it everywhere.
@@ -157,52 +160,52 @@ var elementNames = [numElements]string{
 	elWarning:               "warning",
 }
 
-// props are options a place asks an element for. The theme defines what each does.
-type props uint8
+// Prop is an option a place asks an element for. The theme defines what each does.
+type Prop uint8
 
 const (
-	// dim is for entries that are done: reviewed, collapsed, or resolved.
-	dim props = 1 << iota
-	// strong is for emphasis, such as in headers.
-	strong
+	// Dim is for entries that are done: reviewed, collapsed, or resolved.
+	Dim Prop = 1 << iota
+	// Strong is for emphasis, such as in headers.
+	Strong
 )
 
-// surface is where a line sits. It owns the background.
-type surface int
+// Surface is where a line sits. It owns the background.
+type Surface int
 
 const (
-	surfPlain surface = iota
-	surfHeading
-	surfHunk
-	surfCursor
-	surfCursorDim
-	surfSelected
-	surfAdded
-	surfDeleted
-	surfActiveHunk
-	surfPaneFocused
-	surfPaneUnfocused
-	surfStatus
-	surfStatusError
-	surfSearchMatch
+	Plain Surface = iota
+	HeadingBar
+	HunkBar
+	Cursor
+	CursorDim
+	Selected
+	AddedLine
+	DeletedLine
+	ActiveHunk
+	PaneFocused
+	PaneUnfocused
+	Status
+	StatusError
+	SearchMatch
 	numSurfaces
 )
 
 var surfaceNames = [numSurfaces]string{
-	surfPlain:         "surface.plain",
-	surfHeading:       "surface.heading",
-	surfHunk:          "surface.hunk",
-	surfCursor:        "surface.cursor",
-	surfCursorDim:     "surface.cursor-dim",
-	surfSelected:      "surface.selected",
-	surfAdded:         "surface.added",
-	surfDeleted:       "surface.deleted",
-	surfActiveHunk:    "surface.active-hunk",
-	surfPaneFocused:   "surface.pane-focused",
-	surfPaneUnfocused: "surface.pane-unfocused",
-	surfStatus:        "surface.status",
-	surfStatusError:   "surface.status-error",
-	surfSearchMatch:   "surface.search-match",
+	Plain:         "surface.plain",
+	HeadingBar:    "surface.heading",
+	HunkBar:       "surface.hunk",
+	Cursor:        "surface.cursor",
+	CursorDim:     "surface.cursor-dim",
+	Selected:      "surface.selected",
+	AddedLine:     "surface.added",
+	DeletedLine:   "surface.deleted",
+	ActiveHunk:    "surface.active-hunk",
+	PaneFocused:   "surface.pane-focused",
+	PaneUnfocused: "surface.pane-unfocused",
+	Status:        "surface.status",
+	StatusError:   "surface.status-error",
+	SearchMatch:   "surface.search-match",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -215,21 +218,22 @@ type surfaceStyle struct {
 	bold  bool
 }
 
-// theme is the registry: the roles a theme assigns for a light or dark background, and the style
+// Theme is the registry: the roles a theme assigns for a light or dark background, and the style
 // they give each element and surface.
-type theme struct {
+type Theme struct {
 	isDark   bool
 	roles    roles
 	elements [numElements]lipgloss.Style
 	surfaces [numSurfaces]surfaceStyle
 }
 
-func newTheme(isDark bool, name string) *theme {
+// New is the named theme, one of Themes, for a light or dark background.
+func New(isDark bool, name string) *Theme {
 	p := newRoles(isDark, name)
 	ld := lipgloss.LightDark(isDark)
 	fg := func(c color.Color) lipgloss.Style { return lipgloss.NewStyle().Foreground(c) }
 	bold := func(c color.Color) lipgloss.Style { return fg(c).Bold(true) }
-	t := &theme{isDark: isDark, roles: p}
+	t := &Theme{isDark: isDark, roles: p}
 	t.elements = [numElements]lipgloss.Style{
 		elDefault:               lipgloss.NewStyle(),
 		elText:                  fg(p.text),
@@ -262,35 +266,35 @@ func newTheme(isDark bool, name string) *theme {
 		elWarning:               bold(p.attention),
 	}
 	t.surfaces = [numSurfaces]surfaceStyle{
-		surfPlain:         {},
-		surfHeading:       {bg: p.headingBg},
-		surfHunk:          {bg: p.hunkBg},
-		surfCursor:        {bg: p.cursorBg},
-		surfCursorDim:     {bg: p.dimCursorBg},
-		surfSelected:      {bg: p.selectedBg},
-		surfAdded:         {bg: p.addedBg},
-		surfDeleted:       {bg: p.deletedBg},
-		surfActiveHunk:    {bg: p.accent, solid: true, fg: p.onSolid},
-		surfPaneFocused:   {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
-		surfPaneUnfocused: {bg: p.paneUnfocusedBg, solid: true, fg: p.muted, bold: true},
-		surfStatus:        {bg: p.success, solid: true, fg: p.onSolid, bold: true},
-		surfStatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
-		surfSearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
+		Plain:         {},
+		HeadingBar:    {bg: p.headingBg},
+		HunkBar:       {bg: p.hunkBg},
+		Cursor:        {bg: p.cursorBg},
+		CursorDim:     {bg: p.dimCursorBg},
+		Selected:      {bg: p.selectedBg},
+		AddedLine:     {bg: p.addedBg},
+		DeletedLine:   {bg: p.deletedBg},
+		ActiveHunk:    {bg: p.accent, solid: true, fg: p.onSolid},
+		PaneFocused:   {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
+		PaneUnfocused: {bg: p.paneUnfocusedBg, solid: true, fg: p.muted, bold: true},
+		Status:        {bg: p.success, solid: true, fg: p.onSolid, bold: true},
+		StatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
+		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
 	}
 	return t
 }
 
 // style is how el with props draws on surface s.
-func (t *theme) style(el element, p props, s surface) lipgloss.Style {
+func (t *Theme) style(el element, p Prop, s Surface) lipgloss.Style {
 	ss := t.surfaces[s]
 	if ss.solid {
-		return lipgloss.NewStyle().Foreground(ss.fg).Background(ss.bg).Bold(ss.bold || p&strong != 0)
+		return lipgloss.NewStyle().Foreground(ss.fg).Background(ss.bg).Bold(ss.bold || p&Strong != 0)
 	}
 	st := t.elements[el]
-	if p&dim != 0 {
+	if p&Dim != 0 {
 		st = st.Foreground(t.roles.muted).Bold(false)
 	}
-	if p&strong != 0 {
+	if p&Strong != 0 {
 		st = st.Bold(true)
 	}
 	if ss.bg != nil {

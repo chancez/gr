@@ -4,11 +4,9 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -16,6 +14,7 @@ import (
 	"github.com/chancez/gr/internal/gittest"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/cells"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden screens in testdata/golden")
@@ -91,9 +90,9 @@ func (e *tuiEnv) golden(name string) {
 	if err != nil {
 		e.t.Fatalf("%v; run with -update to create it", err)
 	}
-	gotCells, wantCells := cells(got), cells(string(want))
+	gotCells, wantCells := cells.Parse(got), cells.Parse(string(want))
 	for y := range max(len(gotCells), len(wantCells)) {
-		var g, w []cell
+		var g, w []cells.Cell
 		if y < len(gotCells) {
 			g = gotCells[y]
 		}
@@ -101,7 +100,7 @@ func (e *tuiEnv) golden(name string) {
 			w = wantCells[y]
 		}
 		for x := range max(len(g), len(w)) {
-			var gc, wc cell
+			var gc, wc cells.Cell
 			if x < len(g) {
 				gc = g[x]
 			}
@@ -110,107 +109,6 @@ func (e *tuiEnv) golden(name string) {
 			}
 			if gc != wc {
 				e.t.Fatalf("%s: line %d column %d differs\ngot:  %+v\nwant: %+v\nscreen:\n%s", name, y+1, x+1, gc, wc, e.screen())
-			}
-		}
-	}
-}
-
-// cell is one character on screen and how it is drawn.
-type cell struct {
-	r     rune
-	style sgr
-}
-
-// sgr is the drawing state that SGR escapes set. Colors keep their parameters, such as "38;2;1;2;3".
-type sgr struct {
-	fg        string
-	bg        string
-	bold      bool
-	faint     bool
-	italic    bool
-	underline bool
-	reverse   bool
-	strike    bool
-}
-
-// cells reads a screen into lines of cells, so two screens compare by how they look rather than by
-// the escapes that draw them: a style can be set in one escape or in several.
-func cells(screen string) [][]cell {
-	var out [][]cell
-	for line := range strings.SplitSeq(screen, "\n") {
-		var st sgr
-		var row []cell
-		for i := 0; i < len(line); {
-			if rest, ok := strings.CutPrefix(line[i:], "\x1b["); ok {
-				end := strings.IndexByte(rest, 'm')
-				st.apply(strings.Split(rest[:end], ";"))
-				i += 2 + end + 1
-				continue
-			}
-			r, n := utf8.DecodeRuneInString(line[i:])
-			c := cell{r: r, style: st}
-			if r == ' ' {
-				// A space shows only its background and lines through it, not its text's color.
-				c.style = sgr{bg: st.bg, underline: st.underline, reverse: st.reverse, strike: st.strike}
-			}
-			row = append(row, c)
-			i += n
-		}
-		out = append(out, row)
-	}
-	return out
-}
-
-func (s *sgr) apply(params []string) {
-	for i := 0; i < len(params); i++ {
-		switch p := params[i]; p {
-		case "", "0":
-			*s = sgr{}
-		case "1":
-			s.bold = true
-		case "2":
-			s.faint = true
-		case "3":
-			s.italic = true
-		case "4":
-			s.underline = true
-		case "7":
-			s.reverse = true
-		case "9":
-			s.strike = true
-		case "22":
-			s.bold, s.faint = false, false
-		case "23":
-			s.italic = false
-		case "24":
-			s.underline = false
-		case "27":
-			s.reverse = false
-		case "29":
-			s.strike = false
-		case "39":
-			s.fg = ""
-		case "49":
-			s.bg = ""
-		case "38", "48":
-			n := 3
-			if i+1 < len(params) && params[i+1] == "2" {
-				n = 5
-			}
-			color := strings.Join(params[i:min(i+n, len(params))], ";")
-			if p == "38" {
-				s.fg = color
-			} else {
-				s.bg = color
-			}
-			i += n - 1
-		default:
-			if n, err := strconv.Atoi(p); err == nil && (n >= 30 && n <= 37 || n >= 90 && n <= 97) {
-				s.fg = p
-			} else if err == nil && (n >= 40 && n <= 47 || n >= 100 && n <= 107) {
-				s.bg = p
-			} else {
-				panic("unknown SGR parameter " + p)
 			}
 		}
 	}

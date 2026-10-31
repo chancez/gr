@@ -1,0 +1,290 @@
+package look
+
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/chancez/gr/internal/anchor"
+	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/review"
+	"github.com/chancez/gr/internal/store"
+)
+
+// Constructors for each kind of value gr draws. Each takes the value itself, so the element and
+// the format come from its type.
+
+// SHA is a commit's sha.
+type SHA string
+
+// Short is the sha abbreviated to 7 characters, as in a commit list.
+func (s SHA) Short() Span {
+	if len(s) > 7 {
+		s = s[:7]
+	}
+	return sp(elSHA, string(s))
+}
+
+// Full is the whole sha.
+func (s SHA) Full() Span {
+	return sp(elSHA, string(s))
+}
+
+// Author is who wrote a comment, a review, or a commit.
+func Author(a store.Author) Span {
+	return sp(elAuthor, a.Name)
+}
+
+// Time is when something happened, in local time.
+func Time(t time.Time) Span {
+	return sp(elMuted, t.Local().Format("2006-01-02 15:04"))
+}
+
+// CommitHeader is a commit's sha, author, email, and time.
+func CommitHeader(c git.Commit) []Span {
+	return []Span{
+		sp(elSHA, "commit "+c.SHA).With(Strong), sp(elDefault, "  "),
+		Author(store.Author{Name: c.AuthorName}), sp(elMuted, " <"+c.AuthorEmail+">  "), Time(c.AuthorTime),
+	}
+}
+
+// FileLabel is a file's path, or its old and new paths when renamed.
+func FileLabel(f git.FileDiff) string {
+	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
+		return f.OldPath + " -> " + f.NewPath
+	}
+	return f.Path()
+}
+
+// File is a file's path as a file header shows it: after its status letter, and with notes for a
+// binary file or a changed mode.
+func File(f git.FileDiff) Span {
+	label := " " + StatusLetter(f.Status) + " " + FileLabel(f)
+	if f.Binary {
+		label += "  (binary)"
+	}
+	if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
+		label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
+	}
+	return sp(elPath, label)
+}
+
+// StatusLetter is a file's status as git's --name-status writes it.
+func StatusLetter(s git.FileStatus) string {
+	switch s {
+	case git.StatusAdded:
+		return "A"
+	case git.StatusDeleted:
+		return "D"
+	case git.StatusRenamed:
+		return "R"
+	case git.StatusCopied:
+		return "C"
+	}
+	return "M"
+}
+
+// Location names where a thread points: the commit's sha, then the path and lines. Thread titles
+// show it muted; prop Strong shows it as a heading, as over an excerpt.
+func Location(l store.Location, p ...Prop) []Span {
+	el := elMuted
+	if len(p) > 0 && p[0]&Strong != 0 {
+		el = elPath
+	}
+	var out []Span
+	if l.Scope == store.ScopeChange {
+		return nil
+	}
+	if l.Scope == store.ScopeCommit {
+		out = append(out, sp(el, "commit "), SHA(l.Commit).Short())
+	}
+	if l.Path != "" {
+		loc := l.Path
+		if l.StartLine > 0 {
+			loc += ":" + strconv.Itoa(l.StartLine)
+			if l.EndLine != l.StartLine {
+				loc += "-" + strconv.Itoa(l.EndLine)
+			}
+		}
+		if l.Side == anchor.SideOld {
+			loc += " (old)"
+		}
+		if len(out) > 0 {
+			loc = " " + loc
+		}
+		out = append(out, sp(el, loc))
+	}
+	return out
+}
+
+// Ref is a thread's label, such as "#3" or "r1".
+func Ref(t review.ThreadView) Span {
+	return sp(elRef, t.Label())
+}
+
+// SummaryTitle titles a review's summary thread as the review's, with its ref.
+func SummaryTitle(t review.ThreadView) []Span {
+	return []Span{sp(elRef, "Summary"), sp(elMuted, " ("+t.Label()+")")}
+}
+
+// State is a thread's state badge: its state and who set it, outdated, and draft.
+func State(t review.ThreadView, draft bool) []Span {
+	var out []Span
+	switch t.State {
+	case store.ThreadOpen:
+		out = append(out, sp(elStateOpen, "open"))
+	case store.ThreadAddressed:
+		out = append(out, sp(elStateAddressed, "addressed"))
+	case store.ThreadResolved:
+		out = append(out, sp(elStateResolved, "resolved"))
+	}
+	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
+		out = append(out, sp(elMuted, " by "+t.StateBy.Name))
+	}
+	if t.Outdated {
+		out = append(out, sp(elMuted, ", "), sp(elOutdated, "outdated"))
+	}
+	if draft {
+		out = append(out, sp(elMuted, ", "), sp(elDraft, "draft"))
+	}
+	return out
+}
+
+// StateCount is how many threads are in a state, such as "3 open".
+func StateCount(s store.ThreadState, n int) Span {
+	el := elStateOpen
+	switch s {
+	case store.ThreadAddressed:
+		el = elStateAddressed
+	case store.ThreadResolved:
+		el = elStateResolved
+	}
+	return sp(el, fmt.Sprintf("%d %s", n, s))
+}
+
+// Verdict is a review's verdict, in its own color.
+func Verdict(v store.Verdict) Span {
+	switch v {
+	case store.VerdictApprove:
+		return sp(elVerdictApprove, "approved")
+	case store.VerdictRequestChanges:
+		return sp(elVerdictRequestChanges, "requested changes")
+	}
+	return sp(elVerdictComment, "commented")
+}
+
+// Hunk is a hunk's header range and section.
+func Hunk(h git.Hunk) Span {
+	return sp(elHunkRange, fmt.Sprintf(" @@ -%d,%d +%d,%d @@ %s", h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Section))
+}
+
+// LineMark is a diff line's "+" or "-", or a space for context.
+func LineMark(k git.LineKind) Span {
+	switch k {
+	case git.LineAdded:
+		return sp(elMarkAdded, "+")
+	case git.LineDeleted:
+		return sp(elMarkDeleted, "-")
+	}
+	return sp(elDefault, " ")
+}
+
+// Gutter is a diff line's numbers, each right-aligned to width and followed by a space. Zero is a
+// line that is not on that side.
+func Gutter(width int, lines ...int) Span {
+	var b strings.Builder
+	for _, n := range lines {
+		if n == 0 {
+			b.WriteString(strings.Repeat(" ", width))
+		} else {
+			fmt.Fprintf(&b, "%*d", width, n)
+		}
+		b.WriteByte(' ')
+	}
+	return sp(elGutter, b.String())
+}
+
+// Sidebar marks, shown in an entry's right-aligned badge.
+//
+// TODO: make these configurable, so icons such as checkboxes can replace the ASCII defaults.
+const (
+	// MarkReviewed is shown on files and commits marked reviewed.
+	MarkReviewed = "x"
+	// MarkDraft is shown where you have draft comments not yet submitted.
+	MarkDraft = "*"
+)
+
+// Badge is an entry's open thread count and its marks.
+func Badge(open int, draft, reviewed bool) []Span {
+	var out []Span
+	if open > 0 {
+		out = append(out, sp(elCount, fmt.Sprintf("(%d)", open)))
+	}
+	if draft || reviewed {
+		if len(out) > 0 {
+			out = append(out, sp(elDefault, " "))
+		}
+		if draft {
+			out = append(out, sp(elDraft, MarkDraft).With(Strong))
+		}
+		if reviewed {
+			out = append(out, sp(elReviewed, MarkReviewed).With(Strong))
+		}
+	}
+	return out
+}
+
+// Reviewed is the "reviewed" label on a file reviewed in full.
+func Reviewed() Span {
+	return sp(elReviewed, "reviewed").With(Strong)
+}
+
+// Draft is text about drafts not yet submitted, such as a pending review's count.
+func Draft(s string) Span {
+	return sp(elDraft, s)
+}
+
+// Key is a key, as help shows it.
+func Key(k string) Span {
+	return sp(elKey, k)
+}
+
+// Hint is a key and what it does.
+func Hint(k, desc string) []Span {
+	return []Span{Key(k), sp(elDefault, " "), sp(elKeyDesc, desc)}
+}
+
+// Free text, styled by what it is for.
+
+// Default is text in the terminal's own foreground.
+func Default(s string) Span { return sp(elDefault, s) }
+
+// Text is text in the theme's foreground.
+func Text(s string) Span { return sp(elText, s) }
+
+// Muted is secondary text, such as notes and counts.
+func Muted(s string) Span { return sp(elMuted, s) }
+
+// Heading is a title.
+func Heading(s string) Span { return sp(elHeading, s) }
+
+// KeyDesc is what a key does.
+func KeyDesc(s string) Span { return sp(elKeyDesc, s) }
+
+// Mode marks a mode that changes what keys do, such as selecting lines.
+func Mode(s string) Span { return sp(elMode, s) }
+
+// Warning is a caution, such as editing a resolved thread.
+func Warning(s string) Span { return sp(elWarning, s) }
+
+// Error is an error or a destructive prompt.
+func Error(s string) Span { return sp(elError, s) }
+
+// Border is a divider, in the accent when active.
+func Border(s string, active bool) Span {
+	if active {
+		return sp(elBorderActive, s)
+	}
+	return sp(elBorder, s)
+}

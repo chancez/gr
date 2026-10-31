@@ -26,7 +26,17 @@ import (
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/termtext"
+	"github.com/chancez/gr/internal/tui/look"
 )
+
+// The built-in themes, one of which Options picks.
+const (
+	ThemeDefault    = look.ThemeDefault
+	ThemeColorblind = look.ThemeColorblind
+)
+
+// Themes lists the built-in themes.
+var Themes = look.Themes
 
 // Options configure the TUI.
 type Options struct {
@@ -224,11 +234,7 @@ func (m *model) setTheme(isDark bool) {
 	m.r = newRenderer(isDark, m.theme)
 	h := help.New()
 	h.ShortSeparator, h.FullSeparator, h.Ellipsis = " | ", "   ", "..."
-	th := m.r.th
-	key, desc, muted := th.style(elKey, 0, surfPlain), th.style(elKeyDesc, 0, surfPlain), th.style(elMuted, 0, surfPlain)
-	h.Styles.ShortKey, h.Styles.FullKey = key, key
-	h.Styles.ShortDesc, h.Styles.FullDesc = desc, desc
-	h.Styles.ShortSeparator, h.Styles.FullSeparator = muted, muted
+	m.r.th.StyleHelp(&h)
 	h.SetWidth(m.width)
 	m.help = h
 }
@@ -1374,17 +1380,7 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 // composeStyles colors the comment editor from the palette, so text and hints are readable on any
 // background.
 func (m *model) composeStyles() textarea.Styles {
-	th := m.r.th
-	styles := textarea.DefaultStyles(th.isDark)
-	text, muted := th.style(elText, 0, surfPlain), th.style(elMuted, 0, surfPlain)
-	for _, state := range []*textarea.StyleState{&styles.Focused, &styles.Blurred} {
-		state.Text = text
-		state.Placeholder = muted
-		state.CursorLine = text
-		state.EndOfBuffer = muted
-		state.Prompt = muted
-	}
-	return styles
+	return m.r.th.EditorStyles()
 }
 
 func (m *model) closeComposer() {
@@ -1688,11 +1684,7 @@ func (m *model) render() string {
 	}
 	mainLines := append([]string{m.mainHeader(mw)}, body...)
 	navLines := m.renderSidebar(nw, bh)
-	border := elBorder
-	if m.dragging {
-		border = elBorderActive
-	}
-	sep := m.r.th.render(surfPlain, sp(border, "|"))
+	sep := m.r.th.Render(look.Plain, look.Border("|", m.dragging))
 	var b strings.Builder
 	for y := range bh {
 		if nw > 0 {
@@ -1700,24 +1692,23 @@ func (m *model) render() string {
 			if y < len(navLines) {
 				nl = navLines[y]
 			}
-			b.WriteString(fit(nl, nw))
+			b.WriteString(look.Fit(nl, nw))
 			b.WriteString(sep)
 		}
 		ml := ""
 		if y < len(mainLines) {
 			ml = mainLines[y]
 		}
-		b.WriteString(fit(ml, mw))
+		b.WriteString(look.Fit(ml, mw))
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
 		hints := "  " + m.help.ShortHelpView([]key.Binding{m.keys.Save, m.keys.ExternalEdit, m.keys.Cancel})
-		el := elHeading
+		title := look.Heading(m.compose.title)
 		if m.compose.warn {
-			el = elWarning
+			title = look.Warning(m.compose.title)
 		}
-		title := m.r.th.render(surfPlain, sp(el, m.compose.title)) + hints
-		box := m.r.th.box(m.width, true).Render(ansi.Truncate(title, m.width-4, "") + "\n" + m.compose.area.View())
+		box := m.r.th.Box(m.width, true).Render(ansi.Truncate(m.r.th.Render(look.Plain, title)+hints, m.width-4, "") + "\n" + m.compose.area.View())
 		b.WriteString(box)
 		b.WriteString("\n")
 	}
@@ -1731,39 +1722,40 @@ func (m *model) renderStatus() string {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		return th.render(surfPlain, sp(elHeading, "Submit review: ")) + m.renderHints([]key.Binding{
+		return th.Render(look.Plain, look.Heading("Submit review: ")) + m.renderHints([]key.Binding{
 			hint("a", "approve"), hint("r", "request changes"), hint("c", "comment"),
 			hint("A R C", "skip the summary"), hint("esc", "cancel"),
 		}, m.width-15)
 	case modeConfirm:
-		return th.render(surfPlain, sp(elError, m.confirm.prompt))
+		return th.Render(look.Plain, look.Error(m.confirm.prompt))
 	}
 	d := m.data
 	text := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)
 	if d.change.State != store.ChangeOpen {
 		text += " " + string(d.change.State)
 	}
-	left := []span{sp(elText, text)}
+	left := []look.Span{look.Text(text)}
 	if _, ok := d.draft(); ok {
-		left = append(left, sp(elDraft, " draft"))
+		left = append(left, look.Draft(" draft"))
 	}
-	left = append(left, sp(elText, " "+m.reviewProgress()))
+	left = append(left, look.Text(" "+m.reviewProgress()))
 	if m.autoAdvance {
-		left = append(left, sp(elMode, " auto-advance"))
+		left = append(left, look.Mode(" auto-advance"))
 	}
 	if m.split {
-		left = append(left, sp(elText, " split"))
+		left = append(left, look.Text(" split"))
 	}
 	if m.main.anchor >= 0 {
-		left = append(left, sp(elMode, " selecting"))
+		left = append(left, look.Mode(" selecting"))
 	}
 	if label := m.searchLabel(); label != "" {
-		left = append(left, sp(elText, " "), styledSpan(func(color.Color) string { return th.render(surfSearchMatch, sp(elText, label)) }),
-			sp(elText, " "), sp(elKey, "esc"), sp(elKeyDesc, " clears"))
+		left = append(left, look.Text(" "), look.Styled(func(color.Color) string { return th.Render(look.SearchMatch, look.Text(label)) }),
+			look.Text(" "))
+		left = append(left, look.Hint("esc", "clears")...)
 	}
-	l := th.render(surfPlain, left...)
+	l := th.Render(look.Plain, left...)
 	// Fit the hints in what the left side leaves, keeping help and quit.
 	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10))
 	gap := max(m.width-ansi.StringWidth(l)-ansi.StringWidth(right)-1, 1)
-	return fit(l+strings.Repeat(" ", gap)+right, m.width)
+	return look.Fit(l+strings.Repeat(" ", gap)+right, m.width)
 }

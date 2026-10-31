@@ -8,6 +8,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 type viewKind int
@@ -332,7 +333,7 @@ func pairLines(lines []git.Line) [][2]*git.Line {
 func (r row) searchText(files []git.FileDiff) string {
 	switch r.kind {
 	case rowFile:
-		return fileLabel(files[r.file])
+		return look.FileLabel(files[r.file])
 	case rowHunk:
 		return r.hunk.Section
 	case rowLine:

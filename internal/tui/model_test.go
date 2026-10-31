@@ -11,13 +11,14 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/gittest"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/cells"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 type tuiEnv struct {
@@ -406,7 +407,7 @@ func TestDragSidebar(t *testing.T) {
 
 func TestSidebarTruncates(t *testing.T) {
 	l := navList{items: []navItem{{label: "a very long label that does not fit"}}}
-	got := ansi.Strip(l.render(newTheme(true, ThemeDefault), "T", 12, 2, false)[1])
+	got := ansi.Strip(l.render(look.New(true, ThemeDefault), "T", 12, 2, false)[1])
 	if got != "a very lo..." {
 		t.Errorf("truncated label = %q", got)
 	}
@@ -414,7 +415,7 @@ func TestSidebarTruncates(t *testing.T) {
 
 func TestFileLabelsKeepTheirEnd(t *testing.T) {
 	l := navList{items: []navItem{{prefix: "M ", label: "internal/anchor/anchor_test.go"}}}
-	got := ansi.Strip(l.render(newTheme(true, ThemeDefault), "T", 20, 2, false)[1])
+	got := ansi.Strip(l.render(look.New(true, ThemeDefault), "T", 20, 2, false)[1])
 	if got != "M .../anchor_test.go" {
 		t.Errorf("file label = %q", got)
 	}
@@ -488,7 +489,7 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	reviewedItem := false
 	for _, it := range e.m.viewsNav.items {
 		if strings.Contains(it.label, "say hello") {
-			reviewedItem = it.badge == markReviewed
+			reviewedItem = look.TextOf(it.badge...) == look.MarkReviewed
 		}
 	}
 	if !reviewedItem || !strings.Contains(e.screen(), "1/2 commits reviewed") {
@@ -748,25 +749,25 @@ func TestSidebarMarks(t *testing.T) {
 	e.pressRun("ctrl+s")
 
 	for _, it := range e.m.viewsNav.items {
-		if strings.Contains(it.label, "say hello") && it.badge != markDraft {
-			t.Errorf("commit badge %q, want the draft mark", it.badge)
+		if strings.Contains(it.label, "say hello") && look.TextOf(it.badge...) != look.MarkDraft {
+			t.Errorf("commit badge %q, want the draft mark", look.TextOf(it.badge...))
 		}
 	}
 	for _, it := range e.m.filesNav.items {
-		if strings.Contains(it.label, "main.go") && it.badge != "(1) "+markDraft {
-			t.Errorf("main.go badge %q, want the open thread count and the draft mark", it.badge)
+		if strings.Contains(it.label, "main.go") && look.TextOf(it.badge...) != "(1) "+look.MarkDraft {
+			t.Errorf("main.go badge %q, want the open thread count and the draft mark", look.TextOf(it.badge...))
 		}
-		if strings.Contains(it.label, "COMMIT_MSG") && it.badge != "" {
-			t.Errorf("message badge %q, want none", it.badge)
+		if strings.Contains(it.label, "COMMIT_MSG") && len(it.badge) != 0 {
+			t.Errorf("message badge %q, want none", look.TextOf(it.badge...))
 		}
 	}
-	if marks(true, true) != "*x" || marks(false, false) != "" {
-		t.Errorf("marks = %q and %q", marks(true, true), marks(false, false))
+	if got := look.TextOf(look.Badge(0, true, true)...); got != "*x" {
+		t.Errorf("marks = %q, want drafts first", got)
 	}
 
 	// A badge survives truncation.
-	it := navItem{label: "a very long commit subject", badge: "(2) *x"}
-	if got := ansi.Strip(it.render(newTheme(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
+	it := navItem{label: "a very long commit subject", badge: look.Badge(2, true, true)}
+	if got := ansi.Strip(it.render(look.New(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
 		t.Errorf("rendered = %q", got)
 	}
 }
@@ -1183,7 +1184,7 @@ func TestSearchHighlights(t *testing.T) {
 	e.press("/")
 	e.typeText("hello")
 	e.press("enter")
-	match := e.m.r.th.render(surfSearchMatch, sp(elText, "hello"))
+	match := e.m.r.th.Render(look.SearchMatch, look.Text("hello"))
 	if !strings.Contains(e.m.render(), match) {
 		t.Errorf("match not highlighted:\n%q", e.m.render())
 	}
@@ -1262,18 +1263,18 @@ func TestReviewBarColorsTheVerdict(t *testing.T) {
 	}
 	e.drain(e.m.loadCmd())
 	e.openNav("Overview")
-	verdict := e.m.r.th.render(surfHeading, sp(elVerdictRequestChanges, "requested changes"))
+	verdict := e.m.r.th.Render(look.HeadingBar, look.Verdict(store.VerdictRequestChanges))
 	if !strings.Contains(e.m.render(), verdict) {
 		t.Error("the review bar's verdict is not in its own color")
 	}
 }
 
 func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
-	th := newTheme(true, ThemeDefault)
-	done := navItem{label: "M a.go", badge: "(2) *x", done: true}
-	want := th.draw(surfPlain, 23, sp(elText, "M a.go", dim)) + th.render(surfPlain, sp(elText, " "), sp(elCount, "(2)"),
-		sp(elText, " "), sp(elDraft, markDraft, strong), sp(elReviewed, markReviewed, strong))
-	if got := done.render(th, 30, false, false); !reflect.DeepEqual(cells(got), cells(want)) {
+	th := look.New(true, ThemeDefault)
+	done := navItem{label: "M a.go", badge: look.Badge(2, true, true), done: true}
+	want := th.Draw(look.Plain, 23, look.Default("M a.go").With(look.Dim)) +
+		th.Render(look.Plain, append([]look.Span{look.Default(" ")}, look.Badge(2, true, true)...)...)
+	if got := done.render(th, 30, false, false); !reflect.DeepEqual(cells.Parse(got), cells.Parse(want)) {
 		t.Errorf("reviewed entry = %q, want it dimmed with a colored badge: %q", got, want)
 	}
 
@@ -1286,7 +1287,7 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	if !strings.Contains(header, "reviewed  collapsed, enter expands") {
 		t.Errorf("file header = %q", header)
 	}
-	key := th.render(surfHeading, sp(elKey, "enter"))
+	key := th.Render(look.HeadingBar, look.Key("enter"))
 	if !strings.Contains(e.m.renderMainRow(e.m.main.cursor, rowState{})[0], key) {
 		t.Error("enter not styled as a key in the file header")
 	}
@@ -1314,26 +1315,12 @@ func TestEditingAResolvedThreadWarns(t *testing.T) {
 	}
 }
 
-func TestColorblindTheme(t *testing.T) {
-	for _, dark := range []bool{true, false} {
-		ld := lipgloss.LightDark(dark)
-		// Blue and orange stand in for green and red, by role.
-		want := newRoles(dark, ThemeDefault)
-		want.success, want.added = want.accent, want.accent
-		want.danger, want.deleted = ld(orange, lightOrange), ld(orange, lightOrange)
-		want.addedBg, want.deletedBg = ld(paleSky, deepNavy), ld(paleOrange, darkBrown)
-		if got := newRoles(dark, ThemeColorblind); !reflect.DeepEqual(got, want) {
-			t.Errorf("dark %v: colorblind roles = %+v, want %+v", dark, got, want)
-		}
-	}
-}
-
 func TestSidebarShowsMoreAboveAndBelow(t *testing.T) {
 	var items []navItem
 	for i := range 10 {
 		items = append(items, navItem{label: fmt.Sprintf("item %d", i)})
 	}
-	th := newTheme(true, ThemeDefault)
+	th := look.New(true, ThemeDefault)
 	render := func(l *navList) []string {
 		var out []string
 		for _, line := range l.render(th, "List", 30, 6, false)[1:] {

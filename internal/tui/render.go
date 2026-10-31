@@ -16,11 +16,12 @@ import (
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/termtext"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 // renderer draws rows. It caches what depends only on width.
 type renderer struct {
-	th       *theme
+	th       *look.Theme
 	hl       *highlighter
 	markdown map[int]*glamour.TermRenderer
 	// segments holds, after renderRow draws a thread, the line each of its comments starts on. The
@@ -29,7 +30,7 @@ type renderer struct {
 }
 
 func newRenderer(isDark bool, theme string) *renderer {
-	return &renderer{th: newTheme(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
+	return &renderer{th: look.New(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
 }
 
 // rowState is how a row is highlighted.
@@ -48,21 +49,17 @@ type rowState struct {
 func (r *renderer) hunkMarker(state rowState) string {
 	if state.activeHunk {
 		// A solid cell rather than "|", which would merge with the pane divider beside it.
-		return r.th.draw(surfActiveHunk, 1)
+		return r.th.Draw(look.ActiveHunk, 1)
 	}
 	return " "
 }
 
 // cursorSurface is the cursor's surface, faint when the main pane does not have focus.
-func cursorSurface(state rowState) surface {
+func cursorSurface(state rowState) look.Surface {
 	if state.dim {
-		return surfCursorDim
+		return look.CursorDim
 	}
-	return surfCursor
-}
-
-func (r *renderer) cursorBg(state rowState) color.Color {
-	return r.th.surfaces[cursorSurface(state)].bg
+	return look.Cursor
 }
 
 // renderMarkdown renders a comment body, falling back to plain text.
@@ -72,7 +69,7 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 	md, ok := r.markdown[width]
 	if !ok {
 		var err error
-		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(r.th.isDark)), glamour.WithWordWrap(width))
+		md, err = glamour.NewTermRenderer(glamour.WithStyles(markdownStyle(r.th.IsDark())), glamour.WithWordWrap(width))
 		if err == nil {
 			r.markdown[width] = md
 		}
@@ -82,7 +79,7 @@ func (r *renderer) renderMarkdown(body string, width int) []string {
 			return trimBlank(strings.Split(strings.TrimRight(out, "\n"), "\n"))
 		}
 	}
-	return wrap(body, width)
+	return look.Wrap(body, width)
 }
 
 // markdownStyle is glamour's light or dark style, kept to ASCII.
@@ -121,27 +118,6 @@ func gutterWidth(f git.FileDiff) int {
 	return len(strconv.Itoa(n))
 }
 
-func statusLetter(s git.FileStatus) string {
-	switch s {
-	case git.StatusAdded:
-		return "A"
-	case git.StatusDeleted:
-		return "D"
-	case git.StatusRenamed:
-		return "R"
-	case git.StatusCopied:
-		return "C"
-	}
-	return "M"
-}
-
-func fileLabel(f git.FileDiff) string {
-	if f.OldPath != "" && f.NewPath != "" && f.OldPath != f.NewPath {
-		return f.OldPath + " -> " + f.NewPath
-	}
-	return f.Path()
-}
-
 // renderRow draws one row at width. d supplies thread draft state.
 func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state rowState) []string {
 	r.segments = nil
@@ -152,36 +128,27 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return r.renderCommit(v.commit, width, state)
 	case rowFile:
 		f := v.files[rw.file]
-		label := " " + statusLetter(f.Status) + " " + fileLabel(f)
-		if f.Binary {
-			label += "  (binary)"
-		}
-		if f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode {
-			label += fmt.Sprintf("  (mode %s -> %s)", f.OldMode, f.NewMode)
-		}
-		surf := surfHeading
+		surf := look.HeadingBar
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
-		spans := []span{sp(elPath, label)}
+		spans := []look.Span{look.File(f)}
 		if rw.reviewed {
-			spans = append(spans, sp(elPath, "  "), sp(elReviewed, "reviewed", strong))
+			spans = append(spans, look.Default("  "), look.Reviewed())
 		}
 		switch {
 		case rw.collapsed:
-			spans = append(spans, sp(elPath, "  "), sp(elMuted, "collapsed, "), sp(elKey, "enter"), sp(elKeyDesc, " expands"))
+			spans = append(append(spans, look.Default("  "), look.Muted("collapsed, ")), look.Hint("enter", "expands")...)
 		case rw.reviewed:
-			spans = append(spans, sp(elPath, "  "), sp(elKey, "enter"), sp(elKeyDesc, " collapses"))
+			spans = append(append(spans, look.Default("  ")), look.Hint("enter", "collapses")...)
 		}
-		return []string{r.th.draw(surf, width, spans...)}
+		return []string{r.th.Draw(surf, width, spans...)}
 	case rowHunk:
-		h := rw.hunk
-		label := fmt.Sprintf(" @@ -%d,%d +%d,%d @@ %s", h.OldStart, h.OldLines, h.NewStart, h.NewLines, h.Section)
-		surf := surfHunk
+		surf := look.HunkBar
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
-		return []string{r.hunkMarker(state) + r.th.draw(surf, width-1, sp(elHunkRange, label))}
+		return []string{r.hunkMarker(state) + r.th.Draw(surf, width-1, look.Hunk(*rw.hunk))}
 	case rowLine:
 		f := v.files[rw.file]
 		if rw.line != nil {
@@ -207,57 +174,39 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return r.renderReview(d, rw, width, state)
 	case rowGap:
 		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
-		surf := surfPlain
+		surf := look.Plain
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
-		return []string{" " + r.th.draw(surf, width-1, sp(elMuted, label))}
+		return []string{" " + r.th.Draw(surf, width-1, look.Muted(label))}
 	}
 	return nil
 }
 
 // lineSurface is where a diff line sits: the cursor or selection on the cursor's side, or its
 // added or deleted color.
-func lineSurface(kind git.LineKind, state rowState, cursorSide bool) surface {
+func lineSurface(kind git.LineKind, state rowState, cursorSide bool) look.Surface {
 	switch {
 	case state.cursor && cursorSide:
 		return cursorSurface(state)
 	case state.selected && cursorSide:
-		return surfSelected
+		return look.Selected
 	case kind == git.LineAdded:
-		return surfAdded
+		return look.AddedLine
 	case kind == git.LineDeleted:
-		return surfDeleted
+		return look.DeletedLine
 	}
-	return surfPlain
-}
-
-func mark(kind git.LineKind) span {
-	switch kind {
-	case git.LineAdded:
-		return sp(elMarkAdded, "+")
-	case git.LineDeleted:
-		return sp(elMarkDeleted, "-")
-	}
-	return sp(elDefault, " ")
+	return look.Plain
 }
 
 // code is a line's text, highlighted.
-func (r *renderer) code(f git.FileDiff, l git.Line) span {
-	return styledSpan(func(bg color.Color) string { return r.hl.line(f.Path(), expandTabs(l.Text), bg) })
-}
-
-func num(n, width int) string {
-	if n == 0 {
-		return strings.Repeat(" ", width)
-	}
-	return fmt.Sprintf("%*d", width, n)
+func (r *renderer) code(f git.FileDiff, l git.Line) look.Span {
+	return look.Styled(func(bg color.Color) string { return r.hl.line(f.Path(), expandTabs(l.Text), bg) })
 }
 
 func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState) string {
-	gw := gutterWidth(f)
-	return r.th.draw(lineSurface(l.Kind, state, true), width,
-		sp(elGutter, num(l.OldLine, gw)+" "+num(l.NewLine, gw)+" "), mark(l.Kind), sp(elDefault, " "), r.code(f, l))
+	return r.th.Draw(lineSurface(l.Kind, state, true), width,
+		look.Gutter(gutterWidth(f), l.OldLine, l.NewLine), look.LineMark(l.Kind), look.Default(" "), r.code(f, l))
 }
 
 func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int, state rowState) string {
@@ -265,66 +214,42 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 	half := (width - 1) / 2
 	cell := func(l *git.Line, side anchor.Side, w int) string {
 		if l == nil {
-			return r.th.draw(surfPlain, w)
+			return r.th.Draw(look.Plain, w)
 		}
 		n := l.NewLine
 		if side == anchor.SideOld {
 			n = l.OldLine
 		}
-		return r.th.draw(lineSurface(l.Kind, state, state.side == side), w,
-			sp(elGutter, num(n, gw)+" "), mark(l.Kind), sp(elDefault, " "), r.code(f, *l))
+		return r.th.Draw(lineSurface(l.Kind, state, state.side == side), w,
+			look.Gutter(gw, n), look.LineMark(l.Kind), look.Default(" "), r.code(f, *l))
 	}
-	return cell(left, anchor.SideOld, half) + r.th.render(surfPlain, sp(elBorder, "|")) + cell(right, anchor.SideNew, width-half-1)
+	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
 
 func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []string {
-	surf := surfPlain
+	surf := look.Plain
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	return []string{r.th.draw(surf, width, sp(elSHA, "commit "+c.SHA, strong), sp(elDefault, "  "),
-		sp(elAuthor, c.AuthorName), sp(elMuted, " <"+c.AuthorEmail+">  "+c.AuthorTime.Format("2006-01-02 15:04")))}
-}
-
-// stateSpans are a thread's state badge: its state and who set it, outdated, and draft.
-func stateSpans(t review.ThreadView, draft bool) []span {
-	var out []span
-	switch t.State {
-	case store.ThreadOpen:
-		out = append(out, sp(elStateOpen, "open"))
-	case store.ThreadAddressed:
-		out = append(out, sp(elStateAddressed, "addressed"))
-	case store.ThreadResolved:
-		out = append(out, sp(elStateResolved, "resolved"))
-	}
-	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
-		out = append(out, sp(elMuted, " by "+t.StateBy.Name))
-	}
-	if t.Outdated {
-		out = append(out, sp(elMuted, ", "), sp(elOutdated, "outdated"))
-	}
-	if draft {
-		out = append(out, sp(elMuted, ", "), sp(elDraft, "draft"))
-	}
-	return out
+	return []string{r.th.Draw(surf, width, look.CommitHeader(c)...)}
 }
 
 // commentHeader is a comment's author and time, and whether it is a draft.
-func commentHeader(d *changeData, c store.Comment) []span {
-	out := []span{sp(elAuthor, c.Author.Name), sp(elMuted, "  "+c.CreatedAt.Local().Format("2006-01-02 15:04"))}
+func commentHeader(d *changeData, c store.Comment) []look.Span {
+	out := []look.Span{look.Author(c.Author), look.Default("  "), look.Time(c.CreatedAt)}
 	if d.isDraft(c.ReviewID) {
-		out = append(out, sp(elDraft, "  draft"))
+		out = append(out, look.Draft("  draft"))
 	}
 	return out
 }
 
 // renderExcerpt draws the diff a thread is about, under a line naming where it is.
 func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
-	where := append([]span{sp(elPath, " ")}, locationSpans(loc, elPath)...)
+	where := append([]look.Span{look.Default(" ")}, look.Location(loc, look.Strong)...)
 	if !e.Exact {
-		where = append(where, sp(elPath, "  (outdated: as it was)"))
+		where = append(where, look.Muted("  (outdated: as it was)"))
 	}
-	out := []string{r.th.draw(surfHeading, width, where...)}
+	out := []string{r.th.Draw(look.HeadingBar, width, where...)}
 	// A one-hunk file sized to the excerpt's last line numbers, so the gutter is as wide as needed.
 	f := git.FileDiff{NewPath: e.Path}
 	if n := len(e.Lines); n > 0 {
@@ -351,14 +276,14 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 			first = strings.Join(strings.Fields(t.Comments[0].Body), " ")
 		}
 		line := fmt.Sprintf("    %d comments  %s", len(t.Comments), first)
-		return append(lines, r.th.drawCut(surfPlain, width, sp(elMuted, line)))
+		return append(lines, r.th.DrawCut(look.Plain, width, look.Muted(line)))
 	}
 	r.segments = []int{0}
 	for i, c := range t.Comments {
 		if i > 0 {
 			r.segments = append(r.segments, len(lines))
 			lines = append(lines, "")
-			lines = append(lines, r.th.draw(surfPlain, width, append([]span{sp(elDefault, "    ")}, commentHeader(d, c)...)...))
+			lines = append(lines, r.th.Draw(look.Plain, width, append([]look.Span{look.Default("    ")}, commentHeader(d, c)...)...))
 		}
 		for _, l := range r.renderMarkdown(c.Body, width-6) {
 			lines = append(lines, "    "+l)
@@ -369,24 +294,24 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
 func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
-	where := locationSpans(t.Location, elMuted)
+	where := look.Location(t.Location)
 	if t.Summary {
-		where = []span{sp(elMuted, "summary")}
+		where = []look.Span{look.Muted("summary")}
 	}
 	first := ""
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	spans := []span{sp(elMuted, "  > "+t.Label()+" ")}
-	spans = append(spans, stateSpans(t, d.isDraft(t.ReviewID))...)
-	spans = append(spans, sp(elMuted, "  "))
+	spans := []look.Span{look.Muted("  > " + t.Label() + " ")}
+	spans = append(spans, look.State(t, d.isDraft(t.ReviewID))...)
+	spans = append(spans, look.Muted("  "))
 	spans = append(spans, where...)
-	spans = append(spans, sp(elMuted, fmt.Sprintf("  %d comments  %s", len(t.Comments), first)))
-	surf := surfPlain
+	spans = append(spans, look.Muted(fmt.Sprintf("  %d comments  %s", len(t.Comments), first)))
+	surf := look.Plain
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	return r.th.drawCut(surf, width, dimmed(spans, t.State == store.ThreadResolved)...)
+	return r.th.DrawCut(surf, width, look.DimIf(t.State == store.ThreadResolved, spans...)...)
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
@@ -394,26 +319,26 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 	const indent = 2
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
-	title := []span{sp(elRef, t.Label()), sp(elDefault, " ")}
+	title := []look.Span{look.Ref(t), look.Default(" ")}
 	if t.Summary {
 		// A summary belongs to its review, so it is titled as the review's rather than numbered.
-		title = []span{sp(elRef, "Summary"), sp(elMuted, " ("+t.Label()+")"), sp(elDefault, " ")}
+		title = append(look.SummaryTitle(t), look.Default(" "))
 	}
-	title = append(title, stateSpans(t, d.isDraft(t.ReviewID))...)
-	if loc := locationSpans(t.Location, elMuted); len(loc) > 0 && !t.Summary {
-		title = append(append(title, sp(elMuted, "  ")), loc...)
+	title = append(title, look.State(t, d.isDraft(t.ReviewID))...)
+	if loc := look.Location(t.Location); len(loc) > 0 && !t.Summary {
+		title = append(append(title, look.Muted("  ")), loc...)
 	}
 	// A resolved thread recedes: its title and comment headers are dimmed.
 	done := t.State == store.ThreadResolved
-	lines := []string{ansi.Truncate(r.th.render(surfPlain, dimmed(title, done)...), inner, "")}
+	lines := []string{ansi.Truncate(r.th.Render(look.Plain, look.DimIf(done, title...)...), inner, "")}
 	var starts []int
 	for _, c := range t.Comments {
 		// The box's top border is the first output line.
 		starts = append(starts, len(lines)+1)
-		lines = append(lines, "", r.th.render(surfPlain, dimmed(commentHeader(d, c), done)...))
+		lines = append(lines, "", r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
-	out := strings.Split(r.th.box(boxWidth, cursor).Render(strings.Join(lines, "\n")), "\n")
+	out := strings.Split(r.th.Box(boxWidth, cursor).Render(strings.Join(lines, "\n")), "\n")
 	for i := range out {
 		out[i] = strings.Repeat(" ", indent) + out[i]
 	}
@@ -421,34 +346,6 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		starts = []int{0}
 	}
 	return out, starts
-}
-
-// locationSpans name where a thread points: the commit's sha, and the path and lines as el.
-func locationSpans(l store.Location, el element) []span {
-	var out []span
-	if l.Scope == store.ScopeChange {
-		return nil
-	}
-	if l.Scope == store.ScopeCommit {
-		out = append(out, sp(el, "commit "), sp(elSHA, shortSHA(l.Commit)))
-	}
-	if l.Path != "" {
-		loc := l.Path
-		if l.StartLine > 0 {
-			loc += ":" + strconv.Itoa(l.StartLine)
-			if l.EndLine != l.StartLine {
-				loc += "-" + strconv.Itoa(l.EndLine)
-			}
-		}
-		if l.Side == anchor.SideOld {
-			loc += " (old)"
-		}
-		if len(out) > 0 {
-			loc = " " + loc
-		}
-		out = append(out, sp(el, loc))
-	}
-	return out
 }
 
 func shortSHA(sha string) string {

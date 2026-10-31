@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chancez/gr/internal/tui/look"
+
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/store"
@@ -11,7 +13,7 @@ import (
 
 // navItem is one sidebar entry: a view, or a file within the current view.
 type navItem struct {
-	// sha is a commit's short sha, shown before label.
+	// sha is a commit's sha, shown short before label.
 	sha   string
 	label string
 	view  int
@@ -21,37 +23,12 @@ type navItem struct {
 	// the front, so the file name stays visible.
 	prefix string
 	// badge is right-aligned and kept when label is truncated: marks and thread counts.
-	badge string
+	badge []look.Span
 	// heading styles entries that are not commits or files, such as the overview, so they read as
 	// peers of the commit list rather than parents of it.
 	heading bool
 	// done dims an entry that is marked reviewed, so finished work recedes at a glance.
 	done bool
-}
-
-// badgeSpans are a badge's parts: the open thread count, the draft mark, and the reviewed mark.
-func badgeSpans(badge string) []span {
-	var out []span
-	for i, p := range strings.Fields(badge) {
-		if i > 0 {
-			out = append(out, sp(elDefault, " "))
-		}
-		if strings.HasPrefix(p, "(") {
-			out = append(out, sp(elCount, p))
-			continue
-		}
-		for _, r := range p {
-			switch string(r) {
-			case markReviewed:
-				out = append(out, sp(elReviewed, markReviewed, strong))
-			case markDraft:
-				out = append(out, sp(elDraft, markDraft, strong))
-			default:
-				out = append(out, sp(elDefault, string(r)))
-			}
-		}
-	}
-	return out
 }
 
 // truncateLeft keeps the end of s, marking the cut with "...".
@@ -133,7 +110,7 @@ func (l *navList) at(y int) int {
 }
 
 // render draws a titled section of height lines: a header, then items.
-func (l *navList) render(th *theme, title string, width, height int, focused bool) []string {
+func (l *navList) render(th *look.Theme, title string, width, height int, focused bool) []string {
 	if height <= 0 {
 		return nil
 	}
@@ -147,9 +124,9 @@ func (l *navList) render(th *theme, title string, width, height int, focused boo
 		case i >= len(l.items):
 		case first && y == 0:
 			// The indicator covers this entry, so it counts as hidden too.
-			out = append(out, th.draw(surfPlain, width, sp(elMuted, fmt.Sprintf("^ %d more", l.top+1))))
+			out = append(out, th.Draw(look.Plain, width, look.Muted(fmt.Sprintf("^ %d more", l.top+1))))
 		case last && y == rows-1:
-			out = append(out, th.draw(surfPlain, width, sp(elMuted, fmt.Sprintf("v %d more", len(l.items)-i))))
+			out = append(out, th.Draw(look.Plain, width, look.Muted(fmt.Sprintf("v %d more", len(l.items)-i))))
 		default:
 			out = append(out, l.items[i].render(th, width, i == l.pos, focused))
 		}
@@ -161,40 +138,41 @@ func (l *navList) render(th *theme, title string, width, height int, focused boo
 }
 
 // render draws one entry at width: the label, truncated so the badge always shows at the right.
-func (it navItem) render(th *theme, width int, selected, focused bool) string {
+func (it navItem) render(th *look.Theme, width int, selected, focused bool) string {
 	room := width
-	if it.badge != "" {
-		room -= ansi.StringWidth(it.badge) + 1
+	badge := look.TextOf(it.badge...)
+	if badge != "" {
+		room -= ansi.StringWidth(badge) + 1
 	}
 	lead := 0
 	if it.sha != "" {
-		lead = ansi.StringWidth(it.sha) + 1
+		lead = ansi.StringWidth(look.TextOf(look.SHA(it.sha).Short())) + 1
 	}
 	label := ansi.Truncate(it.label, room-lead, "...")
 	if it.prefix != "" {
 		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
 	}
-	surf, el := surfPlain, elDefault
-	var p props
+	surf, text := look.Plain, look.Default
+	var p []look.Prop
 	switch {
 	case selected && focused:
-		surf, el = surfCursor, elText
+		surf, text = look.Cursor, look.Text
 	case selected:
-		surf, el = surfCursorDim, elText
+		surf, text = look.CursorDim, look.Text
 	case it.heading:
-		surf, el = surfHeading, elHeading
+		surf, text = look.HeadingBar, look.Heading
 	case it.done:
-		p = dim
+		p = []look.Prop{look.Dim}
 	}
-	var spans []span
+	var spans []look.Span
 	if it.sha != "" {
-		spans = append(spans, sp(elSHA, it.sha, p), sp(el, " ", p))
+		spans = append(spans, look.SHA(it.sha).Short().With(p...), text(" ").With(p...))
 	}
-	out := th.draw(surf, room, append(spans, sp(el, label, p))...)
-	if it.badge == "" {
+	out := th.Draw(surf, room, append(spans, text(label).With(p...))...)
+	if badge == "" {
 		return out
 	}
-	return out + th.draw(surf, width-room, append([]span{sp(el, " ")}, badgeSpans(it.badge)...)...)
+	return out + th.Draw(surf, width-room, append([]look.Span{text(" ")}, it.badge...)...)
 }
 
 func (m *model) viewLabel(v view) string {
@@ -215,28 +193,6 @@ func (m *model) viewLabel(v view) string {
 		return fmt.Sprintf("Since rev %d", m.data.interdiffFrom.Seq)
 	}
 	return ""
-}
-
-// Sidebar marks, shown in an entry's right-aligned badge.
-//
-// TODO: make these configurable, so icons such as checkboxes can replace the ASCII defaults.
-const (
-	// markReviewed is shown on files and commits marked reviewed.
-	markReviewed = "x"
-	// markDraft is shown where you have draft comments not yet submitted.
-	markDraft = "*"
-)
-
-// marks renders the marks that apply, drafts first, or "" when none do.
-func marks(reviewed, draft bool) string {
-	var out string
-	if draft {
-		out += markDraft
-	}
-	if reviewed {
-		out += markReviewed
-	}
-	return out
 }
 
 // draftThreads counts the viewer's draft threads in a view, on one path or, if path is empty, on
@@ -273,11 +229,11 @@ func (m *model) buildNav() {
 	for vi, v := range m.views {
 		it := navItem{label: m.viewLabel(v), view: vi, file: -1, heading: v.kind != viewCommit}
 		if v.kind == viewCommit {
-			it.sha, it.label = shortSHA(v.commit.SHA), v.commit.Subject()
+			it.sha, it.label = v.commit.SHA, v.commit.Subject()
 		}
 		if v.kind == viewCommit || v.kind == viewDiff {
 			it.done = m.viewReviewed(v)
-			it.badge = marks(it.done, m.draftThreads(v, "") > 0)
+			it.badge = look.Badge(0, m.draftThreads(v, "") > 0, it.done)
 		}
 		m.viewsNav.items = append(m.viewsNav.items, it)
 	}
@@ -291,12 +247,9 @@ func (m *model) buildNav() {
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
 	for fi, f := range v.files {
-		badge := marks(m.fileReviewed(v, fi), m.draftThreads(v, f.Path()) > 0)
-		if n := counts[f.Path()]; n > 0 {
-			badge = strings.TrimSpace(fmt.Sprintf("(%d) %s", n, badge))
-		}
+		badge := look.Badge(counts[f.Path()], m.draftThreads(v, f.Path()) > 0, m.fileReviewed(v, fi))
 		m.filesNav.items = append(m.filesNav.items, navItem{
-			prefix: statusLetter(f.Status) + " ", label: fileLabel(f), badge: badge, view: m.current, file: fi,
+			prefix: look.StatusLetter(f.Status) + " ", label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
 			done: m.fileReviewed(v, fi),
 		})
 	}
@@ -378,7 +331,7 @@ func (m *model) renderSidebar(width, height int) []string {
 	th := m.r.th
 	out := m.viewsNav.render(th, title, width, vh, m.focus == focusViews)
 	if fh > 0 {
-		out = append(out, th.render(surfPlain, sp(elBorder, strings.Repeat("-", width))))
+		out = append(out, th.Render(look.Plain, look.Border(strings.Repeat("-", width), false)))
 		out = append(out, m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)...)
 	}
 	return out
@@ -394,7 +347,7 @@ func (m *model) mainHeader(width int) string {
 		r := m.main.rows[c]
 		if r.file >= 0 {
 			f := m.views[m.current].files[r.file]
-			title += "  >  " + fileLabel(f)
+			title += "  >  " + look.FileLabel(f)
 			if r.hunk != nil {
 				for i := range f.Hunks {
 					if &f.Hunks[i] == r.hunk {
@@ -414,20 +367,20 @@ func (m *model) withStatus(title string, width int) string {
 		return title
 	}
 	msg := ansi.Truncate(m.status, max(width/2, 20), "...")
-	surf := surfStatus
+	surf := look.Status
 	if m.statusErr {
-		surf = surfStatusError
+		surf = look.StatusError
 	}
-	badge := m.r.th.render(surf, sp(elText, " "+msg+" "))
+	badge := m.r.th.Render(surf, look.Text(" "+msg+" "))
 	keep := max(width-ansi.StringWidth(badge), 0)
 	return ansi.Truncate(title, keep, "") + badge
 }
 
 // paneTitle draws a pane's title bar.
-func paneTitle(th *theme, title string, width int, focused bool) string {
-	surf := surfPaneUnfocused
+func paneTitle(th *look.Theme, title string, width int, focused bool) string {
+	surf := look.PaneUnfocused
 	if focused {
-		surf = surfPaneFocused
+		surf = look.PaneFocused
 	}
-	return th.drawCut(surf, width, sp(elText, title))
+	return th.DrawCut(surf, width, look.Text(title))
 }
