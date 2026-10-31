@@ -34,6 +34,7 @@ type keyMap struct {
 	Fold             key.Binding
 	FoldAll          key.Binding
 	Search           key.Binding
+	Base             key.Binding
 	SearchNext       key.Binding
 	SearchPrev       key.Binding
 	NextThread       key.Binding
@@ -101,6 +102,7 @@ func defaultKeys() keyMap {
 		// Help only: z sequences are handled as a pending prefix.
 		FoldAll:      key.NewBinding(key.WithKeys("zR"), key.WithHelp("zR/zM", "open/close all folds")),
 		Search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search")),
+		Base:         key.NewBinding(key.WithKeys("B"), key.WithHelp("B", "change the base branch")),
 		SearchNext:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n/N", "next/prev match")),
 		SearchPrev:   key.NewBinding(key.WithKeys("N")),
 		NextThread:   key.NewBinding(key.WithKeys("t"), key.WithHelp("t/T", "next/prev thread")),

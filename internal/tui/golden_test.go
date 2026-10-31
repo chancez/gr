@@ -156,6 +156,13 @@ func TestGoldenScreens(t *testing.T) {
 			e.golden(theme + "-help")
 		})
 	}
+	t.Run("base picker", func(t *testing.T) {
+		e := goldenEnv(t)
+		e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#000000")})
+		e.repo.Git("branch", "parent", "main")
+		e.pressRun("B")
+		e.golden("dark-base-picker")
+	})
 	t.Run("colorblind", func(t *testing.T) {
 		e := goldenEnv(t)
 		e.m.theme = ThemeColorblind

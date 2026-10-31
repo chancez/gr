@@ -142,6 +142,27 @@ func (r *Repo) ResolveCommit(ctx context.Context, rev string) (string, error) {
 	return r.line(ctx, "rev-parse", "--verify", "--end-of-options", rev+"^{commit}")
 }
 
+// Branches lists local branches, then remote branches as remote/name, without remotes' HEADs.
+func (r *Repo) Branches(ctx context.Context) ([]string, error) {
+	out, err := r.run(ctx, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return nil, err
+	}
+	var names []string
+	for ref := range strings.Lines(string(out)) {
+		ref = strings.TrimSpace(ref)
+		if strings.HasPrefix(ref, "refs/remotes/") && strings.HasSuffix(ref, "/HEAD") {
+			continue
+		}
+		name, ok := strings.CutPrefix(ref, "refs/heads/")
+		if !ok {
+			name = strings.TrimPrefix(ref, "refs/remotes/")
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
 // BranchExists reports whether refs/heads/name exists.
 func (r *Repo) BranchExists(ctx context.Context, name string) (bool, error) {
 	_, err := r.run(ctx, "show-ref", "--verify", "--quiet", "refs/heads/"+name)

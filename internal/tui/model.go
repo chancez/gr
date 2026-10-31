@@ -77,6 +77,7 @@ const (
 	modeConfirm
 	modeHelp
 	modeSearch
+	modePicker
 )
 
 type composeKind int
@@ -124,6 +125,8 @@ type model struct {
 	searchPos   int
 	searchHits  int
 	searchInput textinput.Model
+	// picker is the popup open in modePicker.
+	picker *picker
 	// theme is the built-in palette, and isDark whether the terminal's background is dark.
 	theme  string
 	isDark bool
@@ -192,6 +195,8 @@ type dataMsg struct {
 type opMsg struct {
 	status string
 	err    error
+	// revised is set when the action recorded a new revision, so git needs reading again.
+	revised bool
 }
 
 type tickMsg struct{}
@@ -443,6 +448,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.status != "" {
 			m.setStatus("%s", msg.status)
 		}
+		if msg.revised {
+			return m, m.loadCmd()
+		}
 		// An action changes the database, not git: reload just that.
 		return m, m.reloadCmd()
 	case tickMsg:
@@ -486,6 +494,8 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case modeSearch:
 			return m.searchKey(msg)
+		case modePicker:
+			return m.pickerKey(msg)
 		}
 		return m.normalKey(msg)
 	}
@@ -706,6 +716,11 @@ func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.openSearch()
+	case key.Matches(msg, k.Base):
+		if m.data == nil {
+			return m, nil
+		}
+		return m, m.openBase()
 	case key.Matches(msg, k.SearchNext):
 		if m.data != nil {
 			m.searchStep(1)
@@ -1549,6 +1564,10 @@ func (m *model) sidebarAt(y int) (*navList, focus, int) {
 }
 
 func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modePicker {
+		m.pickerWheel(msg)
+		return m, nil
+	}
 	nw, _, _ := m.layoutSizes()
 	delta := 3
 	if msg.Button == tea.MouseWheelUp {
@@ -1571,6 +1590,9 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modePicker && msg.Button == tea.MouseLeft {
+		return m.pickerClick(msg)
+	}
 	if m.mode != modeNormal || msg.Button != tea.MouseLeft {
 		return m, nil
 	}
@@ -1685,21 +1707,31 @@ func (m *model) render() string {
 	mainLines := append([]string{m.mainHeader(mw)}, body...)
 	navLines := m.renderSidebar(nw, bh)
 	sep := m.r.th.Render(look.Plain, look.Border("|", m.dragging))
-	var b strings.Builder
+	screen := make([]string, bh)
 	for y := range bh {
+		var line strings.Builder
 		if nw > 0 {
 			nl := ""
 			if y < len(navLines) {
 				nl = navLines[y]
 			}
-			b.WriteString(look.Fit(nl, nw))
-			b.WriteString(sep)
+			line.WriteString(look.Fit(nl, nw))
+			line.WriteString(sep)
 		}
 		ml := ""
 		if y < len(mainLines) {
 			ml = mainLines[y]
 		}
-		b.WriteString(look.Fit(ml, mw))
+		line.WriteString(look.Fit(ml, mw))
+		screen[y] = line.String()
+	}
+	if m.mode == modePicker {
+		m.picker.layout(m.width, bh)
+		screen = overlay(screen, m.picker.render(m.r.th), m.picker.x, m.picker.y)
+	}
+	var b strings.Builder
+	for _, line := range screen {
+		b.WriteString(line)
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
