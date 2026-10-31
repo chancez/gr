@@ -24,49 +24,51 @@ In priority order. Foundations come first because every feature built before the
     them in the same process, without loading diffs.
 9. Stop agents writing as the human. Without `GR_AUTHOR`, gr uses the git identity, which for an
     agent is the human's, and the evals' baselines did exactly that.
+10. A change picker in the TUI, on the base picker's popup: open changes and branches with their
+    bases, to switch between them without leaving.
 
 ## State
 
-10. Remember where you were per change, the view, cursor, folds, and split mode, so reopening gr
+11. Remember where you were per change, the view, cursor, folds, and split mode, so reopening gr
    after an accidental q puts you back.
-11. Open the overview where you last were, or at its newest end, with the change's details and
+12. Open the overview where you last were, or at its newest end, with the change's details and
     thread counts fixed at the top like the title bar, so they stay put while scrolling.
 
 ## Tracking changes
 
-12. Track commits across rebases, for example from `post-rewrite` or by patch id, so threads and
+13. Track commits across rebases, for example from `post-rewrite` or by patch id, so threads and
     reviewed marks survive squashing fixups.
-13. Detect merges more widely: against the default branch as well as the base, with `git cherry`
+14. Detect merges more widely: against the default branch as well as the base, with `git cherry`
     to count commits that landed by patch id (cherry-picks, rebases) and show a partly merged change
     as "N of M commits landed", by content for squash merges, and from the last recorded head once
     the branch is deleted.
 
 ## Config
 
-14. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
-15. Remappable keys, from the action registry.
-16. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`), and
+15. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
+16. Remappable keys, from the action registry.
+17. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`), and
     override roles, such as danger, or individual elements. gr draws its own diff colors, so git's
     `color.diff.*` do not apply.
-17. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
-18. Configurable scrolloff and default sidebar width.
-19. Configurable default for auto-advance after marking reviewed, which `+` toggles per session.
+18. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
+19. Configurable scrolloff and default sidebar width.
+20. Configurable default for auto-advance after marking reviewed, which `+` toggles per session.
 
 ## Features
 
-20. Keep the header of the file at the top of the diff pinned, like GitHub's sticky file headers, so
+21. Keep the header of the file at the top of the diff pinned, like GitHub's sticky file headers, so
     the file being read is always named while scrolling through it.
-21. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
+22. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
     skipping past them is obvious.
-22. Right-click menus with the actions for what was clicked, from the action registry.
-23. Comment on lines outside diff hunks, on context opened from a fold.
-24. Test mouse handling in a real terminal.
-25. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
+23. Right-click menus with the actions for what was clicked, from the action registry.
+24. Comment on lines outside diff hunks, on context opened from a fold.
+25. Test mouse handling in a real terminal.
+26. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
     text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 
-26. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+27. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
