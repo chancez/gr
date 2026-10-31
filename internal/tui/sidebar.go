@@ -207,7 +207,7 @@ func (m *model) viewLabel(v view) string {
 		}
 		return fmt.Sprintf("All changes (%d files)", len(v.files))
 	case viewCommit:
-		return shortSHA(v.commit.SHA)[:7] + " " + v.commit.Subject()
+		return shortSHA(v.commit.SHA) + " " + v.commit.Subject()
 	case viewInterdiff:
 		if m.data.interdiffFromReview {
 			return fmt.Sprintf("Since your review (rev %d)", m.data.interdiffFrom.Seq)
@@ -273,7 +273,7 @@ func (m *model) buildNav() {
 	for vi, v := range m.views {
 		it := navItem{label: m.viewLabel(v), view: vi, file: -1, heading: v.kind != viewCommit}
 		if v.kind == viewCommit {
-			it.sha, it.label = shortSHA(v.commit.SHA)[:7], v.commit.Subject()
+			it.sha, it.label = shortSHA(v.commit.SHA), v.commit.Subject()
 		}
 		if v.kind == viewCommit || v.kind == viewDiff {
 			it.done = m.viewReviewed(v)

@@ -452,8 +452,8 @@ func locationSpans(l store.Location, el element) []span {
 }
 
 func shortSHA(sha string) string {
-	if len(sha) > 10 {
-		return sha[:10]
+	if len(sha) > 7 {
+		return sha[:7]
 	}
 	return sha
 }
