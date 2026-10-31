@@ -756,3 +756,45 @@ func TestEnsureMovesPastAMergedChange(t *testing.T) {
 			merged.State, next.Seq, next.State)
 	}
 }
+
+// A stacked branch's change moves onto its parent, then back onto main once the parent lands, and
+// its threads follow.
+func TestSetBase(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.txt", "a\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "parent")
+	e.repo.Write("p.txt", "p\n")
+	parent := e.repo.Commit("parent")
+	e.repo.Git("checkout", "-q", "-b", "child")
+	e.repo.Write("c.txt", "c\n")
+	child := e.repo.Commit("child")
+	s := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(s, "")
+	tv, err := s.StartThread(ctx, change, review.NewThread{Scope: store.ScopeCommit, Commit: child, Path: "c.txt", StartLine: 1, Body: "c?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	moved, rev, err := s.SetBase(ctx, change, "parent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if moved.BaseBranch != "parent" || rev.BaseSHA != parent || rev.HeadSHA != child || rev.Seq != 2 {
+		t.Errorf("onto parent: base %s, revision %d %s..%s; want parent, revision 2 %s..%s",
+			moved.BaseBranch, rev.Seq, rev.BaseSHA, rev.HeadSHA, parent, child)
+	}
+	threads, err := s.Threads(ctx, moved, review.ThreadFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(threads) != 1 || threads[0].ID != tv.ID || threads[0].Outdated {
+		t.Errorf("threads after moving the base = %+v, want the thread, current", threads)
+	}
+	for _, base := range []string{"child", "nope"} {
+		if _, _, err := s.SetBase(ctx, moved, base); err == nil {
+			t.Errorf("SetBase(%q) succeeded, want an error", base)
+		}
+	}
+}

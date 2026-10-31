@@ -205,7 +205,7 @@ type changeFlags struct {
 
 func (f *changeFlags) register(cmd *cobra.Command) {
 	cmd.Flags().StringVarP(&f.change, "change", "c", "", "change number or id prefix (default: the current branch's change)")
-	cmd.Flags().StringVar(&f.base, "base", "", "base branch when creating a change (default: the default branch)")
+	cmd.Flags().StringVar(&f.base, "base", "", "base branch; moves an existing change onto it (default: the default branch)")
 }
 
 func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*review.Service, store.Change, store.Revision, error) {
@@ -218,14 +218,35 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 			return nil, store.Change{}, store.Revision{}, fmt.Errorf("pass a target or --change, not both")
 		}
 		c, rev, err := svc.ChangeByRef(ctx, f.change)
-		return svc, c, rev, err
+		if err != nil {
+			return nil, store.Change{}, store.Revision{}, err
+		}
+		return a.moveBase(ctx, svc, c, rev, f.base)
 	}
 	target, err := svc.ParseTarget(ctx, spec, f.base)
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
 	}
 	c, rev, err := svc.EnsureChange(ctx, target)
-	return svc, c, rev, err
+	if err != nil {
+		return nil, store.Change{}, store.Revision{}, err
+	}
+	return a.moveBase(ctx, svc, c, rev, f.base)
+}
+
+// moveBase moves a branch change onto base when --base names a different one, so passing --base
+// again fixes a change created against the wrong base.
+func (a *app) moveBase(ctx context.Context, svc *review.Service, c store.Change, rev store.Revision, base string) (*review.Service, store.Change, store.Revision, error) {
+	if base == "" || c.Kind != store.KindBranch || c.BaseBranch == base {
+		return svc, c, rev, nil
+	}
+	from := c.BaseBranch
+	c, rev, err := svc.SetBase(ctx, c, base)
+	if err != nil {
+		return nil, store.Change{}, store.Revision{}, err
+	}
+	fmt.Fprintf(a.stderr, "change #%d moved from %s onto %s\n", c.Seq, from, base)
+	return svc, c, rev, nil
 }
 
 // changeRef picks an existing change, for the commands that act on one.

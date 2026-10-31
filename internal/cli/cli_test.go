@@ -247,3 +247,29 @@ func TestChangeCommandsFindAChange(t *testing.T) {
 		t.Errorf("change show 1 = %q", got)
 	}
 }
+
+// A change's base can be moved, by gr change base or by passing a different --base, and stays the
+// same change.
+func TestChangeBase(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "parent")
+	e.repo.Commit("parent")
+	e.repo.Git("checkout", "-q", "-b", "child")
+	e.repo.Commit("child")
+	human := "Human <h@example.com>"
+	list := func() string { return e.run(human, "change", "list") }
+	e.run(human, "review")
+	e.run(human, "review", "--base", "parent")
+	if got, want := list(), "#1\topen\tchild onto parent\tchild\n"; got != want {
+		t.Errorf("after review --base parent, change list = %q, want %q", got, want)
+	}
+	e.run(human, "change", "base", "main")
+	if got, want := list(), "#1\topen\tchild onto main\tchild\n"; got != want {
+		t.Errorf("after change base main, change list = %q, want %q", got, want)
+	}
+	e.run(human, "change", "base", "parent", "1")
+	if got, want := list(), "#1\topen\tchild onto parent\tchild\n"; got != want {
+		t.Errorf("after change base parent 1, change list = %q, want %q", got, want)
+	}
+}

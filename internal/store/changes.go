@@ -157,6 +157,12 @@ func (q queries) SetChangeTitle(ctx context.Context, id, title string) error {
 		`UPDATE changes SET title = ?, updated_at = ? WHERE id = ?`, title, formatTime(q.now()), id)
 }
 
+// SetChangeBase sets a branch change's base branch.
+func (q queries) SetChangeBase(ctx context.Context, id, base string) error {
+	return q.execOne(ctx, "change "+id,
+		`UPDATE changes SET base_branch = ?, updated_at = ? WHERE id = ?`, base, formatTime(q.now()), id)
+}
+
 const revisionColumns = `id, change_id, seq, base_sha, head_sha, created_at`
 
 func scanRevision(row interface{ Scan(...any) error }) (Revision, error) {

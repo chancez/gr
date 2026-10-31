@@ -134,7 +134,32 @@ func (a *app) changeCommand() *cobra.Command {
 	}
 	tf.register(title)
 
-	cmd.AddCommand(a.changeListCommand(), show, title,
+	var bf changeRef
+	base := &cobra.Command{
+		Use:   "base <branch> [change]",
+		Short: "Move a branch change onto another base branch",
+		Long: `Move a branch change onto another base branch, such as a stacked branch's parent, or main once
+the parent has landed. The change records a new revision against the new base, and its threads
+re-anchor onto it.
+
+` + changeArgHelp,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, change, _, err := a.findChange(cmd.Context(), bf, firstArg(args[1:]), false)
+			if err != nil {
+				return err
+			}
+			from := change.BaseBranch
+			if change, _, err = svc.SetBase(cmd.Context(), change, args[0]); err != nil {
+				return err
+			}
+			fmt.Fprintf(a.stderr, "change #%d moved from %s onto %s\n", change.Seq, from, change.BaseBranch)
+			return nil
+		},
+	}
+	bf.register(base)
+
+	cmd.AddCommand(a.changeListCommand(), show, title, base,
 		setState("abandon", "Abandon a change", store.ChangeAbandoned),
 		setState("merged", "Mark a change merged, as when it landed somewhere other than its base", store.ChangeMerged),
 		setState("reopen", "Reopen an abandoned or merged change", store.ChangeOpen))

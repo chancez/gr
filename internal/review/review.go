@@ -349,6 +349,27 @@ func (s *Service) LatestBranchChange(ctx context.Context, branch string) (store.
 	return store.Change{}, store.Revision{}, store.ErrNotFound
 }
 
+// SetBase moves a branch change onto another base, such as a stacked branch's parent, or main once
+// the parent lands. The next revision is cut against the new base, and threads re-anchor onto it.
+func (s *Service) SetBase(ctx context.Context, change store.Change, base string) (store.Change, store.Revision, error) {
+	fail := func(err error) (store.Change, store.Revision, error) { return store.Change{}, store.Revision{}, err }
+	if change.Kind != store.KindBranch {
+		return fail(fmt.Errorf("change #%d is a %s, not a branch; it has no base branch to move", change.Seq, change.Kind))
+	}
+	if base == change.Branch {
+		return fail(fmt.Errorf("branch %s cannot be its own base", base))
+	}
+	if _, err := s.git.ResolveCommit(ctx, base); err != nil {
+		return fail(fmt.Errorf("%q is not a branch or commit", base))
+	}
+	if err := s.store.SetChangeBase(ctx, change.ID, base); err != nil {
+		return fail(err)
+	}
+	slog.Info("change base moved", "change", change.Seq, "from", change.BaseBranch, "to", base)
+	change.BaseBranch = base
+	return s.Sync(ctx, change)
+}
+
 // ListChanges lists this repository's changes, newest first.
 func (s *Service) ListChanges(ctx context.Context, states ...store.ChangeState) ([]store.Change, error) {
 	return s.store.ListChanges(ctx, s.repo.ID, states...)
