@@ -1,0 +1,346 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+
+	"charm.land/bubbles/v2/key"
+	"charm.land/bubbles/v2/textarea"
+	tea "charm.land/bubbletea/v2"
+	"github.com/chancez/gr/internal/anchor"
+	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/review"
+	"github.com/chancez/gr/internal/store"
+)
+
+type composeKind int
+
+const (
+	composeThread composeKind = iota
+	composeReply
+	composeEdit
+	composeSubmit
+)
+
+type composer struct {
+	kind  composeKind
+	title string
+	// warn shows the title as a warning.
+	warn      bool
+	area      textarea.Model
+	thread    review.NewThread
+	threadID  string
+	commentID string
+	verdict   store.Verdict
+	// initial is the text the box opened with, so closing it unchanged asks nothing.
+	initial string
+	// closing is set while esc asks what to do with unsaved text.
+	closing bool
+}
+
+// startComment opens the composer for a new thread at the cursor. whole comments on the cursor's
+// file, or the commit when the cursor is on the commit header, or the change on the overview.
+func (m *model) startComment(whole bool) (tea.Model, tea.Cmd) {
+	v := m.views[m.current]
+	if v.readOnly() {
+		m.setError(errors.New("the interdiff is read-only; comment on the files or commits"))
+		return m, nil
+	}
+	nt, title, err := m.newThreadAt(v, whole)
+	if err != nil {
+		m.setError(err)
+		return m, nil
+	}
+	// Commenting where your draft already is continues it, rather than starting a second one.
+	if t, c, ok := m.draftAt(nt); ok {
+		return m, m.openComposer(composer{kind: composeEdit, threadID: t.ID, commentID: c.ID,
+			title: fmt.Sprintf("Edit your draft %s", t.Label())}, c.Body)
+	}
+	return m, m.openComposer(composer{kind: composeThread, title: title, thread: nt}, "")
+}
+
+// draftAt finds your draft thread exactly where nt would start one, and its comment. Comments on
+// the change as a whole are not matched, since several are normal.
+func (m *model) draftAt(nt review.NewThread) (review.ThreadView, store.Comment, bool) {
+	if nt.Scope == store.ScopeChange {
+		return review.ThreadView{}, store.Comment{}, false
+	}
+	end := nt.EndLine
+	if end == 0 {
+		end = nt.StartLine
+	}
+	sideOf := func(s anchor.Side) anchor.Side {
+		if s == "" {
+			return anchor.SideNew
+		}
+		return s
+	}
+	for _, t := range m.data.threads {
+		l := t.Location
+		if t.Summary || !m.data.isDraft(t.ReviewID) || len(t.Comments) != 1 || t.Comments[0].Author != m.svc.Author() {
+			continue
+		}
+		if l.Scope == nt.Scope && l.Commit == nt.Commit && l.Path == nt.Path && sideOf(l.Side) == sideOf(nt.Side) &&
+			l.StartLine == nt.StartLine && l.EndLine == end {
+			return t, t.Comments[0], true
+		}
+	}
+	return review.ThreadView{}, store.Comment{}, false
+}
+
+func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error) {
+	if v.kind == viewOverview {
+		return review.NewThread{Scope: store.ScopeChange}, "Comment on the change", nil
+	}
+	nt := review.NewThread{Scope: store.ScopeDiff}
+	where := "the diff"
+	if v.kind == viewCommit {
+		nt.Scope, nt.Commit = store.ScopeCommit, v.commit.SHA
+		where = "commit " + shortSHA(v.commit.SHA)
+	}
+	p := &m.main
+	if p.cursor >= len(p.rows) {
+		return nt, "", errors.New("nothing to comment on")
+	}
+	cur := p.rows[p.cursor]
+	if cur.kind == rowCommit || (whole && cur.file < 0) {
+		if v.kind != viewCommit {
+			return nt, "", errors.New("move to a file to comment")
+		}
+		return nt, "Comment on " + where, nil
+	}
+	if cur.file < 0 {
+		return nt, "", errors.New("move to a file or line to comment")
+	}
+	if cur.gap != nil {
+		return nt, "", errors.New("unchanged lines outside the diff cannot be commented on yet")
+	}
+	f := v.files[cur.file]
+	if cur.kind == rowFile || cur.kind == rowHunk || cur.kind == rowThread || whole {
+		nt.Path, nt.Side = f.NewPath, anchor.SideNew
+		if f.NewPath == "" {
+			nt.Path, nt.Side = f.OldPath, anchor.SideOld
+		}
+		return nt, fmt.Sprintf("Comment on %s in %s", nt.Path, where), nil
+	}
+
+	// Lines: the cursor line decides the side, and the selection gives the range on that side.
+	side := m.lineSide(cur)
+	nt.Side, nt.Path = side, f.NewPath
+	if side == anchor.SideOld {
+		nt.Path = f.OldPath
+	}
+	selStart, selEnd := p.selection()
+	for i := selStart; i <= selEnd; i++ {
+		r := p.rows[i]
+		if r.kind != rowLine {
+			continue
+		}
+		if r.file != cur.file {
+			return nt, "", errors.New("a selection must stay within one file")
+		}
+		n := lineOn(r, side)
+		if n == 0 {
+			continue
+		}
+		if nt.StartLine == 0 || n < nt.StartLine {
+			nt.StartLine = n
+		}
+		nt.EndLine = max(nt.EndLine, n)
+	}
+	if nt.StartLine == 0 {
+		return nt, "", errors.New("no lines on that side")
+	}
+	lines := fmt.Sprintf("%d", nt.StartLine)
+	if nt.EndLine != nt.StartLine {
+		lines += fmt.Sprintf("-%d", nt.EndLine)
+	}
+	sideLabel := ""
+	if side == anchor.SideOld {
+		sideLabel = " (old)"
+	}
+	return nt, fmt.Sprintf("Comment on %s:%s%s in %s", nt.Path, lines, sideLabel, where), nil
+}
+
+// lineSide is the side a line row is commented on: deletions are old, everything else new. In split
+// mode it follows the cursor side, falling back to whichever side has a line.
+func (m *model) lineSide(r row) anchor.Side {
+	if r.line != nil {
+		if r.line.Kind == git.LineDeleted {
+			return anchor.SideOld
+		}
+		return anchor.SideNew
+	}
+	if m.main.side == anchor.SideOld && r.left != nil || r.right == nil {
+		return anchor.SideOld
+	}
+	return anchor.SideNew
+}
+
+func lineOn(r row, side anchor.Side) int {
+	old, new := lineNumbers(r)
+	if r.line != nil {
+		if side == anchor.SideOld && r.line.Kind == git.LineDeleted {
+			return old
+		}
+		if side == anchor.SideNew && r.line.Kind != git.LineDeleted {
+			return new
+		}
+		return 0
+	}
+	if side == anchor.SideOld {
+		return old
+	}
+	return new
+}
+
+func (m *model) openComposer(c composer, initial string) tea.Cmd {
+	c.area = textarea.New()
+	c.area.ShowLineNumbers = false
+	c.area.Placeholder = "Markdown. ctrl+s to save, ctrl+e for $EDITOR, esc to close."
+	c.area.SetStyles(m.composeStyles())
+	c.initial = initial
+	c.area.SetValue(initial)
+	m.compose = c
+	m.mode = modeCompose
+	m.relayout(false)
+	m.main.ensureVisible()
+	return m.compose.area.Focus()
+}
+
+// composeStyles colors the comment editor from the palette, so text and hints are readable on any
+// background.
+func (m *model) composeStyles() textarea.Styles {
+	return m.r.th.EditorStyles()
+}
+
+func (m *model) closeComposer() {
+	m.mode = modeNormal
+	m.compose = composer{}
+	m.relayout(false)
+}
+
+func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	k := m.keys
+	if m.compose.closing {
+		return m.closingKey(msg)
+	}
+	switch {
+	case key.Matches(msg, k.Cancel):
+		// Closing with unsaved text asks first, so a reflexive esc cannot lose a comment.
+		if v := m.compose.area.Value(); strings.TrimSpace(v) == "" || v == m.compose.initial {
+			m.closeComposer()
+		} else {
+			m.compose.closing = true
+		}
+		return m, nil
+	case key.Matches(msg, k.ExternalEdit):
+		return m, editorCmd(m.compose.area.Value())
+	case key.Matches(msg, k.Save):
+		return m.saveCompose()
+	}
+	var cmd tea.Cmd
+	m.compose.area, cmd = m.compose.area.Update(msg)
+	return m, cmd
+}
+
+// closingKey answers the unsaved comment prompt: s saves, d discards, and anything else, esc
+// included, goes back to editing.
+func (m *model) closingKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	m.compose.closing = false
+	switch msg.String() {
+	case "s":
+		return m.saveCompose()
+	case "d":
+		m.closeComposer()
+		m.setStatus("comment discarded")
+	}
+	return m, nil
+}
+
+func (m *model) saveCompose() (tea.Model, tea.Cmd) {
+	c := m.compose
+	body := strings.TrimSpace(c.area.Value())
+	if body == "" && c.kind != composeSubmit {
+		m.setError(errors.New("comment is empty"))
+		return m, nil
+	}
+	svc, ctx, change := m.svc, m.ctx, m.data.change
+	m.closeComposer()
+	m.main.anchor = -1
+	return m, func() tea.Msg {
+		switch c.kind {
+		case composeThread:
+			c.thread.Body = body
+			t, err := svc.StartThread(ctx, change, c.thread)
+			return opMsg{status: fmt.Sprintf("draft thread #%d added; S to submit", t.Seq), err: err}
+		case composeReply:
+			_, err := svc.Reply(ctx, change, c.threadID, body, false)
+			return opMsg{status: "replied", err: err}
+		case composeEdit:
+			return opMsg{status: "comment updated", err: svc.EditComment(ctx, c.commentID, body)}
+		case composeSubmit:
+			r, err := svc.Submit(ctx, change, c.verdict, body)
+			return opMsg{status: fmt.Sprintf("submitted review #%d: %s", r.Seq, r.Verdict), err: err}
+		}
+		return nil
+	}
+}
+
+// verdictKey takes the verdict: a, r, or c open the summary editor, and A, R, or C submit straight
+// away with no new summary, keeping any already in the draft.
+func (m *model) verdictKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	verdicts := map[string]store.Verdict{"a": store.VerdictApprove, "r": store.VerdictRequestChanges, "c": store.VerdictComment}
+	key := msg.String()
+	verdict, ok := verdicts[strings.ToLower(key)]
+	if !ok || len(key) != 1 {
+		m.mode = modeNormal
+		return m, nil
+	}
+	if key != strings.ToLower(key) {
+		m.mode = modeNormal
+		svc, ctx, change := m.svc, m.ctx, m.data.change
+		return m, func() tea.Msg {
+			r, err := svc.Submit(ctx, change, verdict, "")
+			return opMsg{status: fmt.Sprintf("submitted review #%d: %s", r.Seq, r.Verdict), err: err}
+		}
+	}
+	initial := ""
+	if d, ok := m.data.draft(); ok {
+		initial = d.Body
+	}
+	return m, m.openComposer(composer{kind: composeSubmit, verdict: verdict, title: "Submit review: " + string(verdict) + " (summary is optional)"}, initial)
+}
+
+// editorCmd suspends the TUI and edits text in $VISUAL or $EDITOR.
+func editorCmd(text string) tea.Cmd {
+	editor := os.Getenv("VISUAL")
+	if editor == "" {
+		editor = os.Getenv("EDITOR")
+	}
+	if editor == "" {
+		editor = "vi"
+	}
+	tmp, err := os.CreateTemp("", "gr-*.md")
+	if err != nil {
+		return func() tea.Msg { return editorMsg{err: err} }
+	}
+	_, werr := tmp.WriteString(text)
+	cerr := tmp.Close()
+	if err := errors.Join(werr, cerr); err != nil {
+		os.Remove(tmp.Name())
+		return func() tea.Msg { return editorMsg{err: err} }
+	}
+	cmd := exec.Command("sh", "-c", editor+` "$1"`, "sh", tmp.Name())
+	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+		defer os.Remove(tmp.Name())
+		if err != nil {
+			return editorMsg{err: err}
+		}
+		b, err := os.ReadFile(tmp.Name())
+		return editorMsg{text: strings.TrimRight(string(b), "\n"), err: err}
+	})
+}
