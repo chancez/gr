@@ -319,6 +319,36 @@ func (s *Service) ChangeByRef(ctx context.Context, ref string) (store.Change, st
 	return s.Sync(ctx, change)
 }
 
+// FindChange finds the open change for a target without creating one, and syncs it. A branch
+// target needs only its branch.
+func (s *Service) FindChange(ctx context.Context, t Target) (store.Change, store.Revision, error) {
+	var change store.Change
+	var err error
+	if t.Kind == store.KindBranch {
+		change, err = s.store.OpenBranchChange(ctx, s.repo.ID, t.Branch)
+	} else {
+		change, err = s.store.FrozenChange(ctx, s.repo.ID, t.Kind, t.Base, t.Head)
+	}
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	return s.Sync(ctx, change)
+}
+
+// LatestBranchChange finds a branch's newest change in any state.
+func (s *Service) LatestBranchChange(ctx context.Context, branch string) (store.Change, store.Revision, error) {
+	changes, err := s.store.ListChanges(ctx, s.repo.ID)
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	for _, c := range changes {
+		if c.Kind == store.KindBranch && c.Branch == branch {
+			return s.Sync(ctx, c)
+		}
+	}
+	return store.Change{}, store.Revision{}, store.ErrNotFound
+}
+
 // ListChanges lists this repository's changes, newest first.
 func (s *Service) ListChanges(ctx context.Context, states ...store.ChangeState) ([]store.Change, error) {
 	return s.store.ListChanges(ctx, s.repo.ID, states...)

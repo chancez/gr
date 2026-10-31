@@ -40,6 +40,21 @@ func (e *cliEnv) run(author string, args ...string) string {
 	return stdout.String()
 }
 
+// runErr runs gr as author and returns its error, failing the test if it succeeds.
+func (e *cliEnv) runErr(author string, args ...string) error {
+	e.t.Helper()
+	var stdout, stderr bytes.Buffer
+	a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr, logPath: e.log}
+	defer a.close()
+	cmd := a.rootCommand()
+	cmd.SetArgs(append([]string{"--db", e.db, "-C", e.repo.Dir, "--author", author}, args...))
+	err := cmd.ExecuteContext(e.t.Context())
+	if err == nil {
+		e.t.Fatalf("gr %s succeeded, want an error", strings.Join(args, " "))
+	}
+	return err
+}
+
 func TestReviewRoundTrip(t *testing.T) {
 	e := newCLIEnv(t)
 	e.repo.Write("f.txt", gittest.Lines("a", "b", "c"))
@@ -193,5 +208,42 @@ func TestControlCharactersAreShown(t *testing.T) {
 	}
 	if got, want := e.run("agent", "threads"), "^[[5mblink"; !strings.Contains(got, want) {
 		t.Errorf("gr threads does not show %q:\n%s", want, got)
+	}
+}
+
+// The change commands act on an existing change, picked by number or by its branch, and never
+// create one.
+func TestChangeCommandsFindAChange(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "review")
+	list := func() string { return e.run(human, "change", "list", "--all") }
+
+	e.run(human, "change", "abandon")
+	err := e.runErr(human, "change", "abandon")
+	if want := "no open change for branch feature"; !strings.Contains(err.Error(), want) {
+		t.Errorf("abandoning again: %v, want %q", err, want)
+	}
+	if got, want := list(), "#1\tabandoned\tfeature onto main\tfeature\n"; got != want {
+		t.Errorf("after abandoning twice, change list = %q, want %q", got, want)
+	}
+	// With no open change, reopen takes the branch's latest.
+	e.run(human, "change", "reopen")
+	for _, step := range [][]string{
+		{"change", "abandon", "1"},
+		{"change", "reopen", "#1"},
+		{"change", "merged", "feature"},
+		{"change", "reopen", "--change", "1"},
+	} {
+		e.run(human, step...)
+	}
+	if got, want := list(), "#1\topen\tfeature onto main\tfeature\n"; got != want {
+		t.Errorf("after reopening by number and branch, change list = %q, want %q", got, want)
+	}
+	if got := e.run(human, "change", "show", "1"); !strings.HasPrefix(got, "Change #1: feature\n") {
+		t.Errorf("change show 1 = %q", got)
 	}
 }

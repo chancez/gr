@@ -78,13 +78,14 @@ func (a *app) changeCommand() *cobra.Command {
 		Use:   "change",
 		Short: "Manage a change",
 	}
-	var cf changeFlags
+	var cf changeRef
 	show := &cobra.Command{
-		Use:   "show [target]",
+		Use:   "show [change]",
 		Short: "Show a change with its revisions and reviews",
+		Long:  "Show a change with its revisions and reviews.\n\n" + changeArgHelp,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, change, rev, err := a.resolveChange(cmd.Context(), cf, firstArg(args))
+			svc, change, rev, err := a.findChange(cmd.Context(), cf, firstArg(args), true)
 			if err != nil {
 				return err
 			}
@@ -94,13 +95,15 @@ func (a *app) changeCommand() *cobra.Command {
 	cf.register(show)
 
 	setState := func(use, short string, state store.ChangeState) *cobra.Command {
-		var cf changeFlags
+		var cf changeRef
 		c := &cobra.Command{
-			Use:   use + " [target]",
+			Use:   use + " [change]",
 			Short: short,
+			Long:  short + ".\n\n" + changeArgHelp,
 			Args:  cobra.MaximumNArgs(1),
 			RunE: func(cmd *cobra.Command, args []string) error {
-				svc, change, _, err := a.resolveChange(cmd.Context(), cf, firstArg(args))
+				// Only a closed change can be reopened, so reopen falls back to the branch's latest.
+				svc, change, _, err := a.findChange(cmd.Context(), cf, firstArg(args), state == store.ChangeOpen)
 				if err != nil {
 					return err
 				}
@@ -115,13 +118,14 @@ func (a *app) changeCommand() *cobra.Command {
 		return c
 	}
 
-	var tf changeFlags
+	var tf changeRef
 	title := &cobra.Command{
 		Use:   "title <title>",
 		Short: "Set a change's title",
+		Long:  "Set a change's title: the current branch's change, or the one --change picks.",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			svc, change, _, err := a.resolveChange(cmd.Context(), tf, "")
+			svc, change, _, err := a.findChange(cmd.Context(), tf, "", false)
 			if err != nil {
 				return err
 			}

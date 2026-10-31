@@ -3,10 +3,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -69,7 +72,8 @@ range A..B, or a commit. GR_THEME=colorblind uses blue and orange in place of gr
 Logs go to $XDG_STATE_HOME/gr/gr.log, by default ~/.local/state/gr/gr.log.
 
 Commands that act on a change take --change to pick one by number or id prefix. Without it, they
-use the change for the current branch, creating it if needed.`,
+use the change for the current branch. Reviewing and commenting create it if needed; the gr change
+commands only find one, and take a change number such as 4 directly.`,
 		Args:          cobra.MaximumNArgs(1),
 		SilenceUsage:  true,
 		SilenceErrors: true,
@@ -222,6 +226,79 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	}
 	c, rev, err := svc.EnsureChange(ctx, target)
 	return svc, c, rev, err
+}
+
+// changeRef picks an existing change, for the commands that act on one.
+type changeRef struct {
+	change string
+}
+
+func (f *changeRef) register(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&f.change, "change", "c", "", "change number or id prefix (default: the current branch's change)")
+}
+
+// changeArgHelp explains the argument of the commands that act on an existing change.
+const changeArgHelp = `The change is a number such as 4 or #4, a branch, a range A..B, or a commit, and defaults to the
+current branch's change. These commands never create a change.`
+
+// findChange finds an existing change: by --change, by an argument that is a change number such as
+// 4 or #4, or as a target's open change. It never creates one. With latest, a branch with no open
+// change gives its newest change instead, for reopening it.
+func (a *app) findChange(ctx context.Context, f changeRef, arg string, latest bool) (*review.Service, store.Change, store.Revision, error) {
+	svc, err := a.service(ctx)
+	if err != nil {
+		return nil, store.Change{}, store.Revision{}, err
+	}
+	fail := func(err error) (*review.Service, store.Change, store.Revision, error) {
+		return nil, store.Change{}, store.Revision{}, err
+	}
+	switch {
+	case f.change != "" && arg != "":
+		return fail(errors.New("pass a change or --change, not both"))
+	case f.change != "":
+		arg = f.change
+		fallthrough
+	case isChangeNumber(arg):
+		c, rev, err := svc.ChangeByRef(ctx, arg)
+		if errors.Is(err, store.ErrNotFound) {
+			err = fmt.Errorf("no change %s; gr change list --all lists every change", arg)
+		}
+		return svc, c, rev, err
+	}
+	branch := arg
+	if branch == "" {
+		if branch, err = svc.Git().CurrentBranch(ctx); err != nil {
+			return fail(errors.New("HEAD is not on a branch; pass a change number"))
+		}
+	}
+	target := review.Target{Kind: store.KindBranch, Branch: branch}
+	isBranch, err := svc.Git().BranchExists(ctx, branch)
+	if err != nil {
+		return fail(err)
+	}
+	if !isBranch {
+		if target, err = svc.ParseTarget(ctx, arg, ""); err != nil {
+			return fail(err)
+		}
+	}
+	c, rev, err := svc.FindChange(ctx, target)
+	if errors.Is(err, store.ErrNotFound) && latest && target.Kind == store.KindBranch {
+		c, rev, err = svc.LatestBranchChange(ctx, branch)
+	}
+	if errors.Is(err, store.ErrNotFound) {
+		what := "branch " + branch
+		if target.Kind != store.KindBranch {
+			what = arg
+		}
+		err = fmt.Errorf("no open change for %s; gr change list --all lists every change", what)
+	}
+	return svc, c, rev, err
+}
+
+// isChangeNumber reports whether s names a change by number, as 4 or #4.
+func isChangeNumber(s string) bool {
+	_, err := strconv.Atoi(strings.TrimPrefix(s, "#"))
+	return err == nil
 }
 
 func plural(n int, one, many string) string {
