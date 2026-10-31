@@ -229,7 +229,7 @@ func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 // DefaultBranch guesses the branch changes are based on: the base remote's HEAD, or its branch
 // named by init.defaultBranch, main, or master. Failing that, a local branch by one of those names.
 // A remote branch is named by its local branch when one of that name exists, as "main" rather than
-// "origin/main".
+// "origin/main", unless the local branch is only behind it.
 func (r *Repo) DefaultBranch(ctx context.Context) (string, error) {
 	remote, err := r.baseRemote(ctx)
 	if err != nil {
@@ -259,9 +259,21 @@ func (r *Repo) DefaultBranch(ctx context.Context) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if exists {
-			return name, nil
+		if !exists {
+			continue
 		}
+		// A local branch only behind the remote's would cut changes at a stale point, showing
+		// commits that already landed. One with commits of its own is the one to use.
+		if ref != "" {
+			behind, err := r.strictlyBehind(ctx, "refs/heads/"+name, "refs/remotes/"+ref)
+			if err != nil {
+				return "", err
+			}
+			if behind {
+				return ref, nil
+			}
+		}
+		return name, nil
 	}
 	if ref != "" {
 		return ref, nil
@@ -319,6 +331,22 @@ func (r *Repo) defaultNames(ctx context.Context) ([]string, error) {
 		names = append([]string{name}, names...)
 	}
 	return names, nil
+}
+
+// strictlyBehind reports whether a is an ancestor of b and not b itself.
+func (r *Repo) strictlyBehind(ctx context.Context, a, b string) (bool, error) {
+	shaA, err := r.ResolveCommit(ctx, a)
+	if err != nil {
+		return false, err
+	}
+	shaB, err := r.ResolveCommit(ctx, b)
+	if err != nil {
+		return false, err
+	}
+	if shaA == shaB {
+		return false, nil
+	}
+	return r.IsAncestor(ctx, shaA, shaB)
 }
 
 func (r *Repo) refExists(ctx context.Context, ref string) bool {

@@ -859,3 +859,23 @@ func TestStackedBranchIsBasedOnItsParent(t *testing.T) {
 		t.Errorf("ParseTarget with a base = %+v, %v; want %+v", got, err, want)
 	}
 }
+
+// A branch cut from a stale local main, while the remote's main has moved on, is still reviewed
+// from where it was cut: the merge base with the newer remote branch is the stale commit.
+func TestBranchFromAStaleMain(t *testing.T) {
+	e := newEnv(t)
+	stale := e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "other")
+	newer := e.repo.Commit("landed upstream")
+	e.repo.Git("remote", "add", "work", "https://example.com/work.git")
+	e.repo.Git("update-ref", "refs/remotes/work/main", newer)
+	e.repo.Git("symbolic-ref", "refs/remotes/work/HEAD", "refs/remotes/work/main")
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("branch", "-q", "-D", "other")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	one := e.repo.Commit("one")
+	change, rev := e.ensure(e.service(human), "")
+	if change.BaseBranch != "work/main" || rev.BaseSHA != stale || rev.HeadSHA != one {
+		t.Errorf("change on %s, revision %s..%s; want work/main, %s..%s", change.BaseBranch, rev.BaseSHA, rev.HeadSHA, stale, one)
+	}
+}

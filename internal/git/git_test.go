@@ -203,6 +203,10 @@ func TestDefaultBranchFromRemotes(t *testing.T) {
 		remotes []remote
 		local   []string
 		config  map[string]string
+		// behind moves the remotes' branches a commit past the local ones; ahead moves the local
+		// ones a commit past the remotes'.
+		behind  bool
+		ahead   bool
 		want    string
 		wantErr bool
 	}{
@@ -293,6 +297,18 @@ func TestDefaultBranchFromRemotes(t *testing.T) {
 			local: []string{"main"},
 			want:  "main",
 		},
+		"a local main behind the remote's": {
+			remotes: []remote{{name: "work", branches: []string{"main"}, head: "main"}},
+			local:   []string{"main"},
+			behind:  true,
+			want:    "work/main",
+		},
+		"a local main with commits of its own": {
+			remotes: []remote{{name: "work", branches: []string{"main"}, head: "main"}},
+			local:   []string{"main"},
+			ahead:   true,
+			want:    "main",
+		},
 		"a remote with nothing fetched, and a local main": {
 			remotes: []remote{{name: "origin"}},
 			local:   []string{"main"},
@@ -318,6 +334,21 @@ func TestDefaultBranchFromRemotes(t *testing.T) {
 			}
 			for k, v := range tc.config {
 				r.Git("config", k, v)
+			}
+			if tc.behind || tc.ahead {
+				later := r.Git("commit-tree", sha+"^{tree}", "-p", sha, "-m", "later")
+				if tc.behind {
+					for _, rem := range tc.remotes {
+						for _, b := range rem.branches {
+							r.Git("update-ref", "refs/remotes/"+rem.name+"/"+b, later)
+						}
+					}
+				}
+				if tc.ahead {
+					for _, b := range tc.local {
+						r.Git("update-ref", "refs/heads/"+b, later)
+					}
+				}
 			}
 			got, err := open(t, r.Dir).DefaultBranch(t.Context())
 			if (err != nil) != tc.wantErr || got != tc.want {

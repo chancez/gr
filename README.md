@@ -23,9 +23,10 @@ gr abc123           # one commit
 
 The default branch is the base remote's HEAD, or its `main` or `master`. The base remote is
 `checkout.defaultRemote` or `clone.defaultRemoteName` when set, then `origin`, `upstream`, the only
-remote, or the one that is not `remote.pushDefault`. `--base` overrides it, and a change remembers
-its base. To move a change onto another base later, pass a different `--base`, run
-`gr change base <branch>`, or press `B` in the TUI.
+remote, or the one that is not `remote.pushDefault`. A local branch of the same name is used instead
+unless it is only behind the remote's. A branch stacked on another local branch is based on that
+one. `--base` overrides it, and a change remembers its base. To move a change onto another base
+later, pass a different `--base`, run `gr change base <branch>`, or press `B` in the TUI.
 
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:
