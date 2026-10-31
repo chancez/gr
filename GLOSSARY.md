@@ -67,3 +67,30 @@ the roles. Variants cover values, such as `verdict.approve`.
 
 **Surface**: where a line sits, such as plain, the cursor, a heading bar, or an added line. It owns
 the background.
+
+## Acting in the TUI
+
+**Subject**: a value an action acts on, typed by its kind: change, commit, file, hunk, line,
+selection, thread, comment, review, or branch.
+
+**Action**: something the TUI does to a subject, such as marking a commit reviewed. Defined once, by
+name, on its subject's kind, and available wherever a subject of that kind is.
+
+**Binding**: a key bound to an action in a scope: everywhere, a pane, or a mode.
+
+**Place**: where a subject is found, registered with the subject kind it holds and its handlers. A
+subject can be used only in a place registered for its kind. Either a list or a mention.
+
+**List**: a place you navigate through, whose entries are its subjects, such as the sidebar's commit
+list or a diff's lines. The cursor moves from entry to entry.
+
+**Cursor**: the entry keys act on within a place, such as the sidebar's selected commit or the diff
+line under the cursor. Moved by keys and clicks. Pane focus, which pane gets keys, is separate.
+
+**Handler**: what a subject in a place does: on cursor, when the cursor lands on it; activate, when
+it is chosen by enter; and menu. Clicks follow from them.
+
+**Mention**: a place where a subject shows up inside something else and is not navigated through,
+such as the sha in a thread's location. It never holds the cursor, and a click on it opens its menu.
+
+**Target**: a spot on screen where a subject is drawn, with its place, which the mouse can act on.
