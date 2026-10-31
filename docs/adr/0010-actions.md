@@ -1,6 +1,6 @@
 # 10. Run the TUI's actions from one registry
 
-Status: proposed
+Status: accepted
 
 ## Context
 
@@ -47,6 +47,10 @@ actions through the registry.
 
   The same subject can be in both: a commit is an entry in the sidebar's list and a mention in a
   thread's location, with the same actions in each.
+- **Fewer actions in a place.** Whether an action applies to a subject's state is the action's own
+  check: opening a commit does not apply in that commit's own view. Where a place should offer
+  fewer of its kind's actions, as a picker offering only to pick, the place names the ones it
+  offers, and by default it offers them all.
 - **Pane focus and the cursor.** Pane focus is which pane gets keys: the sidebar or the main pane.
   The cursor is the entry keys act on within a list: the sidebar's selected commit, the diff line
   under the cursor. Only a list's entries hold the cursor; a mention never does.
