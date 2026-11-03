@@ -366,8 +366,10 @@ func (m *model) renderSidebar(width, height int) []string {
 func (m *model) mainHeader(width int) string {
 	v := m.views[m.current]
 	label := " " + m.viewLabel(v) + " "
-	var size []look.Span
+	var size, controls []look.Span
 	switch {
+	case v.kind == viewOverview:
+		controls = m.controls("title", modeNormal, m.viewTarget(m.current, false), filterButton.labeled("Showing "+m.filter.String()))
 	case v.kind == viewCommit:
 		// The commit's header names it, with its size: the title says only where it is.
 		at, of := 0, 0
@@ -380,6 +382,15 @@ func (m *model) mainHeader(width int) string {
 			}
 		}
 		label = fmt.Sprintf(" Commit %d of %d ", at, of)
+		// Prev and Next, where there is a commit that way, as GitHub's commit view has.
+		var steps []control
+		if at > 1 {
+			steps = append(steps, prevCommit)
+		}
+		if at < of {
+			steps = append(steps, nextCommit)
+		}
+		controls = m.controls("title", modeNormal, theApp.Target(appSubject{}), steps...)
 	case v.kind != viewOverview && len(v.files) > 0:
 		size = filesSize(v.files)
 	}
@@ -402,11 +413,15 @@ func (m *model) mainHeader(width int) string {
 		}
 	}
 	th, focused := m.r.th, m.focus == focusMain
-	if size == nil {
+	if size == nil && controls == nil {
 		return m.withStatus(paneTitle(th, label+title, width, focused), width)
 	}
-	// The size keeps its colors on a chip of its own, as the bar draws its text in one color.
+	// The size keeps its colors on a chip of its own, as the bar draws its text in one color, and
+	// the controls are drawn on the bar.
 	chip := th.Render(look.HeadingBar, append(append([]look.Span{look.Default(" ")}, size...), look.Default(" "))...)
+	if size == nil {
+		chip = th.Render(paneSurface(focused), append(append([]look.Span{look.Default(" ")}, controls...), look.Default(" "))...)
+	}
 	lead := paneTitle(th, label, min(ansi.StringWidth(label), width), focused)
 	rest := max(width-ansi.StringWidth(lead)-ansi.StringWidth(chip), 0)
 	return m.withStatus(lead+chip+paneTitle(th, title, rest, focused), width)
@@ -439,11 +454,15 @@ func (m *model) withStatus(title string, width int) string {
 
 // paneTitle draws a pane's title bar.
 func paneTitle(th *look.Theme, title string, width int, focused bool) string {
-	surf := look.PaneUnfocused
+	return th.DrawCut(paneSurface(focused), width, look.Text(title))
+}
+
+// paneSurface is a pane's title bar, focused or not.
+func paneSurface(focused bool) look.Surface {
 	if focused {
-		surf = look.PaneFocused
+		return look.PaneFocused
 	}
-	return th.DrawCut(surf, width, look.Text(title))
+	return look.PaneUnfocused
 }
 
 // sidebarAt maps a sidebar line to a list and its item index.

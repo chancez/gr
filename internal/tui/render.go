@@ -44,6 +44,13 @@ type rowState struct {
 	dim bool
 	// activeHunk is set on rows of the hunk the cursor is in.
 	activeHunk bool
+	// hover is set on the row under the mouse, hoverSide the side of a split diff it is over.
+	hover     bool
+	hoverSide anchor.Side
+	// controls are the row's controls, drawn after what they act on: a line's in place of its
+	// +/- sign, and a fold's in place of its label. lead are those before it, as a file's chevron.
+	controls []look.Span
+	lead     []look.Span
 }
 
 // hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
@@ -136,19 +143,19 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 			surf = cursorSurface(state)
 		}
 		spans := []look.Span{look.File(f)}
+		if len(state.lead) > 0 {
+			spans = append(state.lead, spans...)
+		}
 		if size, ok := diffSize(f); ok {
 			spans = append(append(spans, look.Default("  ")), size...)
 		}
-		if rw.reviewed {
-			spans = append(spans, look.Default("  "), look.Reviewed())
+		if rw.collapsed {
+			spans = append(spans, look.Default("  "), look.Muted("collapsed"))
 		}
-		switch {
-		case rw.collapsed:
-			spans = append(append(spans, look.Default("  "), look.Muted("collapsed, ")), look.Hint("enter", "expands")...)
-		case rw.reviewed:
-			spans = append(append(spans, look.Default("  ")), look.Hint("enter", "collapses")...)
+		if len(state.controls) > 0 {
+			spans = append(append(spans, look.Default("  ")), state.controls...)
 		}
-		return []string{r.th.Draw(surf, width, spans...)}
+		return []string{r.th.DrawCut(surf, width, spans...)}
 	case rowHunk:
 		surf := look.HunkBar
 		if state.cursor {
@@ -174,7 +181,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if rw.collapsed {
 			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
 		}
-		lines, starts := r.renderThread(d, *rw.thread, width, state.cursor)
+		lines, starts := r.renderThread(d, *rw.thread, width, state)
 		shift := 0
 		if rw.excerpt != nil {
 			excerpt := r.renderExcerpt(*rw.excerpt, rw.thread.Location, width)
@@ -188,12 +195,15 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	case rowReview:
 		return r.renderReview(d, rw, width, state)
 	case rowGap:
-		label := "   " + gapLabel(*rw.gap) + "  (zo or enter to expand)"
 		surf := look.Plain
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
-		return []string{" " + r.th.Draw(surf, width-1, look.Muted(label))}
+		spans := []look.Span{look.Default("   "), look.Muted(gapLabel(*rw.gap))}
+		if len(state.controls) > 0 {
+			spans = append(spans[:1], state.controls...)
+		}
+		return []string{" " + r.th.Draw(surf, width-1, spans...)}
 	}
 	return nil
 }
@@ -221,7 +231,17 @@ func (r *renderer) code(f git.FileDiff, l git.Line) look.Span {
 
 func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState) string {
 	return r.th.Draw(lineSurface(l.Kind, state, true), width,
-		look.Gutter(gutterWidth(f), l.OldLine, l.NewLine), look.LineMark(l.Kind), look.Default(" "), r.code(f, l))
+		append(append([]look.Span{look.Gutter(gutterWidth(f), l.OldLine, l.NewLine)}, lineSign(l.Kind, state.controls)...),
+			look.Default(" "), r.code(f, l))...)
+}
+
+// lineSign is a line's +/- sign, or the control drawn in its place, as the + that comments on the line
+// under the mouse.
+func lineSign(kind git.LineKind, controls []look.Span) []look.Span {
+	if len(controls) > 0 {
+		return controls
+	}
+	return []look.Span{look.LineMark(kind)}
 }
 
 func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int, state rowState) string {
@@ -235,8 +255,12 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 		if side == anchor.SideOld {
 			n = l.OldLine
 		}
+		var controls []look.Span
+		if state.hoverSide == side {
+			controls = state.controls
+		}
 		return r.th.Draw(lineSurface(l.Kind, state, state.side == side), w,
-			look.Gutter(gw, n), look.LineMark(l.Kind), look.Default(" "), r.code(f, *l))
+			append(append([]look.Span{look.Gutter(gw, n)}, lineSign(l.Kind, controls)...), look.Default(" "), r.code(f, *l))...)
 	}
 	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
@@ -272,7 +296,14 @@ func (r *renderer) renderMessageLine(l git.Line, width int, state rowState) stri
 	case state.selected:
 		surf = look.Selected
 	}
-	return r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), el(termtext.Line(l.Text)))}, width)[0]
+	line := r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), el(termtext.Line(l.Text)))}, width)[0]
+	if len(state.controls) > 0 {
+		// The + that comments on the line takes the box's margin, as a diff line's takes its sign.
+		side := r.th.Render(look.Plain, look.Border("|", false))
+		rest := strings.TrimPrefix(line, side+" ")
+		line = side + r.th.Draw(look.ActiveHunk, 1, state.controls...) + rest
+	}
+	return line
 }
 
 // renderCommit draws the box's footer and its bottom.
@@ -285,6 +316,9 @@ func (r *renderer) renderCommit(v view, width int, state rowState) []string {
 	}
 	by := look.CommitBy(c)
 	which := append(filesSize(slices.DeleteFunc(slices.Clone(v.files), isMessage)), look.Muted("  commit "), look.SHA(c.SHA).Short())
+	if len(state.controls) > 0 {
+		which = append(append(which, look.Default("  ")), state.controls...)
+	}
 	var foot []string
 	if gap := inner - ansi.StringWidth(look.TextOf(by...)) - ansi.StringWidth(look.TextOf(which...)); gap > 0 {
 		foot = []string{r.th.Draw(surf, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...)}
@@ -326,6 +360,11 @@ func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int
 // beneath, unboxed, so a summary reads as part of its review rather than as one more thread.
 func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState) []string {
 	lines := rw.text(width)
+	if len(lines) > 0 && len(state.controls) > 0 {
+		// The review's controls follow its bar's text.
+		text := ansi.StringWidth(strings.TrimRight(ansi.Strip(lines[0]), " "))
+		lines[0] = look.Fit(ansi.Truncate(lines[0], text, "")+"  "+r.th.Render(look.Plain, state.controls...), width)
+	}
 	t := rw.thread
 	if t == nil {
 		return lines
@@ -375,7 +414,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
-func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, cursor bool) ([]string, []int) {
+func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState) ([]string, []int) {
 	const indent = 2
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
@@ -398,7 +437,15 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		lines = append(lines, "", r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
-	out := strings.Split(r.th.Box(boxWidth, cursor).Render(strings.Join(lines, "\n")), "\n")
+	out := strings.Split(r.th.Box(boxWidth, state.cursor).Render(strings.Join(lines, "\n")), "\n")
+	// The thread's controls sit in its bottom border, under its comments, where they take no line.
+	if n := len(out); len(state.controls) > 0 && n > 0 {
+		controls := r.th.Render(look.Plain, state.controls...)
+		if dashes := boxWidth - 5 - ansi.StringWidth(controls); dashes > 0 {
+			out[n-1] = r.th.Render(look.Plain, look.Border("+- ", state.cursor)) + controls +
+				r.th.Render(look.Plain, look.Border(" "+strings.Repeat("-", dashes)+"+", state.cursor))
+		}
+	}
 	for i := range out {
 		out[i] = strings.Repeat(" ", indent) + out[i]
 	}

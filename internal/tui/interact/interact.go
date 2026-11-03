@@ -13,6 +13,7 @@
 package interact
 
 import (
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -166,6 +167,10 @@ type Bound[M any] struct {
 
 // Is reports whether b is a, bound to its subject.
 func (b Bound[M]) Is(a any) bool { return b.action == a }
+
+// ID names b's action by its address, for a mark on screen to find it again. It is the same for
+// the action on every subject.
+func (b Bound[M]) ID() string { return fmt.Sprintf("%p", b.action) }
 
 // Same reports whether b and o are the same action.
 func (b Bound[M]) Same(o Bound[M]) bool { return b.action == o.action }

@@ -1,7 +1,7 @@
-[1;38;2;31;35;40mDiff (here)[m                                           [1;38;2;31;35;40mThread[m                                [1;38;2;31;35;40mEverywhere[m                  
-[1;38;2;9;105;218mj/k[m    [38;2;31;35;40mdown/up[m                                        [1;38;2;9;105;218menter[m  [38;2;31;35;40mexpand/collapse thread[m         [1;38;2;9;105;218mtab/shift+tab[m  [38;2;31;35;40mnext/previous[m
-[1;38;2;9;105;218md/u[m    [38;2;31;35;40mhalf page down/up[m                              [1;38;2;9;105;218mr[m      [38;2;31;35;40mreply[m                          [1;38;2;9;105;218mctrl+j/k[m       [38;2;31;35;40mfiles/changes[m
-[1;38;2;9;105;218mf/b[m    [38;2;31;35;40mpage down/up[m                                   [1;38;2;9;105;218mx[m      [38;2;31;35;40mresolve/reopen[m                 [1;38;2;9;105;218mH[m              [38;2;31;35;40moverview and [m
+[1;38;2;31;35;40mDiff (here)[m                                           [1;38;2;31;35;40mThread[m                                [1;38;2;31;35;40mEverywhere[m                  [1;38;2;31;35;40m[m
+[1;38;2;9;105;218mj/k[m    [38;2;31;35;40mdown/up[m                                        [1;38;2;9;105;218menter[m  [38;2;31;35;40mexpand/collapse thread[m         [1;38;2;9;105;218mtab/shift+tab[m  [38;2;31;35;40mnext/previous[m[1;38;2;9;105;218m[m[38;2;31;35;40m[m
+[1;38;2;9;105;218md/u[m    [38;2;31;35;40mhalf page down/up[m                              [1;38;2;9;105;218mr[m      [38;2;31;35;40mreply[m                          [1;38;2;9;105;218mctrl+j/k[m       [38;2;31;35;40mfiles/changes[m[1;38;2;9;105;218m[m[38;2;31;35;40m[m
+[1;38;2;9;105;218mf/b[m    [38;2;31;35;40mpage down/up[m                                   [1;38;2;9;105;218mx[m      [38;2;31;35;40mresolve/reopen[m                 [1;38;2;9;105;218mH[m              [38;2;31;35;40moverview and [m[1;38;2;9;105;218m[m[38;2;31;35;40m[m
 [1;38;2;9;105;218mg/G[m    [38;2;31;35;40mtop/bottom[m                                     [1;38;2;9;105;218ma[m      [38;2;31;35;40mmark addressed[m                 [1;38;2;9;105;218mA[m              [38;2;31;35;40mall changes a[m
 [1;38;2;9;105;218mh/l[m    [38;2;31;35;40mold/new side in split, or the sidebar[m          [1;38;2;9;105;218me[m      [38;2;31;35;40medit my comment[m                [1;38;2;9;105;218m}/{[m            [38;2;31;35;40mnext/prev com[m
 [1;38;2;9;105;218m]/[[m    [38;2;31;35;40mnext/prev file[m                                 [1;38;2;9;105;218mX[m      [38;2;31;35;40mdelete my comment or thread[m    [1;38;2;9;105;218m>/<[m            [38;2;31;35;40mnext/prev unr[m
@@ -26,14 +26,13 @@
 [1;38;2;31;35;40mSidebar[m                                               [1;38;2;9;105;218mza[m  [38;2;31;35;40mtoggle the fold[m                   [1;38;2;9;105;218mA R C[m  [38;2;31;35;40mskip the summary[m     
 [1;38;2;9;105;218menter/l[m  [38;2;31;35;40mopen[m                                         [1;38;2;9;105;218mzO[m  [38;2;31;35;40mopen all under it[m                 [1;38;2;9;105;218mesc[m    [38;2;31;35;40mcancel[m               
                                                       [1;38;2;9;105;218mzC[m  [38;2;31;35;40mclose all under it[m                                            
-[1;38;2;31;35;40mCommit[m                                                [1;38;2;9;105;218mzR[m  [38;2;31;35;40mopen every fold[m                   [1;38;2;31;35;40mWriting a comment[m           
-[1;38;2;9;105;218mc/C[m  [38;2;31;35;40mcomment on the commit[m                            [1;38;2;9;105;218mzM[m  [38;2;31;35;40mclose every fold[m                  [1;38;2;9;105;218mctrl+s[m  [38;2;31;35;40msave[m                
-[1;38;2;9;105;218mm/M[m  [38;2;31;35;40mmark the commit reviewed[m                                                               [1;38;2;9;105;218mctrl+e[m  [38;2;31;35;40mopen $EDITOR[m        
-                                                                                            [1;38;2;9;105;218mesc[m     [38;2;31;35;40mclose, asking if uns[m
+[1;38;2;31;35;40mCommit[m                                                [1;38;2;9;105;218mzR[m  [38;2;31;35;40mopen every fold[m                   [1;38;2;31;35;40mConfirming[m                  
+[1;38;2;9;105;218mc/C[m  [38;2;31;35;40mcomment on the commit[m                            [1;38;2;9;105;218mzM[m  [38;2;31;35;40mclose every fold[m                  [1;38;2;9;105;218my[m  [38;2;31;35;40myes[m                      
+[1;38;2;9;105;218mm/M[m  [38;2;31;35;40mmark the commit reviewed[m                                                               [1;38;2;9;105;218mn[m  [38;2;31;35;40mno, as any other key[m     
                                                                                                                         
-                                                                                            [1;38;2;31;35;40mUnsaved comment[m             
-                                                                                            [1;38;2;9;105;218ms[m    [38;2;31;35;40msave it[m                
-                                                                                            [1;38;2;9;105;218md[m    [38;2;31;35;40mdiscard it[m             
-                                                                                            [1;38;2;9;105;218mesc[m  [38;2;31;35;40mkeep editing[m           
+                                                                                            [1;38;2;31;35;40mWriting a comment[m           
+                                                                                            [1;38;2;9;105;218mctrl+s[m  [38;2;31;35;40msave[m                
+                                                                                            [1;38;2;9;105;218mctrl+e[m  [38;2;31;35;40mopen $EDITOR[m        
+                                                                                            [1;38;2;9;105;218mesc[m     [38;2;31;35;40mclose, asking if uns[m
                                                                                                                         
 [38;2;89;99;110mAny key closes this help.[m

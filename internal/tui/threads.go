@@ -75,10 +75,10 @@ func (m *model) deleteOwnComment(t review.ThreadView, atCursor bool) {
 		return
 	}
 	svc, ctx := m.svc, m.ctx
-	prompt := fmt.Sprintf("Delete your comment on %s? y/n", t.Label())
+	prompt := fmt.Sprintf("Delete your comment on %s?", t.Label())
 	status := "comment deleted"
 	if len(t.Comments) > 0 && t.Comments[0].ID == c.ID {
-		prompt = fmt.Sprintf("Delete thread %s? Its first comment is the thread. y/n", t.Label())
+		prompt = fmt.Sprintf("Delete thread %s? Its first comment is the thread.", t.Label())
 		status = "thread " + t.Label() + " deleted"
 	}
 	m.ask(prompt, func() tea.Msg {
@@ -93,7 +93,7 @@ func (m *model) deleteReview(rv store.Review) tea.Cmd {
 		m.setError(fmt.Errorf("review #%d is by %s", rv.Seq, rv.Author.Name))
 		return nil
 	}
-	m.ask(fmt.Sprintf("Delete your review #%d with its summary and threads? y/n", rv.Seq), func() tea.Msg {
+	m.ask(fmt.Sprintf("Delete your review #%d with its summary and threads?", rv.Seq), func() tea.Msg {
 		return opMsg{status: fmt.Sprintf("review #%d deleted", rv.Seq), err: svc.DeleteReview(ctx, change, rv.Seq)}
 	})
 	return nil

@@ -86,9 +86,11 @@ type paneSubject struct{}
 // appSubject is gr itself, for commands that act on no subject.
 type appSubject struct{}
 
-// composeSubject is the comment box that is open, and verdictSubject the verdict prompt.
+// composeSubject is the comment box that is open, verdictSubject the verdict prompt, and
+// confirmSubject the y/n prompt.
 type composeSubject struct{}
 type verdictSubject struct{}
+type confirmSubject struct{}
 
 // fileOf is file f of view v, if there is one.
 func (m *model) fileOf(v inView, f int) (fileSubject, bool) {
@@ -494,8 +496,8 @@ var (
 	actPalette     = loadedApp("actions here", func(m *model) tea.Cmd { return m.openPalette() })
 )
 
-// The comment box, its unsaved comment prompt, the verdict prompt, and the fold prefix: modes that
-// take keys of their own while they last.
+// The comment box, its unsaved comment prompt, the verdict and y/n prompts, and the fold prefix:
+// modes that take keys of their own while they last.
 var (
 	actComposeSave = &interact.Action[*model, composeSubject]{
 		Title: "save",
@@ -519,7 +521,20 @@ var (
 	}
 	actClosingKeep = &interact.Action[*model, composeSubject]{
 		Title: "keep editing",
-		Run:   func(*model, composeSubject) tea.Cmd { return nil },
+		Run:   do[composeSubject](func(m *model) { m.compose.closing = false }),
+	}
+
+	actConfirmYes = &interact.Action[*model, confirmSubject]{
+		Title: "yes",
+		Run: func(m *model, _ confirmSubject) tea.Cmd {
+			run := m.confirm.run
+			m.endConfirm()
+			return run
+		},
+	}
+	actConfirmNo = &interact.Action[*model, confirmSubject]{
+		Title: "no",
+		Run:   do[confirmSubject](func(m *model) { m.endConfirm() }),
 	}
 
 	actVerdictApprove        = verdictAction("approve", store.VerdictApprove, false)
@@ -575,6 +590,7 @@ var (
 	composeBoxKind     *interact.Kind[*model, composeSubject]
 	closingKind        *interact.Kind[*model, composeSubject]
 	verdictKind        *interact.Kind[*model, verdictSubject]
+	confirmKind        *interact.Kind[*model, confirmSubject]
 	foldPrefixKind     *interact.Kind[*model, paneSubject]
 )
 
@@ -618,6 +634,7 @@ func init() {
 	verdictKind = interact.NewKind(func(verdictSubject) string { return "Submit" },
 		actVerdictApprove, actVerdictRequestChanges, actVerdictComment, actVerdictApproveNow, actVerdictRequestNow,
 		actVerdictCommentNow, actVerdictCancel)
+	confirmKind = interact.NewKind(func(confirmSubject) string { return "Confirm" }, actConfirmYes, actConfirmNo)
 	foldPrefixKind = interact.NewKind(func(paneSubject) string { return "Folds" },
 		actFoldOpen, actFoldClose, actFoldToggle, actFoldOpenIn, actFoldCloseIn, actFoldOpenAll, actFoldCloseAll)
 }
@@ -753,6 +770,8 @@ func init() {
 	verdictKind.Bind(actVerdictRequestNow, "", "", "R")
 	verdictKind.Bind(actVerdictCommentNow, "", "", "C")
 	verdictKind.Bind(actVerdictCancel, "esc", "cancel", "esc")
+	confirmKind.Bind(actConfirmYes, "y", "yes", "y")
+	confirmKind.Bind(actConfirmNo, "n", "no, as any other key", "n", "esc")
 
 	foldPrefixKind.Bind(actFoldOpen, "zo", "open the fold", "o")
 	foldPrefixKind.Bind(actFoldClose, "zc", "close the fold", "c")
@@ -821,6 +840,7 @@ var (
 	theComposer      *interact.Place[*model, composeSubject]
 	theClosing       *interact.Place[*model, composeSubject]
 	theVerdict       *interact.Place[*model, verdictSubject]
+	theConfirm       *interact.Place[*model, confirmSubject]
 	theFoldPrefix    *interact.Place[*model, paneSubject]
 )
 
@@ -851,6 +871,7 @@ func init() {
 	theComposer = interact.List(composeBoxKind)
 	theClosing = interact.List(closingKind)
 	theVerdict = interact.List(verdictKind)
+	theConfirm = interact.List(confirmKind)
 	theFoldPrefix = interact.List(foldPrefixKind)
 }
 
@@ -1061,7 +1082,7 @@ func pressed[S any](m *model, msg tea.KeyPressMsg, a *interact.Action[*model, S]
 // discardDraft asks to discard your draft review and every comment in it.
 func (m *model) discardDraft() tea.Cmd {
 	svc, ctx, change := m.svc, m.ctx, m.data.change
-	m.ask("Discard your draft review and all its comments? y/n", func() tea.Msg {
+	m.ask("Discard your draft review and all its comments?", func() tea.Msg {
 		return opMsg{status: "draft review discarded", err: svc.Discard(ctx, change)}
 	})
 	return nil

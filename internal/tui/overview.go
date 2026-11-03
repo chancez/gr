@@ -90,7 +90,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 				look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),
 				look.StateCount(store.ThreadAddressed, counts[store.ThreadAddressed]), look.Default(", "),
 				look.StateCount(store.ThreadResolved, counts[store.ThreadResolved]),
-				look.Muted("   showing " + filter.String() + "; F filters, o opens a thread in the whole diff, O in its commit"),
+				look.Muted("   o opens a thread in the whole diff, O in its commit"),
 			},
 			blank,
 		),

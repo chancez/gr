@@ -22,6 +22,10 @@ type pane struct {
 	width  int
 	height int
 	side   anchor.Side
+	// hovering is set while the mouse is over row hover, on side hoverSide in split mode.
+	hovering  bool
+	hover     int
+	hoverSide anchor.Side
 	// scrolloff is the number of lines kept between the cursor and the pane's edges, as in vim.
 	scrolloff int
 	// reader moves between items, the comments of the overview's threads, keeping the selected one
@@ -471,8 +475,10 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 	for i := first; i < len(p.rows) && len(out) < p.height; i++ {
 		state := rowState{cursor: i == p.cursor, selected: p.anchor >= 0 && i >= selStart && i <= selEnd, side: p.side}
 		state.activeHunk = cursorHunk != nil && p.rows[i].hunk == cursorHunk
+		state.hover = p.hovering && i == p.hover
+		state.hoverSide = p.hoverSide
 		var lines []string
-		if state.cursor || state.selected || state.activeHunk {
+		if state.cursor || state.selected || state.activeHunk || state.hover {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {
 			lines = cached

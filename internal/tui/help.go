@@ -12,8 +12,8 @@ import (
 
 // shortHelp is the status bar's hints: what the cursor's subject does where it is, by key, then
 // submit, help, and quit, which are always shown.
-func (m *model) shortHelp() []key.Binding {
-	var out []key.Binding
+func (m *model) shortHelp() []interact.Key[*model] {
+	var out []interact.Key[*model]
 	chain := m.cursorChain()
 	if t, ok := m.cursorTarget(); ok {
 		// The cursor's subject first, then the change it is part of.
@@ -37,14 +37,15 @@ func (m *model) shortHelp() []key.Binding {
 				title = k.Action.Help
 			}
 			titles[title] = true
-			out = append(out, key.NewBinding(key.WithKeys(k.Keys()...), key.WithHelp(k.Help().Key, title)))
+			k.Binding = key.NewBinding(key.WithKeys(k.Keys()...), key.WithHelp(k.Help().Key, title))
+			out = append(out, k)
 		}
 	}
 	// What is always worth knowing comes last, where renderHints keeps it.
 	for _, a := range []any{actSubmit, actShowHelp, actQuit} {
 		for _, k := range interact.Keys(m, chain...) {
 			if k.Action.Is(a) {
-				out = append(out, k.Binding)
+				out = append(out, k)
 				break
 			}
 		}
@@ -82,6 +83,7 @@ func helpOrder() []struct {
 		{"Folds", []interact.Keyed{foldPrefixKind}},
 		{"Everywhere", []interact.Keyed{appKind}},
 		{"Submitting", []interact.Keyed{verdictKind}},
+		{"Confirming", []interact.Keyed{confirmKind}},
 		{"Writing a comment", []interact.Keyed{composeBoxKind}},
 		{"Unsaved comment", []interact.Keyed{closingKind}},
 	}
@@ -197,27 +199,33 @@ func (m *model) renderHelp() string {
 	return b.String()
 }
 
-// renderHints draws as many hints as fit in width, always keeping the last keep.
-func (m *model) renderHints(bindings []key.Binding, width, keep int) string {
+// renderHints draws as many hints as fit in width, always keeping the last keep. A click on a hint
+// runs what its key does.
+func (m *model) renderHints(keys []interact.Key[*model], width, keep int) string {
 	th := m.r.th
-	sep := th.Render(look.Plain, look.Muted(" | "))
-	item := func(b key.Binding) string {
-		return th.Render(look.Plain, look.Hint(b.Help().Key, b.Help().Desc)...)
+	sep := ansi.StringWidth(" | ")
+	hint := func(k interact.Key[*model]) []look.Span { return look.ClickableHint(k.Help().Key, k.Help().Desc) }
+	n := len(keys)
+	used := 0
+	for _, k := range keys[max(n-keep, 0):] {
+		used += ansi.StringWidth(look.TextOf(hint(k)...)) + sep
 	}
-	n := len(bindings)
-	var tail []string
-	for _, b := range bindings[max(n-keep, 0):] {
-		tail = append(tail, item(b))
-	}
-	used := ansi.StringWidth(strings.Join(tail, sep))
-	var head []string
-	for _, b := range bindings[:max(n-keep, 0)] {
-		next := item(b)
-		if used+ansi.StringWidth(next)+2*ansi.StringWidth(sep) > width {
+	shown := keys[max(n-keep, 0):]
+	var head []interact.Key[*model]
+	for _, k := range keys[:max(n-keep, 0)] {
+		w := ansi.StringWidth(look.TextOf(hint(k)...))
+		if used+w+sep > width {
 			break
 		}
-		head = append(head, next)
-		used += ansi.StringWidth(next) + ansi.StringWidth(sep)
+		head = append(head, k)
+		used += w + sep
 	}
-	return strings.Join(append(head, tail...), sep)
+	var spans []look.Span
+	for i, k := range append(head, shown...) {
+		if i > 0 {
+			spans = append(spans, look.Muted(" | "))
+		}
+		spans = append(spans, m.mark("hints", modeNormal, k.Action, hint(k)...)...)
+	}
+	return th.Render(look.Plain, spans...)
 }

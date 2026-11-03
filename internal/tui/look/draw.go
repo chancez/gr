@@ -23,6 +23,8 @@ type Span struct {
 	styled func(bg color.Color) string
 	// zone, when set, marks where the span is drawn, for Scan.
 	zone string
+	// chip draws the span on the Control surface, whatever surface it is drawn on.
+	chip bool
 }
 
 func sp(el element, text string) Span {
@@ -84,7 +86,11 @@ func (t *Theme) Render(s Surface, spans ...Span) string {
 		if x.text == "" {
 			continue
 		}
-		out := t.style(x.el, x.props, s).Render(termtext.Line(x.text))
+		on := s
+		if x.chip {
+			on = Control
+		}
+		out := t.style(x.el, x.props, on).Render(termtext.Line(x.text))
 		if x.zone != "" {
 			out = markZone(x.zone, out)
 		}

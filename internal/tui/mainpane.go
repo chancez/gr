@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"strconv"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/interact"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 func (m *model) rebuildMain() {
@@ -39,6 +42,8 @@ func (m *model) rebuildMain() {
 	m.main.anchor = -1
 	_, mw, bh := m.layoutSizes()
 	m.main.width, m.main.height = mw, mainHeight(bh)
+	// The rows' controls go with the rows' drawings.
+	m.drawnControls = nil
 	m.main.layout(m.renderMainRow)
 }
 
@@ -68,11 +73,69 @@ func (m *model) renderMainRow(i int, state rowState) []string {
 		// One column is the margin that marks the selected item.
 		width--
 	}
+	m.rowControls(i, &state)
 	lines := m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], width, state)
 	if m.r.segments != nil {
 		m.segments[i] = m.r.segments
 	}
 	return lines
+}
+
+// rowControls sets the controls row i shows, in state: a file's chevron before it, and the rest
+// after what they act on. Inside the diff they are quiet, and lit where the cursor or the mouse is,
+// while the main pane has focus and no mode is open, in which they also do nothing. The + that
+// comments on a line shows only under the mouse.
+func (m *model) rowControls(i int, state *rowState) {
+	r := m.main.rows[i]
+	normal := m.mode == modeNormal
+	hovered := state.hover && normal
+	lit := state.cursor && m.focus == focusMain && normal || hovered
+	where := "row" + strconv.Itoa(i)
+	controls := func(t interact.Target[*model], cs ...control) []look.Span {
+		for k := range cs {
+			cs[k] = cs[k].lighted(lit)
+		}
+		return m.controls(where, modeNormal, t, cs...)
+	}
+	switch {
+	case r.kind == rowLine && !hovered, r.kind == rowThread && r.collapsed:
+		return
+	}
+	side := m.main.side
+	if hovered && m.split {
+		side = m.main.hoverSide
+	}
+	t, ok := m.mainRowTarget(i, side)
+	if !ok {
+		return
+	}
+	switch r.kind {
+	case rowLine:
+		state.controls = controls(t, commentHere)
+	case rowGap:
+		state.controls = controls(t, expandFold.labeled(gapLabel(*r.gap)))
+	case rowCommit:
+		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
+	case rowThread:
+		resolve := resolveButton
+		if r.thread.State == store.ThreadResolved {
+			resolve = reopenButton
+		}
+		cs := []control{replyButton, resolve}
+		if r.thread.State == store.ThreadOpen {
+			cs = append(cs, addressedButton)
+		}
+		state.controls = controls(t, append(cs, editButton, deleteButton)...)
+	case rowReview:
+		state.controls = controls(t, deleteReview)
+	case rowFile:
+		state.lead = controls(t, fileFold.checked(!r.collapsed))
+		state.controls = controls(t, viewedBox.checked(r.reviewed))
+		if len(state.controls) == 0 && r.reviewed {
+			// Where it cannot be marked, as in the interdiff, the file still says it is reviewed.
+			state.controls = []look.Span{look.Reviewed()}
+		}
+	}
 }
 
 func (m *model) setView(i int) {

@@ -145,6 +145,25 @@ do there, and keys, menus, and the mouse all run actions through the registry.
   escapes, and the final frame is scanned for them, so marks survive the composition of panes and
   popups. Bubblezone works the same way, but records what it scans on a background goroutine, so
   a click right after a frame, or a test, can miss the zone; `look`'s scan is synchronous.
+- **Controls.** A control is an action drawn as a button, as GitHub's comment box has Comment and
+  Cancel. It is drawn from a target, as a key runs on one: the action is found among the target's
+  keys and menu, so a click runs what the key runs there, the button shows that key, and it is not
+  drawn while the action does not apply. A control is marked with where it is, such as its row,
+  and its action's address, never its turn in a frame, since a row's drawing is kept across frames.
+  It runs in the mode it was drawn for: a left click on a row's runs it only with no mode open, so
+  the rows behind the comment box look the same and do nothing. What shows a state, as a file's
+  Viewed box or a fold's Expand, is always drawn; the rest where the cursor or the mouse is, and
+  the `+` that comments on a line, in place of its sign, only under the mouse, as GitHub's. gr asks
+  the terminal for every mouse motion to know what is under it. Controls are drawn after what they
+  act on rather than at the far right, where they are easy to miss. Around the content, as the
+  comment box, the prompts, and the title bar, a control is a chip, its label and key on a
+  background of its own. Inside the diff and the overview a chip would compete with the code, so
+  controls there are quiet: muted text without a key, as `Reply` in a thread's border, a `[ ]
+  Viewed` box, or a `v` chevron that folds a file, underlined with their key where the cursor or
+  the mouse is. The `+` under the mouse is a chip, as there is one at a time. A hint, which is
+  clickable too, underlines its key. A control's label
+  is the drawing's, short as a button is, and its title stays the menu's. A control never adds a
+  line, since rows are measured once: a thread's buttons sit in its box's bottom border.
 - **A command palette.** `ctrl+p` opens the picker on every action that applies to the cursor's
   subjects, by title, filtered as you type. It reaches what the keyboard cannot select,
   such as the commit a thread is on, and needs nothing beyond the registry and the picker.
@@ -160,7 +179,8 @@ do there, and keys, menus, and the mouse all run actions through the registry.
   palette.
 - What a key does on a subject is written beside the subject's kind or place, and the order a key
   passes through what a subject carries is the one rule to know.
-- Adding mouse support for something means drawing it as a subject, not writing a click handler.
+- Adding mouse support for something means drawing it as a subject, or its actions as controls,
+  not writing a click handler.
 - What differs by where a subject is, as opening a sidebar entry, is declared on its place; what
   differs by state, in an action's check; what a thing is, by its kind.
 - Drawing a value somewhere new without registering that place does not compile, so every target

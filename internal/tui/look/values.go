@@ -10,6 +10,7 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Constructors for each kind of value gr draws. Each takes the value itself, so the element and
@@ -260,6 +261,93 @@ func Key(k string) Span {
 // Hint is a key and what it does.
 func Hint(k, desc string) []Span {
 	return []Span{Key(k), sp(elDefault, " "), sp(elKeyDesc, desc)}
+}
+
+// ClickableHint is a hint a click runs, its key underlined as a link.
+func ClickableHint(k, desc string) []Span {
+	return []Span{Key(k).With(Underlined), sp(elDefault, " "), sp(elKeyDesc, desc)}
+}
+
+// Controls are chips: their label and key on a background of their own, as GitHub's buttons, so
+// what a click runs looks the same everywhere.
+
+func chip(spans ...Span) []Span {
+	out := make([]Span, len(spans))
+	for i, x := range spans {
+		x.chip = true
+		out[i] = x
+	}
+	return out
+}
+
+// Button is a control: its label, and the key that does the same.
+func Button(label, key string) []Span {
+	out := []Span{sp(elDefault, " "), sp(elButton, label)}
+	if key != "" {
+		out = append(out, sp(elDefault, " "), sp(elMuted, key))
+	}
+	return chip(append(out, sp(elDefault, " "))...)
+}
+
+// Checkbox is a control that shows a state, checked when on: its label, and the key that toggles
+// it.
+func Checkbox(label, key string, on bool) []Span {
+	box := "[ ]"
+	if on {
+		box = "[x]"
+	}
+	out := []Span{sp(elDefault, " "), sp(elButton, box+" "+label)}
+	if key != "" {
+		out = append(out, sp(elDefault, " "), sp(elMuted, key))
+	}
+	return chip(append(out, sp(elDefault, " "))...)
+}
+
+// Icon is a control drawn as one character, such as the + that comments on a line.
+func Icon(glyph string) Span { return chip(sp(elKey, glyph))[0] }
+
+// Controls inside content, as a diff's, are quiet: their label muted, without a chip or a key,
+// until lit, as on the row under the mouse or the cursor, when they are underlined and show their
+// key, so the diff stays the thing to read.
+
+// Link is a quiet control: its label, and its key when lit. Unlit, the key's room is kept blank, so
+// lighting it, as the mouse reaches it, moves nothing after it.
+func Link(label, key string, lit bool) []Span {
+	if !lit {
+		out := []Span{sp(elMuted, label)}
+		if key != "" {
+			out = append(out, sp(elDefault, strings.Repeat(" ", 1+ansi.StringWidth(key))))
+		}
+		return out
+	}
+	out := []Span{sp(elText, label).With(Underlined)}
+	if key != "" {
+		out = append(out, sp(elDefault, " "), sp(elMuted, key))
+	}
+	return out
+}
+
+// QuietCheckbox is a quiet control that shows a state: its box, in the reviewed color when on, and
+// its label as a Link.
+func QuietCheckbox(label, key string, on, lit bool) []Span {
+	box := sp(elMuted, "[ ]")
+	if on {
+		box = sp(elReviewed, "[x]")
+	}
+	return append([]Span{box, sp(elDefault, " ")}, Link(label, key, lit)...)
+}
+
+// Chevron is a quiet control that folds what it heads: v when open, > when folded, in the accent
+// when lit.
+func Chevron(open, lit bool) Span {
+	g := ">"
+	if open {
+		g = "v"
+	}
+	if lit {
+		return sp(elKey, g)
+	}
+	return sp(elMuted, g)
 }
 
 // Free text, styled by what it is for.

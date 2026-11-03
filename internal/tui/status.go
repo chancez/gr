@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"charm.land/bubbles/v2/key"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
@@ -43,22 +42,26 @@ func (m *model) renderStatus() string {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		var hints []key.Binding
-		for _, b := range verdictKind.Bindings() {
-			if b.Help().Desc != "" {
-				hints = append(hints, b)
-			}
-		}
-		return th.Render(look.Plain, look.Heading("Submit review: ")) + m.renderHints(hints, m.width-15, 1)
+		t := theVerdict.Target(verdictSubject{})
+		spans := append([]look.Span{look.Heading("Submit review: ")}, m.controls("verdict", modeVerdict, t,
+			button(actVerdictApprove, "Approve"),
+			button(actVerdictRequestChanges, "Request changes"),
+			button(actVerdictComment, "Comment"),
+			button(actVerdictCancel, "Cancel"))...)
+		spans = append(append(spans, look.Default("  ")), look.Hint("A R C", "skip the summary")...)
+		return th.DrawCut(look.Plain, m.width, spans...)
 	case modeConfirm:
-		return th.Render(look.Plain, look.Error(m.confirm.prompt))
+		spans := append([]look.Span{look.Error(m.confirm.prompt), look.Default("  ")}, m.controls("confirm", modeConfirm, theConfirm.Target(confirmSubject{}),
+			button(actConfirmYes, "Yes"),
+			button(actConfirmNo, "No"))...)
+		return th.DrawCut(look.Plain, m.width, spans...)
 	case modeCompose:
 		if m.compose.closing {
-			var hints []key.Binding
-			for _, b := range closingKind.Bindings() {
-				hints = append(hints, b)
-			}
-			return th.Render(look.Plain, look.Warning("Unsaved comment: ")) + m.renderHints(hints, m.width-17, 1)
+			spans := append([]look.Span{look.Warning("Unsaved comment: ")}, m.controls("closing", modeCompose, theClosing.Target(composeSubject{}),
+				button(actComposeSave, "Save"),
+				button(actClosingDiscard, "Discard"),
+				button(actClosingKeep, "Keep editing"))...)
+			return th.DrawCut(look.Plain, m.width, spans...)
 		}
 	}
 	d := m.data
@@ -86,6 +89,10 @@ func (m *model) renderStatus() string {
 		left = append(left, look.Hint("esc", "clears")...)
 	}
 	l := th.Render(look.Plain, left...)
+	if m.mode == modeCompose {
+		// Keys go to the comment box, whose controls are its hints.
+		return look.Fit(l, m.width)
+	}
 	// Fit the hints in what the left side leaves, keeping help and quit.
 	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10), 3)
 	gap := max(m.width-ansi.StringWidth(l)-ansi.StringWidth(right)-1, 1)

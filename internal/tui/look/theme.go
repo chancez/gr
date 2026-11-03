@@ -40,6 +40,7 @@ type roles struct {
 	dimCursorBg     color.Color
 	selectedBg      color.Color
 	paneUnfocusedBg color.Color
+	controlBg       color.Color
 }
 
 // The built-in themes.
@@ -77,6 +78,7 @@ func newRoles(isDark bool, theme string) roles {
 		dimCursorBg:     ld(lightGray, graphite),
 		selectedBg:      ld(paleYellow, indigoGray),
 		paneUnfocusedBg: ld(lightGray, darkGray),
+		controlBg:       ld(paleGray, charcoal),
 	}
 	if theme == ThemeColorblind {
 		r.success, r.added = r.accent, r.accent
@@ -124,6 +126,8 @@ const (
 	// elMode marks a mode that changes what keys do, such as selecting lines.
 	elMode
 	elWarning
+	// elButton is a control's label.
+	elButton
 	numElements
 )
 
@@ -158,6 +162,7 @@ var elementNames = [numElements]string{
 	elBorderActive:          "border.active",
 	elMode:                  "mode",
 	elWarning:               "warning",
+	elButton:                "button",
 }
 
 // Prop is an option a place asks an element for. The theme defines what each does.
@@ -168,6 +173,8 @@ const (
 	Dim Prop = 1 << iota
 	// Strong is for emphasis, such as in headers.
 	Strong
+	// Underlined is for what a click runs that has no chip, as a hint's key or a lit link.
+	Underlined
 )
 
 // Surface is where a line sits. It owns the background.
@@ -188,6 +195,8 @@ const (
 	Status
 	StatusError
 	SearchMatch
+	// Control is a control's own background, a chip on whatever it sits on, as GitHub's buttons.
+	Control
 	numSurfaces
 )
 
@@ -206,6 +215,7 @@ var surfaceNames = [numSurfaces]string{
 	Status:        "surface.status",
 	StatusError:   "surface.status-error",
 	SearchMatch:   "surface.search-match",
+	Control:       "surface.control",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -264,6 +274,7 @@ func New(isDark bool, name string) *Theme {
 		elBorderActive:          fg(p.accent),
 		elMode:                  fg(p.attention),
 		elWarning:               bold(p.attention),
+		elButton:                bold(p.text),
 	}
 	t.surfaces = [numSurfaces]surfaceStyle{
 		Plain:         {},
@@ -280,6 +291,7 @@ func New(isDark bool, name string) *Theme {
 		Status:        {bg: p.success, solid: true, fg: p.onSolid, bold: true},
 		StatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
 		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
+		Control:       {bg: p.controlBg},
 	}
 	return t
 }
@@ -296,6 +308,9 @@ func (t *Theme) style(el element, p Prop, s Surface) lipgloss.Style {
 	}
 	if p&Strong != 0 {
 		st = st.Bold(true)
+	}
+	if p&Underlined != 0 {
+		st = st.Underline(true)
 	}
 	if ss.bg != nil {
 		st = st.Background(ss.bg)

@@ -131,6 +131,16 @@ func KeepMarks(line string, f func(string) string) string {
 	return b.String()
 }
 
+// Mark marks spans as zone id, as a control is.
+func Mark(id string, spans ...Span) []Span {
+	out := make([]Span, len(spans))
+	for i, x := range spans {
+		x.zone = id
+		out[i] = x
+	}
+	return out
+}
+
 // MarkSHA marks the shas among spans as zone id, as the commit a thread's location names.
 func MarkSHA(id string, spans ...Span) []Span {
 	out := make([]Span, len(spans))

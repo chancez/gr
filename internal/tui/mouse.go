@@ -27,6 +27,8 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 	} else {
 		m.main.scroll(delta)
 	}
+	// What is under the mouse moved with the scroll.
+	m.hoverAt(msg.X, msg.Y)
 	m.syncNav()
 	return m, nil
 }
@@ -38,6 +40,12 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// A right click with a menu open opens the menu of where it lands instead.
 	if m.mode == modePicker && msg.Button == tea.MouseRight {
 		m.closePicker()
+	}
+	// A control runs on a left click, in any mode it is drawn in.
+	if msg.Button == tea.MouseLeft {
+		if b, ok := m.controlAt(msg.X, msg.Y); ok && b.Applies(m) {
+			return m, b.Run(m)
+		}
 	}
 	// A left click moves the cursor to what it lands on, as keys would. A right click opens the
 	// menu of what is there, and moves nothing.
@@ -154,9 +162,32 @@ func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if !m.dragging {
+		m.hoverAt(msg.X, msg.Y)
 		return m, nil
 	}
 	m.navWidth = min(max(msg.X, 12), m.width-20)
 	m.relayout(false)
 	return m, nil
+}
+
+// hoverAt notes the main pane's row under the mouse at x, y, which shows the controls the mouse
+// can reach there, as the + that comments on a line.
+func (m *model) hoverAt(x, y int) {
+	p := &m.main
+	nw, _, bh := m.layoutSizes()
+	p.hovering = false
+	if m.data == nil || x <= nw || y < 1 || y >= bh {
+		return
+	}
+	i := p.rowAt(y - 1)
+	if h, ok := m.stickyFile(); ok && y == 1 {
+		i = h
+	}
+	if i < 0 {
+		return
+	}
+	p.hovering, p.hover = true, i
+	if m.split {
+		p.hoverSide = m.sideAt(x)
+	}
 }

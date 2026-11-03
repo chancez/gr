@@ -1284,13 +1284,13 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	e.cursorTo(func(r row) bool { return r.kind == rowFile })
 	e.pressRun("m")
 	e.cursorTo(func(r row) bool { return r.kind == rowFile })
-	header := ansi.Strip(e.m.renderMainRow(e.m.main.cursor, rowState{})[0])
-	if !strings.Contains(header, "reviewed  collapsed, enter expands") {
-		t.Errorf("file header = %q", header)
+	header, _ := look.Scan(e.m.renderMainRow(e.m.main.cursor, rowState{})[0])
+	if got, want := strings.Join(strings.Fields(ansi.Strip(header)), " "), "> M main.go +1 -1 collapsed [x] Viewed"; got != want {
+		t.Errorf("file header = %q", ansi.Strip(header))
 	}
-	key := th.Render(look.HeadingBar, look.Key("enter"))
-	if !strings.Contains(e.m.renderMainRow(e.m.main.cursor, rowState{})[0], key) {
-		t.Error("enter not styled as a key in the file header")
+	viewed := th.Render(look.HeadingBar, look.QuietCheckbox("Viewed", "m", true, false)...)
+	if !strings.Contains(header, viewed) {
+		t.Error("the Viewed box is not styled as a quiet control in the file header")
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/help"
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -104,6 +103,9 @@ type model struct {
 	picker *picker
 	// zones are where the last frame drew marked spans, such as mentions, by id.
 	zones map[string][]look.Zone
+	// drawnControls are the controls drawn, by zone id. They are kept as long as the rows, whose
+	// drawings are kept across frames.
+	drawnControls map[string]drawnControl
 	// theme is the built-in palette, and isDark whether the terminal's background is dark.
 	theme  string
 	isDark bool
@@ -373,7 +375,7 @@ func (m *model) layoutSizes() (navWidth, mainWidth, bodyHeight int) {
 	}
 	bodyHeight = m.height - 1
 	if m.mode == modeCompose {
-		bodyHeight -= composeHeight + 3
+		bodyHeight -= composeHeight + 4
 	}
 	return navWidth, max(mainWidth, 10), max(bodyHeight, 1)
 }
@@ -464,20 +466,26 @@ func (m *model) ask(prompt string, run func() tea.Msg) {
 	m.mode = modeConfirm
 }
 
+// confirmKey answers the y/n prompt: any key but its own is no.
 func (m *model) confirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.mode = modeNormal
-	c := m.confirm
-	m.confirm = confirmation{}
-	if msg.String() != "y" || c.run == nil {
-		return m, nil
+	c, ok := m.runOn(msg, theConfirm.Target(confirmSubject{}))
+	if !ok {
+		m.endConfirm()
 	}
-	return m, c.run
+	return m, c
+}
+
+// endConfirm closes the y/n prompt.
+func (m *model) endConfirm() {
+	m.mode = modeNormal
+	m.confirm = confirmation{}
 }
 
 func (m *model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
-	v.MouseMode = tea.MouseModeCellMotion
+	// Every motion, not only drags, so what the mouse is over can show its controls.
+	v.MouseMode = tea.MouseModeAllMotion
 	v.WindowTitle = "gr"
 	if m.data != nil {
 		v.WindowTitle = fmt.Sprintf("gr #%d %s", m.data.change.Seq, termtext.Line(m.data.change.Title))
@@ -547,14 +555,19 @@ func (m *model) frame() string {
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
-		var bindings []key.Binding
-		bindings = composeBoxKind.Bindings()
-		hints := "  " + m.help.ShortHelpView(bindings)
+		th := m.r.th
 		title := look.Heading(m.compose.title)
 		if m.compose.warn {
 			title = look.Warning(m.compose.title)
 		}
-		box := m.r.th.Box(m.width, true).Render(ansi.Truncate(m.r.th.Render(look.Plain, title)+hints, m.width-4, "") + "\n" + m.compose.area.View())
+		// The buttons sit under the text.
+		inner := m.width - 4
+		buttons := th.Render(look.Plain, m.controls("box", modeCompose, theComposer.Target(composeSubject{}),
+			button(actComposeEditor, "$EDITOR"),
+			button(actComposeClose, "Cancel"),
+			button(actComposeSave, "Save"))...)
+		box := th.Box(m.width, true).Render(th.DrawCut(look.Plain, inner, title) + "\n" + m.compose.area.View() + "\n" +
+			ansi.Truncate(buttons, inner, ""))
 		b.WriteString(box)
 		b.WriteString("\n")
 	}
