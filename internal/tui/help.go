@@ -225,7 +225,7 @@ func (m *model) renderHints(keys []interact.Key[*model], width, keep int) string
 		if i > 0 {
 			spans = append(spans, look.Muted(" | "))
 		}
-		spans = append(spans, m.mark("hints", modeNormal, k.Action, hint(k)...)...)
+		spans = append(spans, m.mark("hints", modeNormal, k.Action, false, hint(k)...)...)
 	}
 	return th.Render(look.Plain, spans...)
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/chancez/gr/internal/anchor"
+	"github.com/chancez/gr/internal/tui/interact"
 )
 
 func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
@@ -43,8 +44,12 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 	// A control runs on a left click, in any mode it is drawn in.
 	if msg.Button == tea.MouseLeft {
-		if b, ok := m.controlAt(msg.X, msg.Y); ok && b.Applies(m) {
-			return m, b.Run(m)
+		if c, ok := m.controlAt(msg.X, msg.Y); ok && c.run.Applies(m) {
+			if c.selects {
+				m.selectFrom(msg.X, msg.Y, c.run)
+				return m, nil
+			}
+			return m, c.run.Run(m)
 		}
 	}
 	// A left click moves the cursor to what it lands on, as keys would. A right click opens the
@@ -156,7 +161,63 @@ func (m *model) sideAt(x int) anchor.Side {
 	return anchor.SideNew
 }
 
+// selecting is a line selection the mouse is dragging, from a control that runs on it when the
+// button is let go.
+type selecting struct {
+	run interact.Bound[*model]
+}
+
+// selectFrom starts a line selection at the line at x, y, the press on a control that selects, as
+// the + that comments on a line.
+func (m *model) selectFrom(x, y int, run interact.Bound[*model]) {
+	i := m.main.rowAt(y - 1)
+	if i < 0 {
+		return
+	}
+	m.setFocus(focusMain)
+	m.main.cursor, m.main.anchor = i, i
+	if m.split {
+		m.main.side = m.sideAt(x)
+	}
+	m.selecting = &selecting{run: run}
+	m.syncNav()
+}
+
+// selectTo moves the dragged selection's end to the line at y, within the file it started in.
+func (m *model) selectTo(y int) {
+	p := &m.main
+	i := p.rowAt(y - 1)
+	if i < 0 || p.rows[i].kind != rowLine || p.rows[i].file != p.rows[p.anchor].file {
+		return
+	}
+	p.cursor = i
+	m.syncNav()
+}
+
+// selected ends the dragged selection: what it started from runs on the lines selected, through the
+// target of the line the drag ended on, as its key would there.
+func (m *model) selected() tea.Cmd {
+	s := m.selecting
+	m.selecting = nil
+	t, ok := m.mainRowTarget(m.main.cursor, m.main.side)
+	if !ok {
+		return nil
+	}
+	for _, g := range t.Groups(m) {
+		for _, b := range g.Actions {
+			if b.Same(s.run) {
+				return b.Run(m)
+			}
+		}
+	}
+	return nil
+}
+
 func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	if m.selecting != nil {
+		m.selectTo(msg.Y)
+		return m, nil
+	}
 	if m.draggingSplit {
 		m.viewsHeight = max(msg.Y, 2)
 		return m, nil

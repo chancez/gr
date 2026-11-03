@@ -160,7 +160,8 @@ do there, and keys, menus, and the mouse all run actions through the registry.
   background of its own. Inside the diff and the overview a chip would compete with the code, so
   controls there are quiet: muted text without a key, as `Reply` in a thread's border, a `[ ]
   Viewed` box, or a `v` chevron that folds a file, underlined with their key where the cursor or
-  the mouse is. The `+` under the mouse is a chip, as there is one at a time. A hint, which is
+  the mouse is. The `+` under the mouse is a chip, as there is one at a time;
+  pressing it and dragging selects lines in its file, and letting go comments on them. A hint, which is
   clickable too, underlines its key. A control's label
   is the drawing's, short as a button is, and its title stays the menu's. A control never adds a
   line, since rows are measured once: a thread's buttons sit in its box's bottom border.

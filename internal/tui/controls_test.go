@@ -55,13 +55,15 @@ func (e *tuiEnv) shownControls(where string) []string {
 	return out
 }
 
-// click clicks the first control on the screen drawn at where whose action is titled title, whether
+// click clicks, pressing and letting go, the first control on the screen drawn at where whose action is titled title, whether
 // or not it runs now.
 func (e *tuiEnv) click(where, title string) {
 	e.t.Helper()
 	for _, c := range e.onScreen(where) {
 		if c.title == title {
 			_, cmd := e.m.Update(tea.MouseClickMsg{X: c.zone.X, Y: c.zone.Y, Button: tea.MouseLeft})
+			e.drain(cmd)
+			_, cmd = e.m.Update(tea.MouseReleaseMsg{X: c.zone.X, Y: c.zone.Y, Button: tea.MouseLeft})
 			e.drain(cmd)
 			return
 		}
@@ -264,6 +266,37 @@ func TestThreadAndTitleControls(t *testing.T) {
 	e.click("title", "next commit")
 	if got, want := e.shownControls("title"), []string{"previous commit"}; !reflect.DeepEqual(got, want) || e.m.views[e.m.current].commit.Subject() != "Add a greeting helper" {
 		t.Errorf("after Next, commit %q has title controls %q, want the last with %q", e.m.views[e.m.current].commit.Subject(), got, want)
+	}
+}
+
+// Dragging from the + selects the lines it passes, and letting go comments on them, as on GitHub.
+// Moving off the lines leaves the selection where it was.
+func TestDragTheCommentPlus(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Add a greeting helper")
+	e.pressRun("l")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.line.NewLine == 2 })
+	start := e.m.main.cursor
+	e.hoverRow(start)
+	var plus look.Zone
+	for _, c := range e.onScreen("row" + strconv.Itoa(start) + ":") {
+		if c.title == "comment" {
+			plus = c.zone
+		}
+	}
+	if plus.W == 0 {
+		t.Fatalf("no + on the line under the mouse:\n%s", e.screen())
+	}
+	y := func(i int) int { return e.m.main.starts[i] - e.m.main.offset + 1 }
+	e.m.Update(tea.MouseClickMsg{X: plus.X, Y: plus.Y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: plus.X, Y: y(start + 2), Button: tea.MouseLeft})
+	// Below the last line, the selection stays where it was.
+	e.m.Update(tea.MouseMotionMsg{X: plus.X, Y: e.m.main.height, Button: tea.MouseLeft})
+	_, cmd := e.m.Update(tea.MouseReleaseMsg{X: plus.X, Y: e.m.main.height, Button: tea.MouseLeft})
+	e.drain(cmd)
+	want := "Comment on util.go:2-4 in commit " + shortSHA(e.m.views[e.m.current].commit.SHA)
+	if e.m.mode != modeCompose || e.m.compose.title != want {
+		t.Errorf("dragging the + opened mode %d, %q, want %q", e.m.mode, e.m.compose.title, want)
 	}
 }
 

@@ -122,6 +122,8 @@ type model struct {
 	viewsHeight int
 	// draggingSplit is set while the divider between the sidebar lists is dragged.
 	draggingSplit bool
+	// selecting is set while the mouse drags a line selection from the + that comments.
+	selecting *selecting
 	// pendingLoads are views whose diffs to load once the current message is handled, and
 	// syncLoads loads them at once instead, for tests. pendingThread and pendingFile are where to go
 	// once the current view's diff arrives, pendingThread in the whole diff when pendingInDiff.
@@ -334,6 +336,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.mouseMotion(msg)
 	case tea.MouseReleaseMsg:
 		m.dragging, m.draggingSplit = false, false
+		if m.selecting != nil {
+			return m, m.selected()
+		}
 		return m, nil
 	case tea.KeyPressMsg:
 		switch m.mode {

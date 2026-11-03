@@ -18,6 +18,9 @@ type control struct {
 	on bool
 	// lit shows a quiet control as the mouse or cursor reaches it.
 	lit bool
+	// selects makes a press on the control start a line selection, and the release run it on what
+	// was selected, as dragging GitHub's + comments on several lines.
+	selects bool
 }
 
 // controlLook is how a control is drawn.
@@ -125,6 +128,7 @@ func init() {
 	fileFold = chevron(actFoldFile)
 	expandFold = link(actExpandFold, "")
 	commentHere = icon(actCommentOnLine, "+")
+	commentHere.selects = true
 	replyButton = link(actReplyToThread, "Reply")
 	resolveButton = link(actResolveThread, "Resolve")
 	reopenButton = link(actResolveThread, "Reopen")
@@ -139,10 +143,12 @@ func init() {
 
 const controlZone = "control:"
 
-// drawnControl is a control on screen: what it runs, and the mode it runs in.
+// drawnControl is a control on screen: what it runs, the mode it runs in, and whether a press on it
+// selects lines first.
 type drawnControl struct {
-	run  interact.Bound[*model]
-	mode mode
+	run     interact.Bound[*model]
+	mode    mode
+	selects bool
 }
 
 // controls draws the controls of cs that t offers and that apply, a space apart, to run in mode
@@ -163,7 +169,7 @@ func (m *model) controls(where string, md mode, t interact.Target[*model], cs ..
 			}
 			out = append(out, look.Default(gap))
 		}
-		out = append(out, m.mark(where, md, b, c.spans(key)...)...)
+		out = append(out, m.mark(where, md, b, c.selects, c.spans(key)...)...)
 	}
 	return out
 }
@@ -171,12 +177,12 @@ func (m *model) controls(where string, md mode, t interact.Target[*model], cs ..
 // mark marks spans as a control that runs b in mode md, and records it for a click on where it
 // lands. Its zone id names where it is and its action, never its turn in a frame, so a row's
 // drawing kept from an earlier frame is still the control it was.
-func (m *model) mark(where string, md mode, b interact.Bound[*model], spans ...look.Span) []look.Span {
+func (m *model) mark(where string, md mode, b interact.Bound[*model], selects bool, spans ...look.Span) []look.Span {
 	id := controlZone + where + ":" + b.ID()
 	if m.drawnControls == nil {
 		m.drawnControls = map[string]drawnControl{}
 	}
-	m.drawnControls[id] = drawnControl{run: b, mode: md}
+	m.drawnControls[id] = drawnControl{run: b, mode: md, selects: selects}
 	return look.Mark(id, spans...)
 }
 
@@ -200,7 +206,7 @@ func offered(m *model, t interact.Target[*model], keys []interact.Key[*model], a
 
 // controlAt is what the control drawn at x, y in the last frame runs, if one is there and runs in
 // the mode open now: a row's controls do nothing behind the comment box.
-func (m *model) controlAt(x, y int) (interact.Bound[*model], bool) {
+func (m *model) controlAt(x, y int) (drawnControl, bool) {
 	for id, zones := range m.zones {
 		c, ok := m.drawnControls[id]
 		if !ok || c.mode != m.mode {
@@ -208,9 +214,9 @@ func (m *model) controlAt(x, y int) (interact.Bound[*model], bool) {
 		}
 		for _, z := range zones {
 			if z.Contains(x, y) {
-				return c.run, true
+				return c, true
 			}
 		}
 	}
-	return interact.Bound[*model]{}, false
+	return drawnControl{}, false
 }
