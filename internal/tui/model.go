@@ -281,6 +281,10 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.relayout(true)
 		return m, nil
 	case dataMsg:
+		if msg.err == nil && msg.data.change.ID != m.changeID {
+			// Loaded for the change shown before a switch.
+			return m, nil
+		}
 		if msg.err != nil {
 			m.setError(msg.err)
 			return m, nil
