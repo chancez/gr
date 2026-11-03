@@ -278,8 +278,23 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 	return m.compose.area.Focus()
 }
 
-// composeIndent is how far the comment box is indented from the main pane's edge.
-const composeIndent = 2
+// composeIndent is how far the comment box is indented from the main pane's edge: as far as the
+// thread it starts or replies to will be, so it opens where that thread shows.
+func (m *model) composeIndent() int {
+	p := &m.main
+	if p.attach < 0 || p.attach >= len(p.rows) {
+		return 2
+	}
+	v, r := m.views[m.current], p.rows[p.attach]
+	switch {
+	case r.kind == rowThread:
+		return threadIndent(v, r, m.split)
+	case m.compose.kind == composeThread && m.compose.thread.StartLine > 0:
+		// The thread it starts, on the lines it hangs under.
+		return codeIndent(v, r, m.split)
+	}
+	return 2
+}
 
 // composeAnchor is the row the comment box opens under, and the first row of what it comments on:
 // a thread's row for a reply or an edit, the last line commented on with the threads already
@@ -370,7 +385,7 @@ func (m *model) composeCursor() *tea.Cursor {
 	if y < 1 || y > p.height {
 		return nil
 	}
-	c.X += left + composeIndent + 2
+	c.X += left + m.composeIndent() + 2
 	c.Y = y
 	c.Shape = tea.CursorBlock
 	if m.compose.vim.Mode() == vimbubble.Insert {
@@ -382,7 +397,7 @@ func (m *model) composeCursor() *tea.Cursor {
 // composeLines draws the comment box, width wide, as it hangs under its row.
 func (m *model) composeLines(width int) []string {
 	th := m.r.th
-	const indent = composeIndent
+	indent := m.composeIndent()
 	boxWidth := max(width-indent, 24)
 	inner := boxWidth - 4
 	title := []look.Span{look.Heading(m.compose.title)}

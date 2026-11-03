@@ -25,8 +25,9 @@ type Span struct {
 	zone string
 	// chip draws the span on the Control surface, or ControlSolid when solid, whatever surface it
 	// is drawn on.
-	chip  bool
-	solid bool
+	chip      bool
+	solid     bool
+	commented bool
 	// glyph, when set, draws the theme's symbol for it in place of text; gap puts a space after it
 	// when there is one.
 	glyph Glyph
@@ -111,6 +112,9 @@ func (t *Theme) Render(s Surface, spans ...Span) string {
 		}
 		if x.solid {
 			on = ControlSolid
+		}
+		if x.commented {
+			on = Commented
 		}
 		out := t.style(x.el, x.props, on).Render(termtext.Line(text))
 		if x.zone != "" {

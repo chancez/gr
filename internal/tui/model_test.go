@@ -2182,3 +2182,47 @@ func TestReopenWhereYouWere(t *testing.T) {
 		t.Errorf("reopened at %+v, split %v, focus %d; want %+v, split, the diff focused", got, m.split, m.focus, was)
 	}
 }
+
+// The line numbers of the lines a thread is on are tinted, and the lines themselves while the
+// cursor is on the thread.
+func TestThreadRanges(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(8)
+	e.repo.Write("notes.txt", gittest.Lines(lines...))
+	e.repo.Commit("add notes")
+	e.drain(e.m.loadCmd())
+	if _, err := e.svc.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeDiff, Path: "notes.txt", StartLine: 3, EndLine: 5, Body: "these three"}); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("All changes")
+	e.pressRun("l")
+	// The line numbers of lines a thread is on are on the commented surface's background.
+	_, sample, _ := strings.Cut(e.m.r.th.Render(look.Commented, look.Default(" ")), "48;2;")
+	bg, _, _ := strings.Cut(sample, "m")
+	bg = "48;2;" + bg
+	tinted := map[int]bool{}
+	for i, r := range e.m.main.rows {
+		if r.kind == rowLine && r.line != nil && e.m.views[e.m.current].files[r.file].Path() == "notes.txt" {
+			tinted[r.line.NewLine] = strings.Contains(e.m.renderMainRow(i, rowState{})[0], bg)
+		}
+	}
+	want := map[int]bool{1: false, 2: false, 3: true, 4: true, 5: true, 6: false, 7: false, 8: false}
+	if !reflect.DeepEqual(tinted, want) {
+		t.Errorf("tinted line numbers = %v, want %v", tinted, want)
+	}
+	focused := func() []bool {
+		var out []bool
+		for i, r := range e.m.main.rows {
+			if r.kind == rowLine && r.line != nil && r.line.NewLine >= 2 && r.line.NewLine <= 6 && e.m.views[e.m.current].files[r.file].Path() == "notes.txt" {
+				_, n := e.m.main.rows[i].covers(e.m.focusedThread())
+				out = append(out, n)
+			}
+		}
+		return out
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.Comments[0].Body == "these three" })
+	if got, want := focused(), []bool{false, true, true, true, false}; !reflect.DeepEqual(got, want) {
+		t.Errorf("lines 2 to 6 tinted = %v, want %v", got, want)
+	}
+}

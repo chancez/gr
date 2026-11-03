@@ -94,6 +94,24 @@ type row struct {
 	excerpt *review.Excerpt
 	// review is set on a rowReview. Its summary thread, if any, is thread.
 	review *store.Review
+	// coverOld and coverNew are the threads on lines that include this line row's, on each side.
+	coverOld []cover
+	coverNew []cover
+}
+
+// cover is a thread on lines that include a line row's, and whether the row is its first or last.
+type cover struct {
+	thread *review.ThreadView
+	first  bool
+	last   bool
+}
+
+// covers reports whether thread id is on lines that include this row's, on the old and new side.
+func (r row) covers(id string) (old, new bool) {
+	has := func(cs []cover) bool {
+		return slices.ContainsFunc(cs, func(c cover) bool { return c.thread.ID == id })
+	}
+	return has(r.coverOld), has(r.coverNew)
 }
 
 func (r row) selectable() bool { return r.kind != rowText && r.kind != rowBoxTop }
@@ -203,6 +221,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 					threadRows(msg, byLine[threadKey{review.CommitMsgPath, anchor.SideNew, l.NewLine}])
 				}
 			}
+			coverLines(rows, lineThreads, locs, &mf)
 		}
 		rows = append(rows, row{kind: rowCommit, file: -1})
 		threadRows(-1, whole)
@@ -216,6 +235,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		}
 		f := &v.files[fi]
 		collapsed := opts.collapsed != nil && opts.collapsed(fi)
+		fileStart := len(rows)
 		rows = append(rows, row{
 			kind: rowFile, file: fi, collapsed: collapsed,
 			reviewed: opts.reviewed != nil && opts.reviewed(fi),
@@ -282,6 +302,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 			}
 		}
 		gapRows(len(f.Hunks))
+		coverLines(rows[fileStart:], lineThreads, locs, f)
 		// Threads whose lines are not in this diff, which should not happen for current threads.
 		for _, t := range lineThreads {
 			loc := locs[t]
@@ -292,6 +313,33 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		}
 	}
 	return rows
+}
+
+// coverLines notes on the line rows of file f which threads' lines include them: on the old side
+// by their old line number, and on the new side by their new one.
+func coverLines(rows []row, threads []*review.ThreadView, locs map[*review.ThreadView]store.Location, f *git.FileDiff) {
+	for _, t := range threads {
+		loc := locs[t]
+		end := max(loc.EndLine, loc.StartLine)
+		in := func(n int) bool { return n > 0 && n >= loc.StartLine && n <= end }
+		at := func(n int) cover { return cover{thread: t, first: n == loc.StartLine, last: n == end} }
+		for i := range rows {
+			r := &rows[i]
+			if r.kind != rowLine {
+				continue
+			}
+			old, new := r.left, r.right
+			if r.line != nil {
+				old, new = r.line, r.line
+			}
+			switch {
+			case loc.Side == anchor.SideOld && loc.Path == f.OldPath && old != nil && in(old.OldLine):
+				r.coverOld = append(r.coverOld, at(old.OldLine))
+			case loc.Side != anchor.SideOld && loc.Path == f.NewPath && new != nil && in(new.NewLine):
+				r.coverNew = append(r.coverNew, at(new.NewLine))
+			}
+		}
+	}
 }
 
 // threadInView reports whether a current thread belongs in a file view.

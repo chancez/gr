@@ -39,6 +39,8 @@ var (
 	amber       = lipgloss.Color("#9a6700")
 	gold        = lipgloss.Color("#d29922")
 	paleYellow  = lipgloss.Color("#fff8c5")
+	sand        = lipgloss.Color("#f5e0a0")
+	darkOlive   = lipgloss.Color("#3b3416")
 	purple      = lipgloss.Color("#8250df")
 	lavender    = lipgloss.Color("#ab7df8")
 	orange      = lipgloss.Color("#bc4c00")

@@ -77,6 +77,7 @@ func (m *model) stickyFile() (int, bool) {
 
 func (m *model) renderMainRow(i int, state rowState) []string {
 	state.dim = m.focus != focusMain
+	state.split = m.split
 	width := m.main.width
 	if m.main.reader {
 		// One column is the margin that marks the selected item.
@@ -88,6 +89,22 @@ func (m *model) renderMainRow(i int, state rowState) []string {
 		m.segments[i] = m.r.segments
 	}
 	return lines
+}
+
+// focusedThread is the id of the thread the mouse is over, or else the one the cursor is on while
+// the diff has focus, whose lines show as its own. It is empty for none.
+func (m *model) focusedThread() string {
+	p := &m.main
+	if m.mode != modeNormal {
+		return ""
+	}
+	if p.hovering && p.hover < len(p.rows) && p.rows[p.hover].kind == rowThread {
+		return p.rows[p.hover].thread.ID
+	}
+	if m.focus == focusMain && p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
+		return p.rows[p.cursor].thread.ID
+	}
+	return ""
 }
 
 // rowControls sets the controls row i shows, in state: a file's chevron before it, and the rest

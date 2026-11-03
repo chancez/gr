@@ -46,6 +46,12 @@ type rowState struct {
 	dim bool
 	// activeHunk is set on rows of the hunk the cursor is in.
 	activeHunk bool
+	// split is set in split mode.
+	split bool
+	// focusOld and focusNew are set on a line the thread under the cursor or mouse is on, on that
+	// side, which tints it.
+	focusOld bool
+	focusNew bool
 	// hover is set on the row under the mouse, hoverSide the side of a split diff it is over.
 	hover     bool
 	hoverSide anchor.Side
@@ -167,12 +173,13 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	case rowLine:
 		f := v.files[rw.file]
 		if isMessage(f) {
-			return []string{r.renderMessageLine(*rw.line, width, state)}
+			return []string{r.renderMessageLine(*rw.line, rw.coverNew, width, state)}
 		}
 		if rw.line != nil {
-			return []string{r.hunkMarker(state) + r.renderUnified(f, *rw.line, width-1, state)}
+			return []string{r.hunkMarker(state) + r.renderUnified(f, *rw.line, width-1, state,
+				commented(append(slices.Clip(rw.coverOld), rw.coverNew...)), state.focusOld || state.focusNew)}
 		}
-		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
+		return []string{r.hunkMarker(state) + r.renderSplit(f, rw, width-1, state)}
 	case rowThread:
 		if rw.file >= 0 && isMessage(v.files[rw.file]) {
 			// A thread on the message sits inside the commit's box, under its line.
@@ -183,10 +190,10 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if rw.collapsed {
 			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
 		}
-		lines, starts := r.renderThread(d, *rw.thread, width, state)
+		lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split))
 		shift := 0
 		if rw.excerpt != nil {
-			excerpt := r.renderExcerpt(*rw.excerpt, rw.thread.Location, width)
+			excerpt := r.renderExcerpt(*rw.excerpt, *rw.thread, width)
 			lines, shift = append(excerpt, lines...), len(excerpt)
 		}
 		r.segments = []int{0}
@@ -212,12 +219,16 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 
 // lineSurface is where a diff line sits: the cursor or selection on the cursor's side, or its
 // added or deleted color.
-func lineSurface(kind git.LineKind, state rowState, cursorSide bool) look.Surface {
+func lineSurface(kind git.LineKind, state rowState, cursorSide, commented, focused bool) look.Surface {
 	switch {
 	case state.cursor && cursorSide:
 		return cursorSurface(state)
-	case state.selected && cursorSide:
+	case state.selected && cursorSide, focused:
 		return look.Selected
+	case commented:
+		// A thread's lines show as its, over their added or deleted color, as GitHub highlights a
+		// range; the sign still says which they are.
+		return look.Commented
 	case kind == git.LineAdded:
 		return look.AddedLine
 	case kind == git.LineDeleted:
@@ -231,10 +242,27 @@ func (r *renderer) code(f git.FileDiff, l git.Line) look.Span {
 	return look.Styled(func(bg color.Color) string { return r.hl.line(f.Path(), expandTabs(l.Text), bg) })
 }
 
-func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState) string {
-	return r.th.Draw(lineSurface(l.Kind, state, true), width,
-		append(append([]look.Span{look.Gutter(gutterWidth(f), l.OldLine, l.NewLine)}, lineSign(l.Kind, state.controls)...),
+// renderUnified draws a line, tinted when threads are on it, and as a selection when the thread
+// under the cursor or the mouse is.
+func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState, tint, focused bool) string {
+	return r.th.Draw(lineSurface(l.Kind, state, true, tint, focused), width,
+		append(append([]look.Span{gutter(gutterWidth(f), tint, l.OldLine, l.NewLine)}, lineSign(l.Kind, state.controls)...),
 			look.Default(" "), r.code(f, l))...)
+}
+
+// commented reports whether threads that are not resolved are on a line, which tints its line
+// numbers. Resolved threads fold away, and their lines are left plain.
+func commented(covers []cover) bool {
+	return slices.ContainsFunc(covers, func(c cover) bool { return c.thread.State != store.ThreadResolved })
+}
+
+// gutter is a line's numbers, tinted when threads are on it.
+func gutter(width int, tint bool, lines ...int) look.Span {
+	g := look.Gutter(width, lines...)
+	if tint {
+		return look.OnCommented(g)
+	}
+	return g
 }
 
 // lineSign is a line's +/- sign, or the control drawn in its place, as the + that comments on the line
@@ -246,7 +274,8 @@ func lineSign(kind git.LineKind, controls []look.Span) []look.Span {
 	return []look.Span{look.LineMark(kind)}
 }
 
-func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int, state rowState) string {
+func (r *renderer) renderSplit(f git.FileDiff, rw row, width int, state rowState) string {
+	left, right := rw.left, rw.right
 	gw := gutterWidth(f)
 	half := (width - 1) / 2
 	cell := func(l *git.Line, side anchor.Side, w int) string {
@@ -261,8 +290,13 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 		if state.hoverSide == side {
 			controls = state.controls
 		}
-		return r.th.Draw(lineSurface(l.Kind, state, state.side == side), w,
-			append(append([]look.Span{look.Gutter(gw, n)}, lineSign(l.Kind, controls)...), look.Default(" "), r.code(f, *l))...)
+		covers, focused := rw.coverNew, state.focusNew
+		if side == anchor.SideOld {
+			covers, focused = rw.coverOld, state.focusOld
+		}
+		return r.th.Draw(lineSurface(l.Kind, state, state.side == side, commented(covers), focused), w,
+			append(append([]look.Span{gutter(gw, commented(covers), n)}, lineSign(l.Kind, controls)...), look.Default(" "),
+				r.code(f, *l))...)
 	}
 	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
@@ -286,7 +320,7 @@ func (r *renderer) boxEdge(width int) string {
 }
 
 // renderMessageLine draws line l of a commit's message in the box.
-func (r *renderer) renderMessageLine(l git.Line, width int, state rowState) string {
+func (r *renderer) renderMessageLine(l git.Line, covered []cover, width int, state rowState) string {
 	el := look.Text
 	if l.NewLine == 1 {
 		el = look.Heading
@@ -295,15 +329,24 @@ func (r *renderer) renderMessageLine(l git.Line, width int, state rowState) stri
 	switch {
 	case state.cursor:
 		surf = cursorSurface(state)
-	case state.selected:
+	case state.selected, state.focusNew:
 		surf = look.Selected
+	case commented(covered):
+		surf = look.Commented
 	}
 	line := r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), el(termtext.Line(l.Text)))}, width)[0]
-	if len(state.controls) > 0 {
-		// The + that comments on the line takes the box's margin, as a diff line's takes its sign.
+	// The + that comments on the line takes the box's margin, as it takes a diff line's sign, or else
+	// the margin is tinted when threads are on the line, as a diff line's numbers are.
+	margin := ""
+	switch {
+	case len(state.controls) > 0:
+		margin = r.th.Draw(look.ActiveHunk, 1, state.controls...)
+	case commented(covered):
+		margin = r.th.Render(look.Plain, look.OnCommented(look.Default(" ")))
+	}
+	if margin != "" {
 		side := r.th.Render(look.Plain, look.Border("|", false))
-		rest := strings.TrimPrefix(line, side+" ")
-		line = side + r.th.Draw(look.ActiveHunk, 1, state.controls...) + rest
+		line = side + margin + strings.TrimPrefix(line, side+" ")
 	}
 	return line
 }
@@ -339,21 +382,65 @@ func commentHeader(d *changeData, c store.Comment) []look.Span {
 	return out
 }
 
-// renderExcerpt draws the diff a thread is about, under a line naming where it is.
-func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
-	where := append([]look.Span{look.Default(" ")}, look.MarkSHA(commitMentions.Zone(loc.Commit), look.Location(loc, look.Strong)...)...)
-	if !e.Exact {
-		where = append(where, look.Muted("  (outdated: as it was)"))
+// threadIndent is how far a thread's box is indented: to where the code starts, past the line
+// numbers, for a thread on lines, so the box hangs off the lines its numbers are tinted on, and a
+// little for one on a file, a commit, or the change.
+func threadIndent(v view, rw row, split bool) int {
+	if t := rw.thread; t == nil || t.Location.StartLine == 0 {
+		return 2
 	}
-	out := []string{r.th.Draw(look.HeadingBar, width, where...)}
-	// A one-hunk file sized to the excerpt's last line numbers, so the gutter is as wide as needed.
+	return codeIndent(v, rw, split)
+}
+
+// codeIndent is the column the code of row rw's file, or of its excerpt, starts at.
+func codeIndent(v view, rw row, split bool) int {
+	switch {
+	case rw.excerpt != nil:
+		// The excerpt's margin, both its numbers, its sign, and the space after.
+		return 1 + 2*(excerptGutterWidth(*rw.excerpt)+1) + 2
+	case rw.file >= 0 && rw.file < len(v.files) && split:
+		// The hunk marker, one side's number, its sign, and the space after.
+		return 1 + gutterWidth(v.files[rw.file]) + 1 + 2
+	case rw.file >= 0 && rw.file < len(v.files):
+		return 1 + 2*(gutterWidth(v.files[rw.file])+1) + 2
+	}
+	return 2
+}
+
+// excerptGutterWidth is how wide an excerpt's line numbers are: as wide as its last line's.
+func excerptGutterWidth(e review.Excerpt) int {
+	return gutterWidth(excerptFile(e))
+}
+
+// excerptFile is a one-hunk file sized to an excerpt's last line numbers, so its gutter is as
+// wide as needed.
+func excerptFile(e review.Excerpt) git.FileDiff {
 	f := git.FileDiff{NewPath: e.Path}
 	if n := len(e.Lines); n > 0 {
 		last := e.Lines[n-1]
 		f.Hunks = []git.Hunk{{OldStart: last.OldLine, NewStart: last.NewLine}}
 	}
+	return f
+}
+
+// renderExcerpt draws the diff a thread is about, under a line naming where it is.
+func (r *renderer) renderExcerpt(e review.Excerpt, t review.ThreadView, width int) []string {
+	loc := t.Location
+	where := append([]look.Span{look.Default(" ")}, look.MarkSHA(commitMentions.Zone(loc.Commit), look.Location(loc, look.Strong)...)...)
+	if !e.Exact {
+		where = append(where, look.Muted("  (outdated: as it was)"))
+	}
+	out := []string{r.th.Draw(look.HeadingBar, width, where...)}
+	f := excerptFile(e)
 	for _, l := range e.Lines {
-		out = append(out, " "+r.renderUnified(f, l, width-1, rowState{}))
+		// The thread's own lines carry its bar, among the context around them.
+		n := l.NewLine
+		if loc.Side == anchor.SideOld {
+			n = l.OldLine
+		}
+		end := max(loc.EndLine, loc.StartLine)
+		tint := t.State != store.ThreadResolved && n > 0 && n >= loc.StartLine && n <= end
+		out = append(out, " "+r.renderUnified(f, l, width-1, rowState{}, tint, false))
 	}
 	return out
 }
@@ -420,8 +507,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
-func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState) ([]string, []int) {
-	const indent = 2
+func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState, indent int) ([]string, []int) {
 	boxWidth := max(width-indent, 20)
 	inner := boxWidth - 4
 	title := []look.Span{look.Ref(t), look.Default(" ")}

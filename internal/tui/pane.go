@@ -27,6 +27,8 @@ type pane struct {
 	// comment box under the line it comments on. They take room in the pane as the row's own do.
 	attach   int
 	attached func(width int) []string
+	// focusThread is the id of the thread under the cursor or the mouse, whose lines are tinted.
+	focusThread string
 	// hovering is set while the mouse is over row hover, on side hoverSide in split mode.
 	hovering  bool
 	hover     int
@@ -510,8 +512,11 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 		state.activeHunk = cursorHunk != nil && p.rows[i].hunk == cursorHunk
 		state.hover = p.hovering && i == p.hover
 		state.hoverSide = p.hoverSide
+		if p.focusThread != "" {
+			state.focusOld, state.focusNew = p.rows[i].covers(p.focusThread)
+		}
 		var lines []string
-		if state.cursor || state.selected || state.activeHunk || state.hover || p.attaching(i) {
+		if state.cursor || state.selected || state.activeHunk || state.hover || state.focusOld || state.focusNew || p.attaching(i) {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {
 			lines = cached

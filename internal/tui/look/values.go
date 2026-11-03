@@ -256,6 +256,13 @@ func Hint(k, desc string) []Span {
 	return []Span{Key(k), sp(elDefault, " "), sp(elKeyDesc, desc)}
 }
 
+// OnCommented draws a gutter, or a margin, of a line a thread is on, on a background of its own,
+// whatever line it is on, so a thread's lines show among the diff's colors and the cursor's.
+func OnCommented(x Span) Span {
+	x.commented = true
+	return x
+}
+
 // ClickableHint is a hint a click runs, its key underlined as a link.
 func ClickableHint(k, desc string) []Span {
 	return []Span{Key(k).With(Underlined), sp(elDefault, " "), sp(elKeyDesc, desc)}

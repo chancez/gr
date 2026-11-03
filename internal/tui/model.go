@@ -565,6 +565,7 @@ func (m *model) frame() string {
 		return msg
 	}
 	nw, mw, bh := m.layoutSizes()
+	m.main.focusThread = m.focusedThread()
 	body := m.main.visible(m.renderMainRow)
 	if h, ok := m.stickyFile(); ok && len(body) > 0 {
 		body[0] = m.renderMainRow(h, rowState{cursor: h == m.main.cursor})[0]

@@ -41,6 +41,7 @@ type roles struct {
 	selectedBg      color.Color
 	paneUnfocusedBg color.Color
 	controlBg       color.Color
+	commentedBg     color.Color
 }
 
 // The built-in themes.
@@ -79,6 +80,7 @@ func newRoles(isDark bool, theme string) roles {
 		selectedBg:      ld(paleYellow, indigoGray),
 		paneUnfocusedBg: ld(lightGray, darkGray),
 		controlBg:       ld(paleGray, charcoal),
+		commentedBg:     ld(sand, darkOlive),
 	}
 	if theme == ThemeColorblind {
 		r.success, r.added = r.accent, r.accent
@@ -204,6 +206,8 @@ const (
 	// ControlSolid is a one-cell control that has to stand out on any line, as the + that comments,
 	// a + on the solid accent, as GitHub's blue square.
 	ControlSolid
+	// Commented is the line numbers of lines a thread is on, as GitHub highlights a range's.
+	Commented
 	numSurfaces
 )
 
@@ -224,6 +228,7 @@ var surfaceNames = [numSurfaces]string{
 	SearchMatch:   "surface.search-match",
 	Control:       "surface.control",
 	ControlSolid:  "surface.control-solid",
+	Commented:     "surface.commented",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -303,6 +308,7 @@ func New(isDark bool, name string) *Theme {
 		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
 		Control:       {bg: p.controlBg},
 		ControlSolid:  {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
+		Commented:     {bg: p.commentedBg},
 	}
 	return t
 }
