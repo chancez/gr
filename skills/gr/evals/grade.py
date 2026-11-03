@@ -35,8 +35,17 @@ class Run:
         if changes:
             self.threads = {t["ref"]: t for t in self.gr("threads", "--json", "-c", "1")}
             self.change = self.gr("change", "show", "--json", "-c", "1")
-        with open(os.path.join(path, "fixture-head")) as f:
+        # The feature branch's head before the run: new commits are counted from it, wherever the
+        # agent started.
+        head = os.path.join(path, "fixture-feature")
+        if not os.path.exists(head):
+            head = os.path.join(path, "fixture-head")
+        with open(head) as f:
             self.fixture_head = f.read().strip()
+        main = os.path.join(path, "fixture-main")
+        self.fixture_main = open(main).read().strip() if os.path.exists(main) else None
+        log = os.path.join(path, "gr.log")
+        self.gr_log = open(log).read().splitlines() if os.path.exists(log) else None
 
     def gr(self, *args):
         return json.loads(run(["gr", "-C", self.repo, *args], self.repo, self.env).stdout)
@@ -53,6 +62,18 @@ class Run:
     def file(self, path):
         with open(os.path.join(self.repo, path)) as f:
             return f.read()
+
+    def on_feature(self, code):
+        """Runs code against the feature branch's files, wherever the agent left the checkout."""
+        tmp = run(["mktemp", "-d"], self.repo).stdout.strip()
+        files = self.git("ls-tree", "--name-only", "feature").split()
+        for f in files:
+            with open(os.path.join(tmp, f), "w") as out:
+                out.write(self.git("show", f"feature:{f}"))
+        return run([sys.executable, "-c", code], tmp, check=False)
+
+    def feature_file(self, path):
+        return self.git("show", f"feature:{path}")
 
     def clean(self):
         return self.git("status", "--porcelain") == ""
@@ -187,6 +208,139 @@ def grade_review(r):
     return res
 
 
+# Flags of gr's that take a value, to find a command's subcommand in the log.
+VALUED = {"-C", "-c", "--change", "--db", "--author", "--base", "-m", "-F", "-p", "-l", "--commit",
+          "--state", "--side", "--thread", "--review"}
+
+
+def subcommand(line):
+    args = line.split()
+    i = 0
+    while i < len(args):
+        if args[i] in VALUED:
+            i += 2
+        elif args[i].startswith("-"):
+            i += 1
+        else:
+            return args[i]
+    return ""
+
+
+def grade_wasted_calls(results, r):
+    """Checks the agent did not fetch a thread by ref after listing the threads, which already
+    showed each in full."""
+    if r.gr_log is None:
+        return
+    cmds = [subcommand(l) for l in r.gr_log]
+    after = cmds[cmds.index("threads") + 1:] if "threads" in cmds else []
+    wasted = [l for l, c in zip(r.gr_log[len(cmds) - len(after):], after) if c == "thread"]
+    expect(results, "No thread is fetched by ref after the thread list showed it",
+           "threads" in cmds and not wasted, f"gr commands: {[c for c in cmds]}; fetched after listing: {wasted}")
+
+
+def grade_fixes(results, r, refs, fixture, new):
+    """Checks refs are addressed, each with a reply citing one of new's commits."""
+    got = {}
+    for ref in refs:
+        t = r.threads.get(ref)
+        n = fixture.get(ref, (1, "open"))[0]
+        got[ref] = (state(r, ref), any(cited(c["body"], new) for c in comments(t)[n:]))
+    names = f"Thread {refs[0]} is" if len(refs) == 1 else f"Threads {', '.join(refs)} are"
+    expect(results, f"{names} addressed with a reply citing the fixing commit",
+           all(st == "addressed" and c for st, c in got.values()),
+           f"state and cites: {got}; commits: {[s[:7] for s in new]}")
+
+
+def grade_untouched(results, r, fixture):
+    got = {ref: (len(comments(r.threads.get(ref))), state(r, ref)) for ref in fixture}
+    expect(results, f"Threads {', '.join(fixture)} are untouched", got == fixture, f"got {got}, want {fixture}")
+
+
+def grade_committed(results, r, new):
+    expect(results, "Every fix is committed on feature", r.clean() and new,
+           f"clean: {r.clean()}, new commits on feature: {len(new)}")
+
+
+def grade_outdated(r):
+    res = []
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, {"1": (1, "open"), "2": (1, "open")}, 1)
+    # Thread 1's ask was met by the fixture's last commit, before the agent: the reply should say so.
+    grade_fixes(res, r, ["1"], {}, [r.fixture_head])
+    grade_fixes(res, r, ["2"], {}, new)
+    stats = r.feature_file("stats.py")
+    checks = stats.count("if xs else") + stats.count("if not xs")
+    p = r.on_feature("from stats import mean; print(repr(mean([])))")
+    expect(res, "The empty-list fix already there is kept, not done again",
+           checks == 1 and p.stdout.strip() == "0.0", f"empty-list checks: {checks}, mean([]) -> {p.stdout.strip()!r}")
+    expect(res, "tmp is renamed to total", "tmp" not in stats and "total" in stats, f"tmp left: {'tmp' in stats}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
+def grade_narrowed(r):
+    res = []
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, {"1": (2, "open"), "2": (1, "open")}, 1)
+    grade_fixes(res, r, ["1"], {"1": (2, "open")}, new)
+    grade_fixes(res, r, ["2"], {}, new)
+    p = r.on_feature("from stats import mean\ntry:\n    print(repr(mean([])))\nexcept ValueError as e:\n    print('ValueError', e)")
+    expect(res, "mean([]) raises ValueError, as the later reply asked, not 0.0",
+           p.stdout.startswith("ValueError"), f"stdout {p.stdout.strip()!r} stderr {p.stderr.strip()[-200:]!r}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
+def grade_off_branch(r):
+    res = []
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, {"1": (1, "open"), "2": (1, "open")}, 1)
+    main = r.git("rev-parse", "main").strip()
+    expect(res, "main is unchanged", main == r.fixture_main, f"main {main[:7]}, was {r.fixture_main[:7]}")
+    grade_fixes(res, r, ["1", "2"], {}, new)
+    p = r.on_feature("from stats import mean; print(repr(mean([])))")
+    stats = r.feature_file("stats.py")
+    expect(res, "feature has both fixes", p.stdout.strip() == "0.0" and "tmp" not in stats,
+           f"mean([]) -> {p.stdout.strip()!r}, tmp left: {'tmp' in stats}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
+def grade_mixed(r):
+    res = []
+    fixture = {"1": (2, "addressed"), "2": (2, "resolved"), "3": (2, "open"), "r1": (2, "addressed")}
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, dict(fixture, **{"4": (1, "open"), "5": (1, "open")}), 2)
+    grade_fixes(res, r, ["4", "5"], {}, new)
+    grade_untouched(res, r, fixture)
+    p = r.on_feature("import stats\nprint(bool(stats.median.__doc__))\n"
+                     "print('empty' in (stats.__doc__ or '').lower())")
+    out = p.stdout.split()
+    expect(res, "median has a docstring, and the module's says what an empty list gives",
+           out == ["True", "True"], f"median docstring, module mentions empty: {out}, stderr {p.stderr.strip()[-200:]!r}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
+def grade_overlap(r):
+    res = []
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, {"1": (1, "open"), "2": (1, "open")}, 1)
+    grade_fixes(res, r, ["1", "2"], {}, new)
+    p = r.on_feature("import inspect, stats\nsrc = inspect.getsource(stats.mean)\n"
+                     "print('sum(' in src and 'for ' not in src)\nprint(repr(stats.mean([])))")
+    out = p.stdout.split()
+    expect(res, "mean uses sum and returns 0.0 for an empty list: both asks are met",
+           out == ["True", "0.0"], f"uses sum, mean([]): {out}, stderr {p.stderr.strip()[-200:]!r}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
 def write_state(r, out):
     os.makedirs(os.path.join(out, "outputs"), exist_ok=True)
     threads = run(["gr", "-C", r.repo, "threads", "-c", "1"], r.repo, r.env, check=False).stdout
@@ -201,6 +355,11 @@ GRADERS = {
     "second-round": grade_second_round,
     "resolve": grade_resolve,
     "review": grade_review,
+    "outdated": grade_outdated,
+    "narrowed": grade_narrowed,
+    "off-branch": grade_off_branch,
+    "mixed": grade_mixed,
+    "overlap": grade_overlap,
 }
 
 

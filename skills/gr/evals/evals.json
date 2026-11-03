@@ -54,6 +54,96 @@
         "Addressed threads 1, 2, and r1 are resolved",
         "Open thread 3 is untouched"
       ]
+    },
+    {
+      "id": 5,
+      "name": "outdated-thread",
+      "scenario": "outdated",
+      "prompt": "I reviewed the feature branch in gr, can you go through my comments and fix them?",
+      "expected_output": "Thread 1 is outdated: the author's last commit already returns 0.0 for an empty list, so it is addressed citing that commit, with no second fix. Thread 2's rename is done, committed, and addressed.",
+      "files": [
+        "evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "Thread 1 is addressed with a reply citing the fixing commit",
+        "Thread 2 is addressed with a reply citing the fixing commit",
+        "The empty-list fix already there is kept, not done again",
+        "tmp is renamed to total",
+        "Every fix is committed on feature",
+        "No thread is fetched by ref after the thread list showed it"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "narrowed-ask",
+      "scenario": "narrowed",
+      "prompt": "I reviewed the feature branch in gr, can you go through my comments and fix them?",
+      "expected_output": "Thread 1's later reply changes the ask from returning 0.0 to raising ValueError; mean raises ValueError for an empty list. Both threads fixed, committed, and addressed.",
+      "files": [
+        "evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "Thread 1 is addressed with a reply citing the fixing commit",
+        "Thread 2 is addressed with a reply citing the fixing commit",
+        "mean([]) raises ValueError, as the later reply asked, not 0.0",
+        "Every fix is committed on feature",
+        "No thread is fetched by ref after the thread list showed it"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "off-branch",
+      "scenario": "off-branch",
+      "prompt": "I reviewed the feature branch in gr, can you go through my comments and fix them?",
+      "expected_output": "The repository is on main; the fixes go on the feature branch, which the change is for, and main is left alone. Both threads addressed.",
+      "files": [
+        "evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "main is unchanged",
+        "Threads 1, 2 are addressed with a reply citing the fixing commit",
+        "feature has both fixes",
+        "Every fix is committed on feature",
+        "No thread is fetched by ref after the thread list showed it"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "mixed-states",
+      "scenario": "mixed",
+      "prompt": "I left a couple more comments in gr, can you handle them?",
+      "expected_output": "Only the new threads 4 and 5 are handled: a module docstring saying what an empty list gives, and a docstring on median. Addressed threads 1 and r1, resolved 2, and 3, open on the agent's question, are left as they are.",
+      "files": [
+        "evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "Threads 4, 5 are addressed with a reply citing the fixing commit",
+        "Threads 1, 2, 3, r1 are untouched",
+        "median has a docstring, and the module's says what an empty list gives",
+        "Every fix is committed on feature",
+        "No thread is fetched by ref after the thread list showed it"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "overlapping-fix",
+      "scenario": "overlap",
+      "prompt": "I reviewed the feature branch in gr, can you go through my comments and fix them?",
+      "expected_output": "Both threads are on mean's body: using sum rewrites the line thread 2 is on, leaving it outdated, but its ask still holds: mean uses sum and returns 0.0 for an empty list, and both threads are addressed.",
+      "files": [
+        "evals/fixtures.sh"
+      ],
+      "assertions": [
+        "Everything the agent wrote is under its own name, not the human's git identity",
+        "Threads 1, 2 are addressed with a reply citing the fixing commit",
+        "mean uses sum and returns 0.0 for an empty list: both asks are met",
+        "Every fix is committed on feature",
+        "No thread is fetched by ref after the thread list showed it"
+      ]
     }
   ]
 }

@@ -3,15 +3,21 @@
 #
 #   fixtures.sh <scenario> <dir>
 #
-# Creates <dir>/repo, <dir>/gr.db, and <dir>/fixture-head, the commit the agent starts from. Run gr
-# against it with GR_DB=<dir>/gr.db. The human is the repository's git identity, "Pat Reviewer"; an
-# agent's earlier replies are by "Claude".
+# Creates <dir>/repo, <dir>/gr.db, <dir>/fixture-head, the commit the agent starts from, and
+# <dir>/bin/gr, which runs gr against <dir>/gr.db and logs each command to <dir>/gr.log for grading.
+# The human is the repository's git identity, "Pat Reviewer"; an agent's earlier replies are by
+# "Claude".
 #
 # Scenarios:
 #   address       a submitted review with three line threads and a summary ask
 #   second-round  address after a round of fixes, with one fixed thread reopened
 #   resolve       address after a round of fixes, ready for the human's final pass
 #   review        an unreviewed branch with two off-by-one bugs and a vague commit message
+#   outdated      address, after a later commit already fixed one thread's ask
+#   narrowed      address, with one ask changed by the reviewer's later reply
+#   off-branch    address, with the repository checked out on main
+#   mixed         address, with new open threads among addressed and resolved ones
+#   overlap       address two threads on the same lines, where fixing one moves the other
 set -euo pipefail
 
 scenario=${1:?scenario}
@@ -41,7 +47,7 @@ grr() {
 }
 
 init() {
-	rm -rf "$repo" "$GR_DB"
+	rm -rf "$repo" "$GR_DB" "$dir/gr.log"
 	git init -q -b main "$repo"
 	git -C "$repo" config user.name "Pat Reviewer"
 	git -C "$repo" config user.email pat@example.com
@@ -145,6 +151,17 @@ EOF
 	GR_AUTHOR=Claude grr reply 3 -m "The \`__main__\` block calls \`summary(None)\` on report.py line 14. Drop that call along with the check, or keep both?"
 }
 
+# small submits a review of the feature branch with two line threads: 1 for an empty list, 2 to
+# rename tmp.
+small() {
+	local c1
+	c1=$(sha HEAD~1)
+	grr comment --commit "$c1" -p stats.py -l 8 \
+		-m "This raises ZeroDivisionError for an empty list. Return 0.0 for an empty list instead."
+	grr comment --commit "$c1" -p stats.py -l 5-7 -m "Rename \`tmp\` to \`total\`."
+	grr submit --request-changes -m ""
+}
+
 case $scenario in
 address)
 	init
@@ -189,6 +206,57 @@ def window(xs, n):
 EOF
 	commit "update stuff"
 	;;
+outdated)
+	init
+	feature
+	# Threads on the whole diff, which follow its lines as it changes.
+	grr comment -p stats.py -l 8 \
+		-m "This raises ZeroDivisionError for an empty list. Return 0.0 for an empty list instead."
+	grr comment -p stats.py -l 5-7 -m "Rename \`tmp\` to \`total\`."
+	grr submit --request-changes -m ""
+	# The author fixes thread 1's ask before anyone replies, on its own line, so the thread is
+	# outdated.
+	python3 - "$repo/stats.py" <<'PY'
+import sys
+p = sys.argv[1]
+s = open(p).read()
+s = s.replace("    return tmp / len(xs)\n", "    return tmp / len(xs) if xs else 0.0\n")
+open(p, "w").write(s)
+PY
+	commit "Handle an empty list in mean"
+	;;
+narrowed)
+	init
+	feature
+	small
+	grr reply 1 -m "On second thought, 0.0 hides an empty input. Raise ValueError(\"mean of an empty list\") instead."
+	;;
+off-branch)
+	init
+	feature
+	small
+	git -C "$repo" checkout -q main
+	;;
+mixed)
+	init
+	feature
+	reviewed
+	fixed
+	grr resolve 2
+	c1=$(sha "$(git -C "$repo" rev-list --reverse main..feature | head -1)")
+	grr comment --commit "$c1" -p stats.py -l 1 -m "Say what each helper returns for an empty list in the module docstring."
+	grr comment --commit "$c1" -p stats.py -l 11 -m "Add a docstring to \`median\`."
+	grr submit -m ""
+	;;
+overlap)
+	init
+	feature
+	# Threads on the whole diff, so fixing the first leaves the second outdated.
+	grr comment -p stats.py -l 5-8 -m "Use \`sum(xs)\` instead of the loop."
+	grr comment -p stats.py -l 8 \
+		-m "This raises ZeroDivisionError for an empty list. Return 0.0 for an empty list instead."
+	grr submit --request-changes -m ""
+	;;
 *)
 	echo "unknown scenario: $scenario" >&2
 	exit 2
@@ -196,3 +264,15 @@ EOF
 esac
 
 git -C "$repo" rev-parse HEAD >"$dir/fixture-head"
+git -C "$repo" rev-parse main >"$dir/fixture-main"
+git -C "$repo" rev-parse feature >"$dir/fixture-feature"
+
+# bin/gr is the gr the agent runs: gr on this test's database, logging every command for grading.
+mkdir -p "$dir/bin"
+real=$(command -v "$gr")
+cat >"$dir/bin/gr" <<SHIM
+#!/bin/sh
+printf '%s\n' "\$*" >>"$dir/gr.log"
+GR_DB="$dir/gr.db" exec "$real" "\$@"
+SHIM
+chmod +x "$dir/bin/gr"
