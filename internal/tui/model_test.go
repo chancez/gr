@@ -763,7 +763,7 @@ func TestSidebarMarks(t *testing.T) {
 		}
 	}
 	for _, it := range e.m.filesNav.items {
-		if strings.Contains(it.label, "main.go") && look.TextOf(it.badge...) != "(1) "+look.MarkDraft {
+		if strings.Contains(it.label, "main.go") && look.TextOf(it.badge...) != "+1 -1 (1) "+look.MarkDraft {
 			t.Errorf("main.go badge %q, want the open thread count and the draft mark", look.TextOf(it.badge...))
 		}
 		if strings.Contains(it.label, "COMMIT_MSG") && len(it.badge) != 0 {

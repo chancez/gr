@@ -8,6 +8,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
 
@@ -248,6 +250,13 @@ func (m *model) buildNav() {
 	m.filesNav.items = nil
 	for fi, f := range v.files {
 		badge := look.Badge(counts[f.Path()], m.draftThreads(v, f.Path()) > 0, m.fileReviewed(v, fi))
+		if size, ok := diffSize(f); ok {
+			// The file's size leads its badge, so it lines up at the right with the others.
+			if len(badge) > 0 {
+				size = append(size, look.Default(" "))
+			}
+			badge = append(size, badge...)
+		}
 		m.filesNav.items = append(m.filesNav.items, navItem{
 			prefix: look.StatusLetter(f.Status) + " ", label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
 			done: m.fileReviewed(v, fi),
@@ -339,8 +348,16 @@ func (m *model) renderSidebar(width, height int) []string {
 
 // mainHeader titles the main pane with the view and the file under the cursor.
 func (m *model) mainHeader(width int) string {
-	title := " " + m.viewLabel(m.views[m.current])
-	if m.needsLoad(m.views[m.current]) {
+	v := m.views[m.current]
+	title := " " + m.viewLabel(v)
+	if v.kind != viewOverview && len(v.files) > 0 {
+		added, deleted := 0, 0
+		for _, f := range v.files {
+			added, deleted = added+f.Added, deleted+f.Deleted
+		}
+		title += "  " + look.TextOf(look.DiffSize(added, deleted)...)
+	}
+	if m.needsLoad(v) {
 		title += "  (loading)"
 	}
 	if c := m.main.cursor; c < len(m.main.rows) {
@@ -408,4 +425,13 @@ func (m *model) showFile(s fileSubject) {
 		}
 	}
 	m.syncNav()
+}
+
+// diffSize is how many lines file f adds and deletes, unless it has no lines to count: a binary
+// file, or the commit message, which is not a file in git.
+func diffSize(f git.FileDiff) ([]look.Span, bool) {
+	if f.Binary || f.Path() == review.CommitMsgPath {
+		return nil, false
+	}
+	return look.DiffSize(f.Added, f.Deleted), true
 }

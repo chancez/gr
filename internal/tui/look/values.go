@@ -190,6 +190,12 @@ func LineMark(k git.LineKind) Span {
 	return sp(elDefault, " ")
 }
 
+// DiffSize is how many lines a diff adds and deletes, "+12 -3", as GitHub shows it. A binary file
+// has none to show.
+func DiffSize(added, deleted int) []Span {
+	return []Span{sp(elMarkAdded, fmt.Sprintf("+%d", added)), sp(elDefault, " "), sp(elMarkDeleted, fmt.Sprintf("-%d", deleted))}
+}
+
 // Gutter is a diff line's numbers, each right-aligned to width and followed by a space. Zero is a
 // line that is not on that side.
 func Gutter(width int, lines ...int) Span {

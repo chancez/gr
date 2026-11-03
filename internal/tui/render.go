@@ -133,6 +133,9 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 			surf = cursorSurface(state)
 		}
 		spans := []look.Span{look.File(f)}
+		if size, ok := diffSize(f); ok {
+			spans = append(append(spans, look.Default("  ")), size...)
+		}
 		if rw.reviewed {
 			spans = append(spans, look.Default("  "), look.Reviewed())
 		}
