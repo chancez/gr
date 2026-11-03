@@ -421,7 +421,7 @@ var (
 	actSelectLines = paneAction("select lines", func(m *model) tea.Cmd { m.toggleSelection(); return nil })
 	actFoldPrefix  = paneAction("folds", func(m *model) tea.Cmd {
 		m.pending = "z"
-		m.setStatus("z: o open, c close, a toggle, R open all, M close all")
+		m.setStatus("z: o open, c close, a toggle, O open all under it, C close all under it, R open all, M close all")
 		return nil
 	})
 )
@@ -509,6 +509,8 @@ var (
 	actFoldToggle   = paneAction("toggle the fold", func(m *model) tea.Cmd { m.fold(foldToggle); return nil })
 	actFoldOpenAll  = paneAction("open every fold", func(m *model) tea.Cmd { m.foldAll(true); return nil })
 	actFoldCloseAll = paneAction("close every fold", func(m *model) tea.Cmd { m.foldAll(false); return nil })
+	actFoldOpenIn   = paneAction("open the fold and all under it", func(m *model) tea.Cmd { m.foldIn(true); return nil })
+	actFoldCloseIn  = paneAction("close the fold and all under it", func(m *model) tea.Cmd { m.foldIn(false); return nil })
 )
 
 // verdictAction submits the draft review with verdict: at once, without a summary, or after asking
@@ -572,7 +574,7 @@ func init() {
 		actMoveLeft, actMoveRight, actNextFile, actPrevFile, actNextHunk, actPrevHunk, actNextChange, actPrevChange,
 		actNextThreadInDiff, actPrevThreadInDiff, actSelectLines, actFoldPrefix)...)
 	overviewPaneKind = interact.NewKind(func(paneSubject) string { return "Overview" }, append(readerMovesOf.actions(),
-		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview)...)
+		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actFoldPrefix)...)
 	appKind = interact.NewKind(func(appSubject) string { return "gr" },
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
 		actAutoAdvance, actSearch, actPickBase, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
@@ -586,7 +588,7 @@ func init() {
 		actVerdictApprove, actVerdictRequestChanges, actVerdictComment, actVerdictApproveNow, actVerdictRequestNow,
 		actVerdictCommentNow, actVerdictCancel)
 	foldPrefixKind = interact.NewKind(func(paneSubject) string { return "Folds" },
-		actFoldOpen, actFoldClose, actFoldToggle, actFoldOpenAll, actFoldCloseAll)
+		actFoldOpen, actFoldClose, actFoldToggle, actFoldOpenIn, actFoldCloseIn, actFoldOpenAll, actFoldCloseAll)
 }
 
 func fileLabel(s fileSubject) string { return "File " + s.diff.Path() }
@@ -651,13 +653,14 @@ func init() {
 		{actNextThreadInDiff, "t/T", "next/prev thread", []string{"t"}},
 		{actPrevThreadInDiff, "", "", []string{"T"}},
 		{actSelectLines, "v", "select lines", []string{"v", "V"}},
-		{actFoldPrefix, "z", "folds, then o c a R M", []string{"z"}},
+		{actFoldPrefix, "z", "folds, then o c a O C R M", []string{"z"}},
 	} {
 		diffPaneKind.Bind(b.action, b.help, b.desc, b.keys...)
 	}
 	overviewPaneKind.Bind(actToSidebar, "h", "sidebar", "h", "left")
 	overviewPaneKind.Bind(actNextThreadInOverview, "t/T", "next/prev thread", "t")
 	overviewPaneKind.Bind(actPrevThreadInOverview, "", "", "T")
+	overviewPaneKind.Bind(actFoldPrefix, "z", "folds, then o c a O C R M", "z")
 
 	for _, b := range []struct {
 		action     *interact.Action[*model, appSubject]
@@ -710,6 +713,8 @@ func init() {
 	foldPrefixKind.Bind(actFoldOpen, "zo", "open the fold", "o")
 	foldPrefixKind.Bind(actFoldClose, "zc", "close the fold", "c")
 	foldPrefixKind.Bind(actFoldToggle, "za", "toggle the fold", "a")
+	foldPrefixKind.Bind(actFoldOpenIn, "zO", "open all under it", "O")
+	foldPrefixKind.Bind(actFoldCloseIn, "zC", "close all under it", "C")
 	foldPrefixKind.Bind(actFoldOpenAll, "zR", "open every fold", "R")
 	foldPrefixKind.Bind(actFoldCloseAll, "zM", "close every fold", "M")
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/chancez/gr/internal/review"
 )
 
 type foldOp int
@@ -108,9 +110,14 @@ func (m *model) foldRow(i int, op foldOp) {
 	}
 }
 
-// foldAll opens or closes every fold in the view, files included.
+// foldAll opens or closes every fold in the view: in the overview its threads, and in a diff its
+// files and gaps.
 func (m *model) foldAll(open bool) {
 	v := m.views[m.current]
+	if v.kind == viewOverview {
+		m.foldThreads(open, func(review.ThreadView) bool { return true })
+		return
+	}
 	for _, file := range v.files {
 		m.expanded[v.key()+"\x00"+file.Path()] = open
 		for _, g := range gaps(file) {
@@ -128,6 +135,36 @@ func (m *model) foldAll(open bool) {
 	}
 	m.rebuildKeeping(cur)
 	m.buildNav()
+}
+
+// foldIn opens or closes the fold under the cursor and every fold inside it: on a review's bar, its
+// summary and all its threads.
+func (m *model) foldIn(open bool) {
+	p := &m.main
+	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowReview && p.rows[p.cursor].review != nil {
+		id := p.rows[p.cursor].review.ID
+		m.foldThreads(open, func(t review.ThreadView) bool { return t.ReviewID == id })
+		return
+	}
+	op := foldClose
+	if open {
+		op = foldOpen
+	}
+	m.fold(op)
+}
+
+// foldThreads opens or closes every thread that matches, keeping the cursor where it was.
+func (m *model) foldThreads(open bool, match func(review.ThreadView) bool) {
+	for _, t := range m.data.threads {
+		if match(t) {
+			m.threadFolds[t.ID] = !open
+		}
+	}
+	var cur row
+	if m.main.cursor < len(m.main.rows) {
+		cur = m.main.rows[m.main.cursor]
+	}
+	m.rebuildKeeping(cur)
 }
 
 // rebuildKeeping rebuilds the main pane and puts the cursor back near the row it was on: the same

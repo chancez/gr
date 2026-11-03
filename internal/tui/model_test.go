@@ -1814,3 +1814,57 @@ func TestInterdiffIsReadOnly(t *testing.T) {
 		}
 	}
 }
+
+// zR and zM open and close every thread in the overview, and zO and zC on a review's bar those of
+// that review alone.
+func TestOverviewFoldsThreads(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	var first, second []string
+	for _, round := range []*[]string{&first, &second} {
+		for _, body := range []string{"one", "two"} {
+			v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: body})
+			if err != nil {
+				t.Fatal(err)
+			}
+			*round = append(*round, v.ID)
+		}
+		if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, "summary"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+	collapsed := func() map[string]bool {
+		out := map[string]bool{}
+		for _, th := range e.m.data.threads {
+			if !th.Summary {
+				out[th.ID] = e.m.threadCollapsed(th)
+			}
+		}
+		return out
+	}
+	all := func(ids []string, c bool, into map[string]bool) map[string]bool {
+		for _, id := range ids {
+			into[id] = c
+		}
+		return into
+	}
+	e.press("z", "M")
+	if got, want := collapsed(), all(second, true, all(first, true, map[string]bool{})); !reflect.DeepEqual(got, want) {
+		t.Errorf("after zM: %v, want every thread collapsed", got)
+	}
+	e.press("z", "R")
+	if got, want := collapsed(), all(second, false, all(first, false, map[string]bool{})); !reflect.DeepEqual(got, want) {
+		t.Errorf("after zR: %v, want every thread open", got)
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowReview && r.review != nil && r.review.Seq == 1 })
+	e.press("z", "C")
+	if got, want := collapsed(), all(second, false, all(first, true, map[string]bool{})); !reflect.DeepEqual(got, want) {
+		t.Errorf("after zC on review 1: %v, want its threads collapsed and review 2's open", got)
+	}
+	e.press("z", "O")
+	if got, want := collapsed(), all(second, false, all(first, false, map[string]bool{})); !reflect.DeepEqual(got, want) {
+		t.Errorf("after zO on review 1: %v, want every thread open", got)
+	}
+}
