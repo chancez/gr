@@ -128,6 +128,8 @@ type model struct {
 	pendingThread *review.ThreadView
 	pendingInDiff bool
 	pendingFile   string
+	// comparing is the revisions picked to compare in the interdiff, by seq, if any.
+	comparing *[2]int
 	// jumps is the jump list and jumpAt the place in it, as in vim. restoring is set while going to
 	// a place in it, so that does not record a jump of its own.
 	jumps     []jumpPoint

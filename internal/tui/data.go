@@ -39,6 +39,9 @@ type changeData struct {
 	hasInterdiff  bool
 	interdiff     []git.FileDiff
 	interdiffFrom store.Revision
+	// interdiffTo is the revision the interdiff compares with: the latest, unless two others were
+	// picked to compare.
+	interdiffTo store.Revision
 	// interdiffFromReview is set when interdiffFrom is the revision the viewer last reviewed.
 	interdiffFromReview bool
 	interdiffExact      bool
@@ -86,6 +89,7 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 	if from, fromReview, ok := interdiffBase(d, svc.Author()); ok {
 		d.hasInterdiff, d.interdiffFrom, d.interdiffFromReview = true, from, fromReview
 	}
+	d.interdiffTo = rev
 	return d, nil
 }
 
@@ -182,7 +186,7 @@ func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) v
 			msg.placements, msg.err = placeInDiff(ctx, svc, d, msg.files)
 		}
 	case viewInterdiff:
-		msg.files, msg.exact, msg.err = svc.Interdiff(ctx, d.interdiffFrom, d.revision)
+		msg.files, msg.exact, msg.err = svc.Interdiff(ctx, d.interdiffFrom, d.interdiffTo)
 	}
 	return msg
 }
@@ -220,7 +224,7 @@ func (d *changeData) carryLoaded(old *changeData) {
 			}
 			d.diffFiles, d.diffPlacements = old.diffFiles, old.diffPlacements
 		case key == view{kind: viewInterdiff}.key():
-			if !sameRevision || old.interdiffFrom.ID != d.interdiffFrom.ID {
+			if !sameRevision || old.interdiffFrom.ID != d.interdiffFrom.ID || old.interdiffTo.ID != d.interdiffTo.ID {
 				continue
 			}
 			d.interdiff, d.interdiffExact = old.interdiff, old.interdiffExact
@@ -277,6 +281,27 @@ func placeInDiff(ctx context.Context, svc *review.Service, d *changeData, diffFi
 		}
 	}
 	return out, nil
+}
+
+// compare sets the interdiff to compare revisions from and to, numbered by seq, and reports whether
+// both are revisions of the change. Its diff is loaded again.
+func (d *changeData) compare(from, to int) bool {
+	var f, t *store.Revision
+	for i := range d.revisions {
+		switch d.revisions[i].Seq {
+		case from:
+			f = &d.revisions[i]
+		case to:
+			t = &d.revisions[i]
+		}
+	}
+	if f == nil || t == nil {
+		return false
+	}
+	d.hasInterdiff, d.interdiffFrom, d.interdiffTo, d.interdiffFromReview = true, *f, *t, false
+	d.interdiff, d.interdiffExact = nil, false
+	delete(d.loaded, view{kind: viewInterdiff}.key())
+	return true
 }
 
 // interdiffBase picks the revision to compare the latest with: the one the viewer last reviewed,

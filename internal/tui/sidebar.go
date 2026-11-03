@@ -189,6 +189,9 @@ func (m *model) viewLabel(v view) string {
 	case viewCommit:
 		return shortSHA(v.commit.SHA) + " " + v.commit.Subject()
 	case viewInterdiff:
+		if to := m.data.interdiffTo; to.ID != m.data.revision.ID {
+			return fmt.Sprintf("Rev %d to %d", m.data.interdiffFrom.Seq, to.Seq)
+		}
 		if m.data.interdiffFromReview {
 			return fmt.Sprintf("Since your review (rev %d)", m.data.interdiffFrom.Seq)
 		}

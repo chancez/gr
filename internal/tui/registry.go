@@ -479,6 +479,7 @@ var (
 	actAutoAdvance = appAction("toggle auto-advance after marking", func(m *model) tea.Cmd { m.toggleAutoAdvance(); return nil })
 	actSearch      = loadedApp("search", func(m *model) tea.Cmd { return m.openSearch() })
 	actPickBase    = loadedApp("change the base branch", func(m *model) tea.Cmd { return m.openBase() })
+	actCompare     = loadedApp("compare two revisions", func(m *model) tea.Cmd { return m.pickRevisions() })
 	actSearchNext  = loadedApp("next match", func(m *model) tea.Cmd { m.searchStep(1); return nil })
 	actSearchPrev  = loadedApp("previous match", func(m *model) tea.Cmd { m.searchStep(-1); return nil })
 	actJumpBack    = loadedApp("back in the jump list", func(m *model) tea.Cmd { m.jumpBack(); return nil })
@@ -604,7 +605,7 @@ func init() {
 		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actNextUnresolved, actPrevUnresolved, actFoldPrefix)...)
 	appKind = interact.NewKind(func(appSubject) string { return "gr" },
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
-		actAutoAdvance, actSearch, actPickBase, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
+		actAutoAdvance, actSearch, actPickBase, actCompare, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
 		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette)
 
 	composeBoxKind = interact.NewKind(func(composeSubject) string { return "Comment" },
@@ -723,6 +724,7 @@ func init() {
 		{actAutoAdvance, "+", "auto-advance after marking", []string{"+"}},
 		{actSplitView, "s", "split/unified", []string{"s"}},
 		{actPickBase, "B", "change the base branch", []string{"B"}},
+		{actCompare, "p", "pick two revisions to compare", []string{"p"}},
 		{actReload, "R", "reload", []string{"R", "ctrl+r"}},
 		{actPalette, "ctrl+p", "actions here", []string{"ctrl+p"}},
 		{actShowHelp, "?", "help", []string{"?"}},

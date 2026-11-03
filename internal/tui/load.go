@@ -145,6 +145,9 @@ func (m *model) applyData(d *changeData) {
 	prevSeg := m.main.itemSegment()
 	m.closeStaleMenus()
 	m.data = d
+	if c := m.comparing; c != nil && !d.compare(c[0], c[1]) {
+		m.comparing = nil
+	}
 	m.views = buildViews(d)
 	m.current = 0
 	for i, v := range m.views {

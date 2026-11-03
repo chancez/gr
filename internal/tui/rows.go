@@ -46,7 +46,7 @@ func buildViews(d *changeData) []view {
 	head := d.revision.HeadSHA
 	views := []view{{kind: viewOverview}}
 	if d.hasInterdiff {
-		views = append(views, view{kind: viewInterdiff, files: d.interdiff, newRev: head})
+		views = append(views, view{kind: viewInterdiff, files: d.interdiff, newRev: d.interdiffTo.HeadSHA})
 	}
 	for _, c := range d.commits {
 		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA], newRev: c.SHA})
