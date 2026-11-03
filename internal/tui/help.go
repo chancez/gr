@@ -1,152 +1,149 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
+	"github.com/chancez/gr/internal/tui/interact"
 	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
 )
 
-// helpContext is where the keys apply: the sidebar, the overview, or a diff.
-type helpContext int
-
-const (
-	contextSidebar helpContext = iota
-	contextOverview
-	contextDiff
-)
-
-func (m *model) helpContext() helpContext {
-	switch {
-	case m.focus != focusMain:
-		return contextSidebar
-	case m.data != nil && m.views[m.current].kind == viewOverview:
-		return contextOverview
-	}
-	return contextDiff
-}
-
-// hint is a binding shown in help only, for keys handled outside the keymap or described
-// differently in one context.
-func hint(keys, desc string) key.Binding {
-	return key.NewBinding(key.WithKeys(keys), key.WithHelp(keys, desc))
-}
-
-// shortHelp is the status bar's hints for the focused pane and the row under the cursor. The last
-// two, help and quit, are always shown.
+// shortHelp is the status bar's hints: what the cursor's subject does where it is, by key, then
+// submit, help, and quit, which are always shown.
 func (m *model) shortHelp() []key.Binding {
-	k := m.keys
-	tail := []key.Binding{k.Help, k.Quit}
-	switch m.helpContext() {
-	case contextSidebar:
-		comment := hint("C", "comment on commit")
-		switch {
-		case m.focus == focusFiles:
-			comment = hint("c", "comment on file")
-		case m.data != nil && m.views[m.current].kind == viewOverview:
-			comment = hint("c", "comment")
+	var out []key.Binding
+	chain := m.cursorChain()
+	if t, ok := m.cursorTarget(); ok {
+		// The cursor's subject first, then the change it is part of.
+		near := []interact.Target[*model]{t}
+		if m.data != nil {
+			near = append(near, theChange.Target(changeSubject{}))
 		}
-		return append([]key.Binding{comment, k.Submit, hint("enter", "open"), k.Reviewed,
-			hint("ctrl+j/k", "other list")}, tail...)
-	case contextOverview:
-		bindings := []key.Binding{hint("c", "comment"), k.Submit}
-		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].kind == rowReview {
-			r := m.main.rows[c]
-			if r.thread != nil {
-				bindings = append(bindings, hint("enter", "summary"), k.Reply, hint("x", "resolve summary"))
+		var hinted []interact.Bound[*model]
+		titles := map[string]bool{}
+		// Bindings without a description are second keys of the one before, already hinted.
+		for _, k := range interact.Keys(m, near...) {
+			if k.Help().Desc == "" || slices.ContainsFunc(hinted, k.Action.Same) {
+				continue
 			}
-			if r.review.Author == m.svc.Author() {
-				bindings = append(bindings, hint("D", "delete review"))
+			hinted = append(hinted, k.Action)
+			// A hint shows the title of what the key does here, which can be more specific than
+			// the binding's own description. Two actions of one title, as a line's comment and
+			// its file's, tell themselves apart by their help: "c comment" and "C comment on file".
+			title := k.Action.Title
+			if titles[title] {
+				title = k.Action.Help
 			}
-		}
-		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].kind == rowThread {
-			bindings = append(bindings, k.Reply, hint("e", "edit"), k.Resolve, hint("enter", "expand"), hint("o", "open in diff"))
-		}
-		return append(append(bindings, hint("t/T", "threads"), hint("F", "filter")), tail...)
-	}
-	if c := m.main.cursor; c < len(m.main.rows) {
-		switch m.main.rows[c].kind {
-		case rowThread:
-			return append([]key.Binding{k.Reply, hint("e", "edit"), k.Resolve, k.Address, hint("enter", "expand"),
-				k.Submit, hint("t/T", "threads")}, tail...)
-		case rowGap:
-			return append([]key.Binding{hint("enter", "expand"), hint("zR/zM", "all folds"),
-				hint("J/K", "hunks")}, tail...)
-		case rowCommit:
-			return append([]key.Binding{hint("C", "comment on commit"), k.Submit, k.Reviewed}, tail...)
-		case rowFile:
-			return append([]key.Binding{hint("c", "comment on file"), k.Submit, k.Reviewed,
-				hint("enter", "fold"), hint("]/[", "files")}, tail...)
+			titles[title] = true
+			out = append(out, key.NewBinding(key.WithKeys(k.Keys()...), key.WithHelp(k.Help().Key, title)))
 		}
 	}
-	return append([]key.Binding{k.Comment, k.Select, k.Submit, k.Reviewed, hint("J/K", "hunks"),
-		hint("]/[", "files")}, tail...)
+	// What is always worth knowing comes last, where renderHints keeps it.
+	for _, a := range []any{actSubmit, actShowHelp, actQuit} {
+		for _, k := range interact.Keys(m, chain...) {
+			if k.Action.Is(a) {
+				out = append(out, k.Binding)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // helpSection is one titled group in the full help.
 type helpSection struct {
 	title    string
-	context  helpContext
-	global   bool
+	here     bool
 	bindings []key.Binding
 }
 
-func (m *model) helpSections() []helpSection {
-	k := m.keys
-	return []helpSection{
-		{title: "Everywhere", global: true, bindings: []key.Binding{
-			hint("tab/shift+tab", "next/previous pane"), hint("h/l", "sidebar/diff"), k.Overview, k.AllChanges,
-			hint("}/{", "next/prev commit"), hint(">/<", "next/prev unreviewed commit"), hint("ctrl+o/ctrl+i", "back/forward in jump list"), k.Search, hint("n/N", "next/prev match"), hint("esc", "clear search or selection"), k.Split, k.Reload, k.Base,
-			k.Submit, k.Discard, k.Help, k.Quit,
-		}},
-		{title: "Sidebar", context: contextSidebar, bindings: []key.Binding{
-			hint("j/k", "move"), hint("d/u, f/b", "half page, page"), hint("g/G", "top, bottom"),
-			hint("enter/l", "open"), hint("ctrl+j/k", "files/commits list"), k.Reviewed, k.CommitDone,
-		}},
-		{title: "Overview", context: contextOverview, bindings: []key.Binding{
-			hint("j/k", "scroll"), hint("d/u, f/b", "half page, page"), hint("t/T", "next/prev thread"),
-			hint("enter", "expand/collapse thread"), hint("o", "open thread in the whole diff"),
-			hint("O", "open thread in its commit"), k.Filter,
-			hint("c", "comment on the change"), hint("D", "on your review: delete it"),
-		}},
-		{title: "Diff", context: contextDiff, bindings: []key.Binding{
-			hint("j/k", "move"), hint("d/u, f/b", "half page, page"), hint("]/[", "next/prev file"),
-			hint("J/K", "next/prev hunk"), hint(")/(", "next/prev change"), hint("t/T", "next/prev thread"),
-			hint("h/l", "old/new side in split"), k.Select, k.Comment, k.FileComment, k.Reviewed, k.CommitDone, k.AutoAdvance,
-		}},
-		{title: "Threads", global: true, bindings: []key.Binding{
-			k.Reply, hint("x", "resolve/reopen"), k.Address, k.Edit, hint("X", "delete my comment or thread"),
-		}},
-		{title: "Folds", context: contextDiff, bindings: []key.Binding{
-			hint("enter", "expand/collapse"), hint("zo/zc/za", "open/close/toggle"), hint("zR/zM", "open/close all"),
-		}},
-		{title: "Submitting", global: true, bindings: []key.Binding{
-			hint("S", "submit: then a/r/c for a verdict with a summary"), hint("S then A/R/C", "submit at once, no summary"),
-		}},
-		{title: "Writing a comment", global: true, bindings: []key.Binding{k.Save, k.ExternalEdit, k.Cancel}},
+// helpOrder is help's sections, in order: their titles, and the kinds and places whose keys each
+// shows. A key shows in the first section that has it.
+func helpOrder() []struct {
+	title string
+	from  []interact.Keyed
+} {
+	return []struct {
+		title string
+		from  []interact.Keyed
+	}{
+		{"Sidebar", []interact.Keyed{sidebarPaneKind, sidebarCommits, sidebarOverview, sidebarDiff, sidebarInterdiff,
+			sidebarFileList}},
+		{"Diff", []interact.Keyed{diffPaneKind, fileHeaderList, folds}},
+		{"Line", []interact.Keyed{lineKind, hunkKind}},
+		{"File", []interact.Keyed{fileKind}},
+		{"Commit", []interact.Keyed{commitKind}},
+		{"Thread", []interact.Keyed{diffThreads, diffThreadKind}},
+		{"Overview", []interact.Keyed{overviewPaneKind, overviewKind, overviewThreads, overviewThreadKind, summaryKind,
+			reviewBars, reviewKind}},
+		{"Change", []interact.Keyed{changeKind}},
+		{"Folds", []interact.Keyed{foldPrefixKind}},
+		{"Everywhere", []interact.Keyed{appKind}},
+		{"Submitting", []interact.Keyed{verdictKind}},
+		{"Writing a comment", []interact.Keyed{composeBoxKind}},
+		{"Unsaved comment", []interact.Keyed{closingKind}},
 	}
+}
+
+// helpSections are the keys bound on kinds and places, by section, the sections of where the
+// cursor is first and marked. A binding with no description is a second key of the one before it,
+// already in its help.
+func (m *model) helpSections() []helpSection {
+	t, ok := m.cursorTarget()
+	near := []interact.Target[*model]{m.paneTarget(m.focus != focusMain)}
+	if ok {
+		near = append(near, t)
+	}
+	var first, rest []helpSection
+	for _, hs := range helpOrder() {
+		sec := helpSection{title: hs.title}
+		for _, from := range hs.from {
+			for _, t := range near {
+				sec.here = sec.here || t.Involves(from)
+			}
+			for _, b := range from.Bindings() {
+				if b.Help().Desc != "" {
+					sec.bindings = append(sec.bindings, b)
+				}
+			}
+		}
+		if sec.here {
+			first = append(first, sec)
+		} else {
+			rest = append(rest, sec)
+		}
+	}
+	// Each key shows once, in the first section that has it.
+	seen := map[key.Help]bool{}
+	var out []helpSection
+	for _, sec := range append(first, rest...) {
+		var kept []key.Binding
+		for _, b := range sec.bindings {
+			if !seen[b.Help()] {
+				seen[b.Help()] = true
+				kept = append(kept, b)
+			}
+		}
+		if len(kept) > 0 {
+			sec.bindings = kept
+			out = append(out, sec)
+		}
+	}
+	return out
 }
 
 // renderHelp lays the help sections out in columns, the current context's sections first and
 // marked.
 func (m *model) renderHelp() string {
 	th := m.r.th
-	here := m.helpContext()
-	var sections, rest []helpSection
-	for _, s := range m.helpSections() {
-		if !s.global && s.context == here {
-			sections = append(sections, s)
-		} else {
-			rest = append(rest, s)
-		}
-	}
-	sections = append(sections, rest...)
+	sections := m.helpSections()
 
 	var blocks [][]string
 	for _, s := range sections {
 		title := s.title
-		if !s.global && s.context == here {
+		if s.here {
 			title += " (here)"
 		}
 		keyWidth := 0
@@ -200,22 +197,21 @@ func (m *model) renderHelp() string {
 	return b.String()
 }
 
-// renderHints draws as many hints as fit in width, always keeping the last two.
-func (m *model) renderHints(bindings []key.Binding, width int) string {
+// renderHints draws as many hints as fit in width, always keeping the last keep.
+func (m *model) renderHints(bindings []key.Binding, width, keep int) string {
 	th := m.r.th
 	sep := th.Render(look.Plain, look.Muted(" | "))
 	item := func(b key.Binding) string {
 		return th.Render(look.Plain, look.Hint(b.Help().Key, b.Help().Desc)...)
 	}
 	n := len(bindings)
-	keep := bindings[max(n-2, 0):]
 	var tail []string
-	for _, b := range keep {
+	for _, b := range bindings[max(n-keep, 0):] {
 		tail = append(tail, item(b))
 	}
 	used := ansi.StringWidth(strings.Join(tail, sep))
 	var head []string
-	for _, b := range bindings[:max(n-2, 0)] {
+	for _, b := range bindings[:max(n-keep, 0)] {
 		next := item(b)
 		if used+ansi.StringWidth(next)+2*ansi.StringWidth(sep) > width {
 			break

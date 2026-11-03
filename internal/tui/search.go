@@ -9,7 +9,6 @@ import (
 	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 )
@@ -36,7 +35,7 @@ func (m *model) openSearch() tea.Cmd {
 
 func (m *model) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.Cancel):
+	case pressed(m, msg, actCancel, theApp.Target(appSubject{})):
 		m.mode = modeNormal
 		return m, nil
 	case msg.String() == "enter":

@@ -60,43 +60,24 @@ func (m *model) toggleCollapsed(v view, f int) {
 	m.buildNav()
 }
 
-// cursorFile is the file the reviewed key applies to: the selected sidebar file, or the file under
-// the main cursor.
-func (m *model) cursorFile() int {
-	if m.focus == focusFiles {
-		if m.filesNav.pos < len(m.filesNav.items) {
-			return m.filesNav.items[m.filesNav.pos].file
-		}
-		return -1
+// toggleCommitReviewed marks or unmarks every file of a commit's view reviewed. Marking the commit
+// shown advances; marking one named elsewhere, as by a mention, stays put.
+func (m *model) toggleCommitReviewed(v view) tea.Cmd {
+	reviewed := !m.viewReviewed(v)
+	m.applyCommitMark(v, reviewed)
+	note := ""
+	if reviewed && m.autoAdvance && v.key() == m.views[m.current].key() {
+		note = m.advance(m.nextUnreviewedCommit)
 	}
-	if m.main.cursor < len(m.main.rows) {
-		return m.main.rows[m.main.cursor].file
+	svc, ctx, change, sha, files := m.svc, m.ctx, m.data.change, v.commit.SHA, v.files
+	return func() tea.Msg {
+		err := svc.SetCommitReviewed(ctx, change, sha, files, reviewed)
+		return opMsg{status: reviewedStatus("commit "+shortSHA(sha), reviewed) + note, err: err}
 	}
-	return -1
 }
 
-// toggleReviewed marks or unmarks the focused file, or the commit when the commit list or the
-// commit header has focus. Marking moves on to the next unreviewed file or commit.
-func (m *model) toggleReviewed(wholeCommit bool) tea.Cmd {
-	v := m.views[m.current]
-	f := m.cursorFile()
-	if v.kind == viewCommit && (wholeCommit || m.focus == focusViews || f < 0) {
-		reviewed := !m.viewReviewed(v)
-		m.applyCommitMark(v, reviewed)
-		note := ""
-		if reviewed && m.autoAdvance {
-			note = m.advance(m.nextUnreviewedCommit)
-		}
-		svc, ctx, change, sha, files := m.svc, m.ctx, m.data.change, v.commit.SHA, v.files
-		return func() tea.Msg {
-			err := svc.SetCommitReviewed(ctx, change, sha, files, reviewed)
-			return opMsg{status: reviewedStatus("commit "+shortSHA(sha), reviewed) + note, err: err}
-		}
-	}
-	if wholeCommit {
-		m.setError(errors.New("not in a commit"))
-		return nil
-	}
+// toggleFileReviewed marks or unmarks file f of view v reviewed.
+func (m *model) toggleFileReviewed(v view, f int) tea.Cmd {
 	if f < 0 {
 		m.setError(errors.New("move to a file to mark it reviewed"))
 		return nil

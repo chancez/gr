@@ -22,19 +22,8 @@ func (m *model) pendingKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if prefix != "z" {
 		return m, nil
 	}
-	switch msg.String() {
-	case "o":
-		m.fold(foldOpen)
-	case "c":
-		m.fold(foldClose)
-	case "a":
-		m.fold(foldToggle)
-	case "R":
-		m.foldAll(true)
-	case "M":
-		m.foldAll(false)
-	}
-	return m, nil
+	c, _ := m.runOn(msg, theFoldPrefix.Target(paneSubject{}))
+	return m, c
 }
 
 // fileContent returns a file's new-side lines in a view, reading them once.
@@ -55,12 +44,17 @@ func (m *model) fileContent(v view, f int) []string {
 
 // fold opens or closes the fold under the cursor: a gap of unchanged lines, or the file.
 func (m *model) fold(op foldOp) {
+	m.foldRow(m.main.cursor, op)
+}
+
+// foldRow opens or closes the fold of row i: a thread, a gap of unchanged lines, or the file.
+func (m *model) foldRow(i int, op foldOp) {
 	p := &m.main
-	if p.cursor >= len(p.rows) {
+	if i < 0 || i >= len(p.rows) {
 		return
 	}
 	v := m.views[m.current]
-	r := p.rows[p.cursor]
+	r := p.rows[i]
 	if (r.kind == rowThread || r.kind == rowReview) && r.thread != nil {
 		collapsed := m.threadCollapsed(*r.thread)
 		switch op {

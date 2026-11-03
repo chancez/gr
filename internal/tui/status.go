@@ -43,17 +43,22 @@ func (m *model) renderStatus() string {
 	case modeSearch:
 		return m.searchInput.View()
 	case modeVerdict:
-		return th.Render(look.Plain, look.Heading("Submit review: ")) + m.renderHints([]key.Binding{
-			hint("a", "approve"), hint("r", "request changes"), hint("c", "comment"),
-			hint("A R C", "skip the summary"), hint("esc", "cancel"),
-		}, m.width-15)
+		var hints []key.Binding
+		for _, b := range verdictKind.Bindings() {
+			if b.Help().Desc != "" {
+				hints = append(hints, b)
+			}
+		}
+		return th.Render(look.Plain, look.Heading("Submit review: ")) + m.renderHints(hints, m.width-15, 1)
 	case modeConfirm:
 		return th.Render(look.Plain, look.Error(m.confirm.prompt))
 	case modeCompose:
 		if m.compose.closing {
-			return th.Render(look.Plain, look.Warning("Unsaved comment: ")) + m.renderHints([]key.Binding{
-				hint("s", "save it"), hint("d", "discard it"), hint("esc", "keep editing"),
-			}, m.width-17)
+			var hints []key.Binding
+			for _, b := range closingKind.Bindings() {
+				hints = append(hints, b)
+			}
+			return th.Render(look.Plain, look.Warning("Unsaved comment: ")) + m.renderHints(hints, m.width-17, 1)
 		}
 	}
 	d := m.data
@@ -82,7 +87,7 @@ func (m *model) renderStatus() string {
 	}
 	l := th.Render(look.Plain, left...)
 	// Fit the hints in what the left side leaves, keeping help and quit.
-	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10))
+	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10), 3)
 	gap := max(m.width-ansi.StringWidth(l)-ansi.StringWidth(right)-1, 1)
 	return look.Fit(l+strings.Repeat(" ", gap)+right, m.width)
 }

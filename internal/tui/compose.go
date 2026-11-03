@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 	"github.com/chancez/gr/internal/anchor"
@@ -41,25 +40,61 @@ type composer struct {
 	closing bool
 }
 
-// startComment opens the composer for a new thread at the cursor. whole comments on the cursor's
-// file, or the commit when the cursor is on the commit header, or the change on the overview.
-func (m *model) startComment(whole bool) (tea.Model, tea.Cmd) {
+// commentOnRow opens the comment box on row i of the main pane: its line, on side in split mode, or
+// file, or, when whole, its whole file or commit.
+func (m *model) commentOnRow(i int, side anchor.Side, whole bool) tea.Cmd {
 	v := m.views[m.current]
 	if v.readOnly() {
 		m.setError(errors.New("the interdiff is read-only; comment on the files or commits"))
-		return m, nil
+		return nil
 	}
-	nt, title, err := m.newThreadAt(v, whole)
+	nt, title, err := m.newThreadAt(v, i, side, whole)
 	if err != nil {
 		m.setError(err)
-		return m, nil
+		return nil
 	}
-	// Commenting where your draft already is continues it, rather than starting a second one.
+	return m.commentOn(nt, title)
+}
+
+// commentOn opens the comment box for a new thread nt. Commenting where your draft already is
+// continues it, rather than starting a second one.
+func (m *model) commentOn(nt review.NewThread, title string) tea.Cmd {
 	if t, c, ok := m.draftAt(nt); ok {
-		return m, m.openComposer(composer{kind: composeEdit, threadID: t.ID, commentID: c.ID,
+		return m.openComposer(composer{kind: composeEdit, threadID: t.ID, commentID: c.ID,
 			title: fmt.Sprintf("Edit your draft %s", t.Label())}, c.Body)
 	}
-	return m, m.openComposer(composer{kind: composeThread, title: title, thread: nt}, "")
+	return m.openComposer(composer{kind: composeThread, title: title, thread: nt}, "")
+}
+
+// commentOnChange opens the comment box on the change as a whole, without changing what is shown.
+func (m *model) commentOnChange() tea.Cmd {
+	return m.commentOn(review.NewThread{Scope: store.ScopeChange}, "Comment on the change")
+}
+
+// commentOnCommit opens the comment box on the commit v shows.
+func (m *model) commentOnCommit(v view) tea.Cmd {
+	return m.commentOn(review.NewThread{Scope: store.ScopeCommit, Commit: v.commit.SHA},
+		"Comment on commit "+shortSHA(v.commit.SHA))
+}
+
+// commentOnFile opens the comment box on file f of view v as a whole, without changing what is
+// shown.
+func (m *model) commentOnFile(v view, f int) tea.Cmd {
+	if v.readOnly() {
+		m.setError(errors.New("the interdiff is read-only; comment on the files or commits"))
+		return nil
+	}
+	file := v.files[f]
+	nt := review.NewThread{Scope: store.ScopeDiff, Path: file.NewPath, Side: anchor.SideNew}
+	where := "the diff"
+	if v.kind == viewCommit {
+		nt.Scope, nt.Commit = store.ScopeCommit, v.commit.SHA
+		where = "commit " + shortSHA(v.commit.SHA)
+	}
+	if file.NewPath == "" {
+		nt.Path, nt.Side = file.OldPath, anchor.SideOld
+	}
+	return m.commentOn(nt, fmt.Sprintf("Comment on %s in %s", nt.Path, where))
 }
 
 // draftAt finds your draft thread exactly where nt would start one, and its comment. Comments on
@@ -91,7 +126,9 @@ func (m *model) draftAt(nt review.NewThread) (review.ThreadView, store.Comment, 
 	return review.ThreadView{}, store.Comment{}, false
 }
 
-func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error) {
+// newThreadAt is where a new thread on row i would be: its line, or the selection when i is the
+// cursor's, its file when whole, or the commit.
+func (m *model) newThreadAt(v view, i int, side anchor.Side, whole bool) (review.NewThread, string, error) {
 	if v.kind == viewOverview {
 		return review.NewThread{Scope: store.ScopeChange}, "Comment on the change", nil
 	}
@@ -102,10 +139,10 @@ func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error
 		where = "commit " + shortSHA(v.commit.SHA)
 	}
 	p := &m.main
-	if p.cursor >= len(p.rows) {
+	if i < 0 || i >= len(p.rows) {
 		return nt, "", errors.New("nothing to comment on")
 	}
-	cur := p.rows[p.cursor]
+	cur := p.rows[i]
 	if cur.kind == rowCommit || (whole && cur.file < 0) {
 		if v.kind != viewCommit {
 			return nt, "", errors.New("move to a file to comment")
@@ -128,12 +165,15 @@ func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error
 	}
 
 	// Lines: the cursor line decides the side, and the selection gives the range on that side.
-	side := m.lineSide(cur)
+	side = lineSide(cur, side)
 	nt.Side, nt.Path = side, f.NewPath
 	if side == anchor.SideOld {
 		nt.Path = f.OldPath
 	}
-	selStart, selEnd := p.selection()
+	selStart, selEnd := i, i
+	if i == p.cursor {
+		selStart, selEnd = p.selection()
+	}
 	for i := selStart; i <= selEnd; i++ {
 		r := p.rows[i]
 		if r.kind != rowLine {
@@ -166,15 +206,15 @@ func (m *model) newThreadAt(v view, whole bool) (review.NewThread, string, error
 }
 
 // lineSide is the side a line row is commented on: deletions are old, everything else new. In split
-// mode it follows the cursor side, falling back to whichever side has a line.
-func (m *model) lineSide(r row) anchor.Side {
+// mode it is side, falling back to whichever side has a line.
+func lineSide(r row, side anchor.Side) anchor.Side {
 	if r.line != nil {
 		if r.line.Kind == git.LineDeleted {
 			return anchor.SideOld
 		}
 		return anchor.SideNew
 	}
-	if m.main.side == anchor.SideOld && r.left != nil || r.right == nil {
+	if side == anchor.SideOld && r.left != nil || r.right == nil {
 		return anchor.SideOld
 	}
 	return anchor.SideNew
@@ -224,41 +264,29 @@ func (m *model) closeComposer() {
 }
 
 func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	k := m.keys
+	box := theComposer.Target(composeSubject{})
 	if m.compose.closing {
-		return m.closingKey(msg)
+		// The unsaved comment prompt: any key but its own goes back to editing.
+		m.compose.closing = false
+		c, _ := m.runOn(msg, theClosing.Target(composeSubject{}))
+		return m, c
 	}
-	switch {
-	case key.Matches(msg, k.Cancel):
-		// Closing with unsaved text asks first, so a reflexive esc cannot lose a comment.
-		if v := m.compose.area.Value(); strings.TrimSpace(v) == "" || v == m.compose.initial {
-			m.closeComposer()
-		} else {
-			m.compose.closing = true
-		}
-		return m, nil
-	case key.Matches(msg, k.ExternalEdit):
-		return m, editorCmd(m.compose.area.Value())
-	case key.Matches(msg, k.Save):
-		return m.saveCompose()
+	if c, ok := m.runOn(msg, box); ok {
+		return m, c
 	}
 	var cmd tea.Cmd
 	m.compose.area, cmd = m.compose.area.Update(msg)
 	return m, cmd
 }
 
-// closingKey answers the unsaved comment prompt: s saves, d discards, and anything else, esc
-// included, goes back to editing.
-func (m *model) closingKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	m.compose.closing = false
-	switch msg.String() {
-	case "s":
-		return m.saveCompose()
-	case "d":
+// closeOrAsk closes the comment box, or asks first when it has unsaved text, so a reflexive esc
+// cannot lose a comment.
+func (m *model) closeOrAsk() {
+	if v := m.compose.area.Value(); strings.TrimSpace(v) == "" || v == m.compose.initial {
 		m.closeComposer()
-		m.setStatus("comment discarded")
+		return
 	}
-	return m, nil
+	m.compose.closing = true
 }
 
 func (m *model) saveCompose() (tea.Model, tea.Cmd) {
@@ -293,17 +321,20 @@ func (m *model) saveCompose() (tea.Model, tea.Cmd) {
 // verdictKey takes the verdict: a, r, or c open the summary editor, and A, R, or C submit straight
 // away with no new summary, keeping any already in the draft.
 func (m *model) verdictKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	verdicts := map[string]store.Verdict{"a": store.VerdictApprove, "r": store.VerdictRequestChanges, "c": store.VerdictComment}
-	key := msg.String()
-	verdict, ok := verdicts[strings.ToLower(key)]
-	if !ok || len(key) != 1 {
+	c, ok := m.runOn(msg, theVerdict.Target(verdictSubject{}))
+	if !ok {
 		m.mode = modeNormal
-		return m, nil
 	}
-	if key != strings.ToLower(key) {
+	return m, c
+}
+
+// submitWith submits the draft review with verdict: now, without a new summary, keeping any
+// already in the draft, or after the comment box asks for one.
+func (m *model) submitWith(verdict store.Verdict, now bool) tea.Cmd {
+	if now {
 		m.mode = modeNormal
 		svc, ctx, change := m.svc, m.ctx, m.data.change
-		return m, func() tea.Msg {
+		return func() tea.Msg {
 			r, err := svc.Submit(ctx, change, verdict, "")
 			return opMsg{status: fmt.Sprintf("submitted review #%d: %s", r.Seq, r.Verdict), err: err}
 		}
@@ -312,7 +343,7 @@ func (m *model) verdictKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if d, ok := m.data.draft(); ok {
 		initial = d.Body
 	}
-	return m, m.openComposer(composer{kind: composeSubmit, verdict: verdict, title: "Submit review: " + string(verdict) + " (summary is optional)"}, initial)
+	return m.openComposer(composer{kind: composeSubmit, verdict: verdict, title: "Submit review: " + string(verdict) + " (summary is optional)"}, initial)
 }
 
 // editorCmd suspends the TUI and edits text in $VISUAL or $EDITOR.

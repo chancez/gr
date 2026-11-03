@@ -1,12 +1,9 @@
 package tui
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
-	tea "charm.land/bubbletea/v2"
 	"github.com/chancez/gr/internal/tui/look"
 
 	"github.com/charmbracelet/x/ansi"
@@ -388,72 +385,6 @@ func paneTitle(th *look.Theme, title string, width int, focused bool) string {
 	return th.DrawCut(surf, width, look.Text(title))
 }
 
-func (m *model) navKey(msg tea.KeyPressMsg, l *navList, open func()) (tea.Model, tea.Cmd) {
-	k := m.keys
-	_, _, bh := m.layoutSizes()
-	vh, fh := m.sidebarHeights(bh)
-	page := vh - 1
-	if l == &m.filesNav {
-		page = fh - 1
-	}
-	changed := false
-	switch {
-	case key.Matches(msg, k.Up):
-		changed = l.move(-1)
-	case key.Matches(msg, k.Down):
-		changed = l.move(1)
-	case key.Matches(msg, k.HalfPageUp):
-		changed = l.move(-max(page/2, 1))
-	case key.Matches(msg, k.HalfPageDown):
-		changed = l.move(max(page/2, 1))
-	case key.Matches(msg, k.PageUp):
-		changed = l.move(-max(page, 1))
-	case key.Matches(msg, k.PageDown):
-		changed = l.move(max(page, 1))
-	case key.Matches(msg, k.Top):
-		changed = l.set(0)
-	case key.Matches(msg, k.Bottom):
-		changed = l.set(len(l.items) - 1)
-	case key.Matches(msg, k.Left):
-		return m, nil
-	case key.Matches(msg, k.Open), key.Matches(msg, k.Right):
-		open()
-		m.setFocus(focusMain)
-		return m, nil
-	case key.Matches(msg, k.Comment), key.Matches(msg, k.FileComment):
-		return m.sidebarComment()
-	default:
-		return m.mainKey(msg)
-	}
-	if changed {
-		open()
-	}
-	return m, nil
-}
-
-// sidebarComment comments on what the sidebar has selected: the commit, the file, or, on the
-// overview, the change. It moves the main cursor there first, so the comment lands where the
-// selection is rather than wherever the diff's cursor was.
-func (m *model) sidebarComment() (tea.Model, tea.Cmd) {
-	v := m.views[m.current]
-	switch {
-	case v.kind == viewOverview:
-		return m.startComment(false)
-	case m.focus == focusFiles:
-		m.openFile()
-		return m.startComment(true)
-	case v.kind == viewCommit:
-		for i, r := range m.main.rows {
-			if r.kind == rowCommit {
-				m.main.cursor = i
-			}
-		}
-		return m.startComment(true)
-	}
-	m.setError(errors.New("select a commit or file to comment on"))
-	return m, nil
-}
-
 // sidebarAt maps a sidebar line to a list and its item index.
 func (m *model) sidebarAt(y int) (*navList, focus, int) {
 	_, _, bh := m.layoutSizes()
@@ -463,4 +394,18 @@ func (m *model) sidebarAt(y int) (*navList, focus, int) {
 	}
 	// Past the divider and the files header.
 	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - sidebarGap - 1)
+}
+
+// showFile shows file s in the main pane, in its view.
+func (m *model) showFile(s fileSubject) {
+	if s.at != m.current {
+		m.setView(s.at)
+	}
+	for i, r := range m.main.rows {
+		if r.kind == rowFile && r.file == s.file {
+			m.main.jump(i)
+			break
+		}
+	}
+	m.syncNav()
 }

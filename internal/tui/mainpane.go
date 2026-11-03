@@ -2,10 +2,9 @@ package tui
 
 import (
 	"errors"
-	"fmt"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
@@ -69,159 +68,6 @@ func (m *model) setView(i int) {
 	m.rebuildMain()
 	m.buildNav()
 	m.requestLoad()
-}
-
-func (m *model) mainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	k := m.keys
-	p := &m.main
-	if p.reader {
-		switch {
-		case key.Matches(msg, k.Up):
-			p.readerPrev()
-			return m, nil
-		case key.Matches(msg, k.Down):
-			p.readerNext()
-			return m, nil
-		case key.Matches(msg, k.HalfPageDown):
-			p.readerScroll(p.height / 2)
-			return m, nil
-		case key.Matches(msg, k.HalfPageUp):
-			p.readerScroll(-p.height / 2)
-			return m, nil
-		case key.Matches(msg, k.PageDown):
-			p.readerScroll(p.height)
-			return m, nil
-		case key.Matches(msg, k.PageUp):
-			p.readerScroll(-p.height)
-			return m, nil
-		case key.Matches(msg, k.Top):
-			m.jump(func() { p.readerSelect(0) })
-			return m, nil
-		case key.Matches(msg, k.Bottom):
-			m.jump(func() { p.readerSelect(len(p.items) - 1) })
-			return m, nil
-		}
-	}
-	switch {
-	case key.Matches(msg, k.Up):
-		p.move(-1)
-	case key.Matches(msg, k.Down):
-		p.move(1)
-	case key.Matches(msg, k.HalfPageDown):
-		p.moveLines(p.height / 2)
-	case key.Matches(msg, k.HalfPageUp):
-		p.moveLines(-p.height / 2)
-	case key.Matches(msg, k.PageDown):
-		p.moveLines(p.height)
-	case key.Matches(msg, k.PageUp):
-		p.moveLines(-p.height)
-	case key.Matches(msg, k.Top):
-		m.jump(p.top)
-	case key.Matches(msg, k.Bottom):
-		m.jump(p.bottom)
-	case key.Matches(msg, k.Left):
-		// In split mode, left first moves to the old side, then to the sidebar.
-		if m.split && p.side == anchor.SideNew {
-			p.side = anchor.SideOld
-		} else {
-			m.focusSidebar()
-		}
-	case key.Matches(msg, k.Right):
-		p.side = anchor.SideNew
-	case key.Matches(msg, k.NextFile):
-		m.jumpTo(1, func(r row) bool { return r.kind == rowFile })
-	case key.Matches(msg, k.PrevFile):
-		m.jumpTo(-1, func(r row) bool { return r.kind == rowFile })
-	case key.Matches(msg, k.NextChange):
-		m.jumpToIndex(1, m.isChangeStart)
-	case key.Matches(msg, k.PrevChange):
-		m.jumpToIndex(-1, m.isChangeStart)
-	case key.Matches(msg, k.NextHunk):
-		m.jumpTo(1, func(r row) bool { return r.kind == rowHunk })
-	case key.Matches(msg, k.PrevHunk):
-		m.jumpTo(-1, func(r row) bool { return r.kind == rowHunk })
-	case key.Matches(msg, k.NextThread):
-		m.jump(func() { m.jumpTo(1, func(r row) bool { return r.kind == rowThread }) })
-	case key.Matches(msg, k.PrevThread):
-		m.jump(func() { m.jumpTo(-1, func(r row) bool { return r.kind == rowThread }) })
-	case key.Matches(msg, k.Select):
-		if p.anchor >= 0 {
-			p.anchor = -1
-		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowLine {
-			p.anchor = p.cursor
-		}
-	case key.Matches(msg, k.OpenThread), key.Matches(msg, k.OpenThreadCommit):
-		if m.views[m.current].kind == viewOverview && p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowThread {
-			m.openThread(*p.rows[p.cursor].thread, key.Matches(msg, k.OpenThread))
-		}
-	case key.Matches(msg, k.Filter):
-		if m.views[m.current].kind == viewOverview {
-			m.filter = (m.filter + 1) % filterCount
-			m.rebuildMain()
-			m.setStatus("showing %s threads", m.filter)
-		}
-	case key.Matches(msg, k.Open):
-		if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowFile {
-			m.toggleCollapsed(m.views[m.current], p.rows[p.cursor].file)
-		} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowGap {
-			m.fold(foldOpen)
-		} else if p.cursor < len(p.rows) && (p.rows[p.cursor].kind == rowThread || p.rows[p.cursor].kind == rowReview) {
-			m.fold(foldToggle)
-		}
-	case key.Matches(msg, k.Comment):
-		return m.startComment(false)
-	case key.Matches(msg, k.FileComment):
-		return m.startComment(true)
-	case key.Matches(msg, k.Reply):
-		return m.threadAction(composeReply)
-	case key.Matches(msg, k.Edit):
-		return m.threadAction(composeEdit)
-	case key.Matches(msg, k.Resolve):
-		t, ok := m.cursorThread()
-		if !ok {
-			return m, nil
-		}
-		state := store.ThreadResolved
-		if t.State == store.ThreadResolved {
-			state = store.ThreadOpen
-		}
-		return m, m.setThreadState(t, state)
-	case key.Matches(msg, k.Address):
-		t, ok := m.cursorThread()
-		if !ok {
-			return m, nil
-		}
-		return m, m.setThreadState(t, store.ThreadAddressed)
-	case key.Matches(msg, k.Delete):
-		t, ok := m.cursorThread()
-		if !ok {
-			return m, nil
-		}
-		c, ok := m.lastOwnComment(t)
-		// In the overview, delete the selected comment when it is yours.
-		if seg := m.main.itemSegment(); m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
-			c, ok = t.Comments[seg], true
-		}
-		if !ok {
-			m.setError(errors.New("no comment of yours in this thread"))
-			return m, nil
-		}
-		svc, ctx := m.svc, m.ctx
-		prompt := fmt.Sprintf("Delete your comment on %s? y/n", t.Label())
-		status := "comment deleted"
-		if len(t.Comments) > 0 && t.Comments[0].ID == c.ID {
-			prompt = fmt.Sprintf("Delete thread %s? Its first comment is the thread. y/n", t.Label())
-			status = "thread " + t.Label() + " deleted"
-		}
-		m.ask(prompt, func() tea.Msg {
-			return opMsg{status: status, err: svc.DeleteComment(ctx, c.ID)}
-		})
-		return m, nil
-	default:
-		return m, nil
-	}
-	m.syncNav()
-	return m, nil
 }
 
 // toggleAllChanges opens the whole diff, or goes back to the view it was opened from.
@@ -377,4 +223,129 @@ func (m *model) isChangeStart(i int) bool {
 		return !isChange(rows[j]) || rows[j].hunk != rows[i].hunk
 	}
 	return true
+}
+
+// Moves: the cursor through the pane focus is in. In the sidebar, landing on an entry runs its on
+// cursor handler, so the main pane follows.
+
+// focusedList is the sidebar list focus is in, or nil in the main pane.
+func (m *model) focusedList() *navList {
+	switch m.focus {
+	case focusViews:
+		return &m.viewsNav
+	case focusFiles:
+		return &m.filesNav
+	}
+	return nil
+}
+
+// landed runs the on cursor handler of the sidebar entry the cursor moved to.
+func (m *model) landed(moved bool) tea.Cmd {
+	if !moved {
+		return nil
+	}
+	if t, ok := m.cursorTarget(); ok {
+		return t.OnCursor(m)
+	}
+	return nil
+}
+
+// moves are the moves through one pane, each a pane's own: the sidebar's lists, the diff, or the
+// overview's reader.
+type moves struct {
+	by   func(m *model, n int) tea.Cmd
+	page func(m *model, dir, div int) tea.Cmd
+	end  func(m *model, bottom bool) tea.Cmd
+}
+
+// listMoves move the selection of the sidebar list focus is in, and run the on cursor handler of
+// where it lands.
+var listMoves = moves{
+	by: func(m *model, n int) tea.Cmd { return m.landed(m.focusedList().move(n)) },
+	page: func(m *model, dir, div int) tea.Cmd {
+		l := m.focusedList()
+		_, _, bh := m.layoutSizes()
+		vh, fh := m.sidebarHeights(bh)
+		page := vh - 1
+		if l == &m.filesNav {
+			page = fh - 1
+		}
+		return m.landed(l.move(dir * max(page/div, 1)))
+	},
+	end: func(m *model, bottom bool) tea.Cmd {
+		l := m.focusedList()
+		i := 0
+		if bottom {
+			i = len(l.items) - 1
+		}
+		return m.landed(l.set(i))
+	},
+}
+
+// diffMoves move the cursor through the diff by rows.
+var diffMoves = moves{
+	by: func(m *model, n int) tea.Cmd {
+		m.main.move(n)
+		m.syncNav()
+		return nil
+	},
+	page: func(m *model, dir, div int) tea.Cmd {
+		m.main.moveLines(dir * m.main.height / div)
+		m.syncNav()
+		return nil
+	},
+	end: func(m *model, bottom bool) tea.Cmd {
+		if bottom {
+			m.jump(m.main.bottom)
+		} else {
+			m.jump(m.main.top)
+		}
+		m.syncNav()
+		return nil
+	},
+}
+
+// readerMoves move the overview's reader by comment.
+var readerMoves = moves{
+	by: func(m *model, n int) tea.Cmd {
+		if n < 0 {
+			m.main.readerPrev()
+		} else {
+			m.main.readerNext()
+		}
+		return nil
+	},
+	page: func(m *model, dir, div int) tea.Cmd {
+		m.main.readerScroll(dir * m.main.height / div)
+		return nil
+	},
+	end: func(m *model, bottom bool) tea.Cmd {
+		p := &m.main
+		if bottom {
+			m.jump(func() { p.readerSelect(len(p.items) - 1) })
+		} else {
+			m.jump(func() { p.readerSelect(0) })
+		}
+		m.syncNav()
+		return nil
+	},
+}
+
+// moveLeft in split mode first moves to the old side, then to the sidebar.
+func (m *model) moveLeft() {
+	if m.split && m.main.side == anchor.SideNew {
+		m.main.side = anchor.SideOld
+		return
+	}
+	m.focusSidebar()
+}
+
+// toggleSelection starts a selection of lines at the cursor, or ends one.
+func (m *model) toggleSelection() {
+	p := &m.main
+	if p.anchor >= 0 {
+		p.anchor = -1
+	} else if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowLine {
+		p.anchor = p.cursor
+	}
 }

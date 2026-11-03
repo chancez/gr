@@ -81,7 +81,6 @@ type model struct {
 	ctx      context.Context
 	svc      *review.Service
 	changeID string
-	keys     keyMap
 	help     help.Model
 	r        *renderer
 
@@ -201,8 +200,22 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 		return nil, err
 	}
 	m := &model{
-		ctx: ctx, svc: svc, changeID: change.ID, keys: defaultKeys(),
-		watcher: w, version: version, main: pane{anchor: -1, side: anchor.SideNew, scrolloff: defaultScrolloff}, expanded: map[string]bool{}, openGaps: map[string]bool{}, threadFolds: map[string]bool{}, contents: map[string][]string{}, returns: map[viewKind]jumpPoint{}, lastSidebar: focusFiles,
+		ctx:      ctx,
+		svc:      svc,
+		changeID: change.ID,
+		watcher:  w,
+		version:  version,
+		main: pane{
+			anchor:    -1,
+			side:      anchor.SideNew,
+			scrolloff: defaultScrolloff,
+		},
+		expanded:    map[string]bool{},
+		openGaps:    map[string]bool{},
+		threadFolds: map[string]bool{},
+		contents:    map[string][]string{},
+		returns:     map[viewKind]jumpPoint{},
+		lastSidebar: focusFiles,
 	}
 	// Dark until the terminal reports its background.
 	m.setTheme(true)
@@ -379,131 +392,11 @@ func (m *model) relayout(resized bool) {
 }
 
 func (m *model) normalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	k := m.keys
 	if m.pending != "" {
 		return m.pendingKey(msg)
 	}
-	switch {
-	case key.Matches(msg, k.Quit):
-		return m, tea.Quit
-	case key.Matches(msg, k.Help):
-		m.mode = modeHelp
-		return m, nil
-	case key.Matches(msg, k.Cancel):
-		m.main.anchor = -1
-		m.status = ""
-		m.search, m.searchPos, m.searchHits = "", 0, 0
-		return m, nil
-	case key.Matches(msg, k.Focus):
-		m.cycleFocus(1)
-		return m, nil
-	case key.Matches(msg, k.FocusBack):
-		m.cycleFocus(-1)
-		return m, nil
-	case key.Matches(msg, k.SectionDown):
-		m.focusSection(1)
-		return m, nil
-	case key.Matches(msg, k.SectionUp):
-		m.focusSection(-1)
-		return m, nil
-	case key.Matches(msg, k.Reload):
-		m.setStatus("reloading")
-		return m, m.loadCmd()
-	case key.Matches(msg, k.Split):
-		m.split = !m.split
-		m.rebuildMain()
-		return m, nil
-	case key.Matches(msg, k.Submit):
-		if m.data == nil {
-			return m, nil
-		}
-		m.mode = modeVerdict
-		return m, nil
-	case key.Matches(msg, k.AutoAdvance):
-		m.autoAdvance = !m.autoAdvance
-		if m.autoAdvance {
-			m.setStatus("auto-advance on: marking reviewed moves to the next unreviewed file")
-		} else {
-			m.setStatus("auto-advance off: marking reviewed stays put")
-		}
-		return m, nil
-	case key.Matches(msg, k.Reviewed), key.Matches(msg, k.CommitDone):
-		if m.data == nil {
-			return m, nil
-		}
-		return m, m.toggleReviewed(key.Matches(msg, k.CommitDone))
-	case key.Matches(msg, k.Discard):
-		if m.data == nil {
-			return m, nil
-		}
-		return m, m.deleteReviewAtCursor()
-	}
-	if m.data == nil {
-		return m, nil
-	}
-	switch {
-	case key.Matches(msg, k.Fold):
-		if m.data != nil && m.views[m.current].kind != viewOverview {
-			m.pending = "z"
-			m.setStatus("z: o open, c close, a toggle, R open all, M close all")
-		}
-		return m, nil
-	case key.Matches(msg, k.Search):
-		if m.data == nil {
-			return m, nil
-		}
-		return m, m.openSearch()
-	case key.Matches(msg, k.Base):
-		if m.data == nil {
-			return m, nil
-		}
-		return m, m.openBase()
-	case key.Matches(msg, k.SearchNext):
-		if m.data != nil {
-			m.searchStep(1)
-		}
-		return m, nil
-	case key.Matches(msg, k.SearchPrev):
-		if m.data != nil {
-			m.searchStep(-1)
-		}
-		return m, nil
-	case key.Matches(msg, k.JumpBack):
-		if m.data != nil {
-			m.jumpBack()
-		}
-		return m, nil
-	case key.Matches(msg, k.JumpForward):
-		if m.data != nil {
-			m.jumpForward()
-		}
-		return m, nil
-	case key.Matches(msg, k.AllChanges):
-		m.toggleAllChanges()
-		return m, nil
-	case key.Matches(msg, k.Overview):
-		m.toggleView(viewOverview)
-		return m, nil
-	case key.Matches(msg, k.NextUnreviewed):
-		m.stepUnreviewed(1)
-		return m, nil
-	case key.Matches(msg, k.PrevUnreviewed):
-		m.stepUnreviewed(-1)
-		return m, nil
-	case key.Matches(msg, k.NextCommit):
-		m.stepCommit(1)
-		return m, nil
-	case key.Matches(msg, k.PrevCommit):
-		m.stepCommit(-1)
-		return m, nil
-	}
-	switch m.focus {
-	case focusViews:
-		return m.navKey(msg, &m.viewsNav, m.openView)
-	case focusFiles:
-		return m.navKey(msg, &m.filesNav, m.openFile)
-	}
-	return m.mainKey(msg)
+	cmd, _ := m.dispatch(msg)
+	return m, cmd
 }
 
 // focusOrder is the panes from left to right. The files list is skipped when the view has none.
@@ -635,7 +528,9 @@ func (m *model) render() string {
 		b.WriteString("\n")
 	}
 	if m.mode == modeCompose {
-		hints := "  " + m.help.ShortHelpView([]key.Binding{m.keys.Save, m.keys.ExternalEdit, m.keys.Cancel})
+		var bindings []key.Binding
+		bindings = composeBoxKind.Bindings()
+		hints := "  " + m.help.ShortHelpView(bindings)
 		title := look.Heading(m.compose.title)
 		if m.compose.warn {
 			title = look.Warning(m.compose.title)
@@ -646,4 +541,20 @@ func (m *model) render() string {
 	}
 	b.WriteString(m.renderStatus())
 	return b.String()
+}
+
+// clearTransient clears the selection, the status message, and the search.
+func (m *model) clearTransient() {
+	m.main.anchor = -1
+	m.status = ""
+	m.search, m.searchPos, m.searchHits = "", 0, 0
+}
+
+func (m *model) toggleAutoAdvance() {
+	m.autoAdvance = !m.autoAdvance
+	if m.autoAdvance {
+		m.setStatus("auto-advance on: marking reviewed moves to the next unreviewed file")
+	} else {
+		m.setStatus("auto-advance off: marking reviewed stays put")
+	}
 }

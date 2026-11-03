@@ -9,20 +9,6 @@ import (
 	"github.com/chancez/gr/internal/store"
 )
 
-func (m *model) cursorThread() (review.ThreadView, bool) {
-	p := &m.main
-	if p.cursor < len(p.rows) && p.rows[p.cursor].thread != nil &&
-		(p.rows[p.cursor].kind == rowThread || p.rows[p.cursor].kind == rowReview) {
-		return *p.rows[p.cursor].thread, true
-	}
-	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowReview {
-		m.setError(errors.New("this review has no summary"))
-		return review.ThreadView{}, false
-	}
-	m.setError(errors.New("move the cursor to a thread first"))
-	return review.ThreadView{}, false
-}
-
 func (m *model) lastOwnComment(t review.ThreadView) (store.Comment, bool) {
 	for i := len(t.Comments) - 1; i >= 0; i-- {
 		if t.Comments[i].Author == m.svc.Author() {
@@ -49,11 +35,9 @@ func (m *model) setThreadState(t review.ThreadView, state store.ThreadState) tea
 	}
 }
 
-func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
-	t, ok := m.cursorThread()
-	if !ok {
-		return m, nil
-	}
+// threadActionOn opens the comment box to reply to t, or edit your comment in it: in the
+// overview, the selected comment when t is at the cursor and the comment is yours.
+func (m *model) threadActionOn(t review.ThreadView, atCursor bool, kind composeKind) tea.Cmd {
 	c := composer{kind: kind, threadID: t.ID}
 	initial := ""
 	switch kind {
@@ -62,12 +46,12 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 	case composeEdit:
 		own, ok := m.lastOwnComment(t)
 		// In the overview, edit the selected comment when it is yours.
-		if seg := m.main.itemSegment(); m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
+		if seg := m.main.itemSegment(); atCursor && m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
 			own, ok = t.Comments[seg], true
 		}
 		if !ok {
 			m.setError(errors.New("no comment of yours in this thread"))
-			return m, nil
+			return nil
 		}
 		c.title, c.commentID, initial = fmt.Sprintf("Edit your comment on %s", t.Label()), own.ID, own.Body
 		if t.State == store.ThreadResolved {
@@ -76,31 +60,41 @@ func (m *model) threadAction(kind composeKind) (tea.Model, tea.Cmd) {
 			c.warn = true
 		}
 	}
-	return m, m.openComposer(c, initial)
+	return m.openComposer(c, initial)
 }
 
-// deleteReviewAtCursor deletes the review whose entry the cursor is on, or discards the draft
-// when the cursor is elsewhere, after asking.
-func (m *model) deleteReviewAtCursor() tea.Cmd {
+// deleteOwnComment asks to delete your last comment in t, or in the overview the selected one when
+// it is yours. Deleting a thread's first comment deletes the thread.
+func (m *model) deleteOwnComment(t review.ThreadView, atCursor bool) {
+	c, ok := m.lastOwnComment(t)
+	if seg := m.main.itemSegment(); atCursor && m.main.reader && seg < len(t.Comments) && t.Comments[seg].Author == m.svc.Author() {
+		c, ok = t.Comments[seg], true
+	}
+	if !ok {
+		m.setError(errors.New("no comment of yours in this thread"))
+		return
+	}
+	svc, ctx := m.svc, m.ctx
+	prompt := fmt.Sprintf("Delete your comment on %s? y/n", t.Label())
+	status := "comment deleted"
+	if len(t.Comments) > 0 && t.Comments[0].ID == c.ID {
+		prompt = fmt.Sprintf("Delete thread %s? Its first comment is the thread. y/n", t.Label())
+		status = "thread " + t.Label() + " deleted"
+	}
+	m.ask(prompt, func() tea.Msg {
+		return opMsg{status: status, err: svc.DeleteComment(ctx, c.ID)}
+	})
+}
+
+// deleteReview asks to delete rv, a review of yours that was submitted.
+func (m *model) deleteReview(rv store.Review) tea.Cmd {
 	svc, ctx, change := m.svc, m.ctx, m.data.change
-	p := &m.main
-	if p.cursor < len(p.rows) && p.rows[p.cursor].kind == rowReview && p.rows[p.cursor].review.State == store.ReviewSubmitted {
-		rv := *p.rows[p.cursor].review
-		if rv.Author != svc.Author() {
-			m.setError(fmt.Errorf("review #%d is by %s", rv.Seq, rv.Author.Name))
-			return nil
-		}
-		m.ask(fmt.Sprintf("Delete your review #%d with its summary and threads? y/n", rv.Seq), func() tea.Msg {
-			return opMsg{status: fmt.Sprintf("review #%d deleted", rv.Seq), err: svc.DeleteReview(ctx, change, rv.Seq)}
-		})
+	if rv.Author != svc.Author() {
+		m.setError(fmt.Errorf("review #%d is by %s", rv.Seq, rv.Author.Name))
 		return nil
 	}
-	if _, ok := m.data.draft(); !ok {
-		m.setError(errors.New("no draft review; on a review of yours, D deletes it"))
-		return nil
-	}
-	m.ask("Discard your draft review and all its comments? y/n", func() tea.Msg {
-		return opMsg{status: "draft review discarded", err: svc.Discard(ctx, change)}
+	m.ask(fmt.Sprintf("Delete your review #%d with its summary and threads? y/n", rv.Seq), func() tea.Msg {
+		return opMsg{status: fmt.Sprintf("review #%d deleted", rv.Seq), err: svc.DeleteReview(ctx, change, rv.Seq)}
 	})
 	return nil
 }

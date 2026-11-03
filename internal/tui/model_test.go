@@ -349,6 +349,10 @@ func TestFocusMovesBetweenPanes(t *testing.T) {
 	if e.m.focus != focusMain {
 		t.Errorf("focus after ctrl+j l = %d, want main", e.m.focus)
 	}
+	e.press("h", "right")
+	if e.m.focus != focusMain {
+		t.Errorf("focus after h right = %d, want main", e.m.focus)
+	}
 
 	// In split mode, h goes to the old side before leaving the pane.
 	e.press("s", "l", "h")
@@ -705,6 +709,11 @@ func TestFolds(t *testing.T) {
 		t.Fatalf("no fold between hunks:\n%s", e.screen())
 	}
 	e.cursorTo(func(r row) bool { return r.kind == rowGap && r.gap.index == 1 })
+	// The fold itself cannot be commented on either, rather than commenting on its file.
+	e.press("c")
+	if e.m.mode != modeNormal || !strings.Contains(e.m.status, "cannot be commented") {
+		t.Errorf("c on a fold: mode %d, status %q", e.m.mode, e.m.status)
+	}
 	e.press("z", "o")
 	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowLine || r.line.Text != "line 6" || r.line.OldLine != 6 {
 		t.Fatalf("after zo, cursor on %+v, want line 6", r)
@@ -940,19 +949,19 @@ func TestContextualHelp(t *testing.T) {
 		t.Errorf("overview hints = %q", bar())
 	}
 	e.press("h")
-	if !strings.Contains(bar(), "enter open") || !strings.Contains(bar(), "S submit") {
+	if !strings.Contains(bar(), "enter/l open") || !strings.Contains(bar(), "S submit") {
 		t.Errorf("sidebar hints = %q", bar())
 	}
 	e.press("l")
 	e.openNav("say hello")
 	e.cursorTo(addedLine)
-	if !strings.Contains(bar(), "c comment") || !strings.Contains(bar(), "v select lines") {
+	if !strings.Contains(bar(), "c comment") || !strings.Contains(bar(), "v select") {
 		t.Errorf("diff line hints = %q", bar())
 	}
 
 	e.press("?")
 	help := ansi.Strip(e.m.render())
-	for _, want := range []string{"Diff (here)", "Overview", "Sidebar", "Folds", "zo/zc/za"} {
+	for _, want := range []string{"Diff (here)", "Overview", "Sidebar", "Folds", "zo  open the fold"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("help missing %q:\n%s", want, help)
 		}
@@ -1035,7 +1044,7 @@ func TestCommentFromTheSidebar(t *testing.T) {
 	// Leave the diff cursor on a line, then comment from the commit list.
 	e.cursorTo(addedLine)
 	e.press("h", "ctrl+k")
-	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "C comment on commit") {
+	if !strings.Contains(ansi.Strip(e.m.renderStatus()), "c/C comment") {
 		t.Errorf("commit list hints = %q", ansi.Strip(e.m.renderStatus()))
 	}
 	e.press("C")
@@ -1785,5 +1794,23 @@ func TestAutoAdvanceOnlyMovesForward(t *testing.T) {
 	}
 	if !strings.Contains(e.m.status, "1 earlier file is still unreviewed") {
 		t.Errorf("status = %q", e.m.status)
+	}
+}
+
+// The interdiff takes no comments or marks: its keys say so, rather than passing to the change.
+func TestInterdiffIsReadOnly(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hello, world\")", "}"))
+	e.repo.Commit("greet the world")
+	e.drain(e.m.loadCmd())
+	e.openNav("Since rev 1")
+	e.press("l")
+	e.cursorTo(addedLine)
+	for _, k := range []string{"c", "C", "m"} {
+		e.m.status = ""
+		e.press(k)
+		if e.m.mode != modeNormal || !strings.Contains(e.m.status, "read-only") {
+			t.Errorf("%s in the interdiff: mode %d, status %q", k, e.m.mode, e.m.status)
+		}
 	}
 }
