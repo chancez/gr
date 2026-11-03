@@ -1,6 +1,7 @@
 # 5. Anchor threads to content, not commit identity
 
-Status: accepted
+Status: accepted, amended by [ADR 11](0011-rewritten-commits.md), which follows commits across
+rewrites
 
 ## Context
 
@@ -19,3 +20,4 @@ across rewrites is not tracked.
 - Works for any workflow with no setup.
 - Heavy rebases make most threads outdated. They are listed for re-review.
 - Rewrite tracking, for example via `post-rewrite`, can be added later as an extra matching step.
+  ADR 11 adds it, by author and author date.
