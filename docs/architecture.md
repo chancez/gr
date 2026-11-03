@@ -12,6 +12,7 @@ internal/review/   domain logic: changes, revisions, reviews, threads, re-anchor
 internal/store/    SQLite persistence and migrations
 internal/git/      git subprocess wrapper and unified diff parser
 internal/anchor/   anchor matching against diffs and blobs
+internal/config/   the config file
 ```
 
 Dependencies point down: `cli` and `tui` -> `review` -> `store`, `git`, `anchor`. `cli` and `tui`

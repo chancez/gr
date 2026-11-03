@@ -38,14 +38,11 @@ In priority order. Foundations come first because every feature built before the
 
 ## Config
 
-9. TOML config in `$XDG_CONFIG_HOME/gr/config.toml`.
 10. Remappable keys, from the action registry.
-11. Configurable colors: choose a built-in theme (default or colorblind, today from `GR_THEME`), and
-    override roles, such as danger, or individual elements. gr draws its own diff colors, so git's
+11. Configurable colors: override roles, such as danger, or individual elements, over the built-in
+    theme `ui.theme` picks. gr draws its own diff colors, so git's
     `color.diff.*` do not apply.
 12. Configurable sidebar marks, so icons such as checkboxes can replace the ASCII defaults.
-13. Configurable scrolloff and default sidebar width.
-14. Configurable default for auto-advance after marking reviewed, which `+` toggles per session.
 
 ## Features
 

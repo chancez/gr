@@ -24,7 +24,7 @@ Terms are defined in [GLOSSARY.md](../GLOSSARY.md). Decisions and their reasons 
 - Reviewing uncommitted changes.
 - Syncing or pushing reviews anywhere. GitHub export may come later, so the model stays close to
   GitHub's.
-- Config files and key remapping. Planned, see below.
+- Key remapping and colors in the config file. Planned, see below.
 - Neovim integration and quickfix output.
 - Shallow clones. gr refuses them, because the root commit is not available.
 
@@ -133,7 +133,8 @@ applied locally and exported later.
 
 ## Later
 
-- TOML config in `$XDG_CONFIG_HOME/gr/config.toml`: key bindings, colors, defaults, who may resolve.
+- More in the config file (`$XDG_CONFIG_HOME/gr/config.toml`, which holds the TUI's settings now): key
+  bindings, colors, who may resolve.
 - Neovim plugin, likely backed by a `gr serve --stdio` JSON-RPC mode.
 - GitHub export of changes, reviews, and threads.
 - Reviewing uncommitted changes, by snapshotting the working tree into a commit.

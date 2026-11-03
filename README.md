@@ -61,6 +61,20 @@ and Ghostty, recognized by their answer to XTVERSION or their environment. A fon
 detected, so elsewhere set `GR_GLYPHS=nerd` if your font is a Nerd Font, or `GR_GLYPHS=ascii` for
 plain ASCII.
 
+## Config
+
+Settings live in `$XDG_CONFIG_HOME/gr/config.toml`, by default `~/.config/gr/config.toml`, or
+wherever `GR_CONFIG` points. Every setting is optional; an unknown one is an error.
+
+```toml
+[ui]
+theme = "colorblind"   # or "default"; GR_THEME overrides it
+glyphs = "nerd"        # "ascii", "unicode", or "nerd"; unset picks from the terminal; GR_GLYPHS overrides it
+scrolloff = 5          # lines kept between the cursor and the diff's edges
+sidebar_width = 30     # columns, until the divider is dragged
+auto_advance = true    # move on to the next unreviewed file after marking one reviewed
+```
+
 ## For agents
 
 Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name.

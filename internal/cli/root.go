@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/chancez/gr/internal/config"
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/logging"
 	"github.com/chancez/gr/internal/review"
@@ -71,7 +72,8 @@ reviews: threads on the change, a commit, a file, or lines, batched into a revie
 Run without a command to review in the TUI. A target is a branch (default: the current one), a
 range A..B, or a commit. GR_THEME=colorblind uses blue and orange in place of green and red.
 GR_GLYPHS=ascii, unicode, or nerd sets the symbols drawn with; by default Nerd Font icons are used
-in terminals that bundle them, such as kitty, WezTerm, and Ghostty, and Unicode elsewhere.
+in terminals that bundle them, such as kitty, WezTerm, and Ghostty, and Unicode elsewhere. Both can
+also be set in the config file, $XDG_CONFIG_HOME/gr/config.toml or GR_CONFIG.
 
 Logs go to $XDG_STATE_HOME/gr/gr.log, by default ~/.local/state/gr/gr.log.
 
@@ -89,7 +91,12 @@ commands only find one, and take a change number such as 4 directly.`,
 		if err != nil {
 			return err
 		}
-		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME"), Glyphs: os.Getenv("GR_GLYPHS"), Notice: a.notice})
+		opts, err := tuiOptions()
+		if err != nil {
+			return err
+		}
+		opts.Notice = a.notice
+		return tui.Run(cmd.Context(), svc, change, opts)
 	}
 	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)
@@ -337,4 +344,30 @@ func plural(n int, one, many string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// tuiOptions are the TUI's settings: the config file's, under GR_THEME and GR_GLYPHS.
+func tuiOptions() (tui.Options, error) {
+	path, err := config.DefaultPath()
+	if err != nil {
+		return tui.Options{}, err
+	}
+	c, err := config.Load(path)
+	if err != nil {
+		return tui.Options{}, err
+	}
+	opts := tui.Options{
+		Theme:        c.UI.Theme,
+		Glyphs:       c.UI.Glyphs,
+		Scrolloff:    c.UI.Scrolloff,
+		SidebarWidth: c.UI.SidebarWidth,
+		AutoAdvance:  c.UI.AutoAdvance,
+	}
+	if v := os.Getenv("GR_THEME"); v != "" {
+		opts.Theme = v
+	}
+	if v := os.Getenv("GR_GLYPHS"); v != "" {
+		opts.Glyphs = v
+	}
+	return opts, nil
 }

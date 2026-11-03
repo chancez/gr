@@ -36,6 +36,12 @@ type Options struct {
 	Notice string
 	// Glyphs is "ascii", "unicode", or "nerd". Empty picks them from what the terminal is.
 	Glyphs string
+	// Scrolloff is the lines kept between the cursor and the main pane's edges. Nil is the default.
+	Scrolloff *int
+	// SidebarWidth is the sidebar's width until it is dragged. Zero sizes it to the terminal.
+	SidebarWidth int
+	// AutoAdvance starts with moving on to the next unreviewed file after marking one reviewed.
+	AutoAdvance bool
 }
 
 // Run opens the TUI on a change.
@@ -58,6 +64,10 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 		m.glyphs = look.GlyphsFromEnv()
 	}
 	m.setTheme(true)
+	if opts.Scrolloff != nil {
+		m.main.scrolloff = *opts.Scrolloff
+	}
+	m.navWidth, m.autoAdvance = opts.SidebarWidth, opts.AutoAdvance
 	if opts.Notice != "" {
 		m.setStatus("%s", opts.Notice)
 	}
@@ -100,7 +110,7 @@ type model struct {
 	// view's files.
 	viewsNav navList
 	filesNav navList
-	// navWidth is the sidebar width once dragged, or 0 for the default.
+	// navWidth is the sidebar width once dragged or set in the config, or 0 for the default.
 	navWidth int
 	dragging bool
 	// search is the last search pattern, and searchInput the prompt while typing one. searchPos

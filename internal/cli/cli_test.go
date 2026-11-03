@@ -12,6 +12,7 @@ import (
 	"github.com/google/go-cmp/cmp/cmpopts"
 
 	"github.com/chancez/gr/internal/gittest"
+	"github.com/chancez/gr/internal/tui"
 )
 
 type cliEnv struct {
@@ -394,5 +395,24 @@ func TestMarkAndUnmark(t *testing.T) {
 		if err := e.runErr(agent, strings.Fields(args)...); !strings.Contains(err.Error(), want) {
 			t.Errorf("gr %s: %v, want %q", args, err, want)
 		}
+	}
+}
+
+// The TUI's settings come from the config file, with GR_THEME and GR_GLYPHS over it.
+func TestTUIOptions(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"colorblind\"\nglyphs = \"ascii\"\nscrolloff = 2\nsidebar_width = 28\nauto_advance = true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GR_CONFIG", path)
+	t.Setenv("GR_THEME", "")
+	t.Setenv("GR_GLYPHS", "nerd")
+	got, err := tuiOptions()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := tui.Options{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(2), SidebarWidth: 28, AutoAdvance: true}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("tuiOptions (-want +got):\n%s", diff)
 	}
 }
