@@ -35,6 +35,8 @@ type app struct {
 	debug  bool
 	// logPath overrides the log file's location, for tests.
 	logPath string
+	// getenv reads the environment, which tests replace.
+	getenv  func(string) string
 	logFile io.Closer
 
 	store *store.Store
@@ -45,7 +47,7 @@ type app struct {
 
 // Execute runs gr with os.Args and returns the exit code.
 func Execute(ctx context.Context) int {
-	a := &app{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr}
+	a := &app{stdin: os.Stdin, stdout: os.Stdout, stderr: os.Stderr, getenv: os.Getenv}
 	cmd := a.rootCommand()
 	cmd.SetArgs(os.Args[1:])
 	err := cmd.ExecuteContext(ctx)
@@ -107,13 +109,16 @@ commands only find one, and take a change number such as 4 directly.`,
 	flags.StringVarP(&a.dir, "repo", "C", ".", "run as if started in this directory")
 	flags.BoolVar(&a.json, "json", false, "print JSON")
 	flags.BoolVar(&a.debug, "debug", false, "log at debug level, as GR_LOG=debug does")
-	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error { return a.setupLogging() }
+	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		if err := a.setupLogging(); err != nil {
+			return err
+		}
+		return a.checkAgentAuthor(cmd)
+	}
 
-	root.AddCommand(
-		a.reviewCommand(),
-		a.changeCommand(),
-		a.threadsCommand(),
-		a.threadCommand(),
+	root.AddCommand(a.reviewCommand(), a.changeCommand(), a.threadsCommand(), a.threadCommand())
+	// What these write is the author's: comments, thread states, marks, and reviews.
+	for _, cmd := range []*cobra.Command{
 		a.commentCommand(),
 		a.replyCommand(),
 		a.stateCommand("resolve", store.ThreadResolved, "Mark a thread resolved"),
@@ -125,7 +130,10 @@ commands only find one, and take a change number such as 4 directly.`,
 		a.deleteCommand(),
 		a.submitCommand(),
 		a.discardCommand(),
-	)
+	} {
+		cmd.Annotations = map[string]string{writesAsAuthor: "true"}
+		root.AddCommand(cmd)
+	}
 	return root
 }
 
@@ -193,6 +201,32 @@ func (a *app) service(ctx context.Context) (*review.Service, error) {
 		return nil, err
 	}
 	return a.svc, nil
+}
+
+// writesAsAuthor annotates a command that writes as its author.
+const writesAsAuthor = "gr/writes-as-author"
+
+// agentEnv are environment variables set by coding agents for the commands they run.
+var agentEnv = []string{"CLAUDECODE"}
+
+// checkAgentAuthor refuses a command that writes as its author when an agent runs it with no author
+// given: gr would write as the git identity, which is the human's, and the agent's comments would
+// read as theirs. Reading is left alone.
+func (a *app) checkAgentAuthor(cmd *cobra.Command) error {
+	if a.author != "" || cmd.Annotations[writesAsAuthor] == "" {
+		return nil
+	}
+	getenv := a.getenv
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	for _, v := range agentEnv {
+		if getenv(v) != "" {
+			return fmt.Errorf("an agent is running gr (%s is set), and gr %s would write as your git identity; "+
+				"set GR_AUTHOR to the agent's name, or pass --author with whose it is", v, cmd.Name())
+		}
+	}
+	return nil
 }
 
 func (a *app) resolveAuthor(ctx context.Context, g *git.Repo) (store.Author, error) {

@@ -81,7 +81,8 @@ vim = true             # vim's modes in the comment box: esc to normal mode, esc
 
 ## For agents
 
-Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name.
+Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name. Under an agent, as
+Claude Code, gr refuses to write as your git identity without it.
 
 ```
 gr threads --state open --json             # what the reviewer asked for, with the code each is on

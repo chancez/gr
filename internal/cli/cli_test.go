@@ -416,3 +416,34 @@ func TestTUIOptions(t *testing.T) {
 		t.Errorf("tuiOptions (-want +got):\n%s", diff)
 	}
 }
+
+// Under an agent, a command that writes as its author needs one given, rather than writing as the
+// human's git identity; reading needs none.
+func TestAgentsNeedAnAuthor(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Write("f.txt", "one\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("f.txt", "two\n")
+	e.repo.Commit("change")
+	// The human's identity, which an agent with no author would write as.
+	e.repo.Git("config", "user.name", "Human")
+	e.repo.Git("config", "user.email", "h@example.com")
+	run := func(args ...string) error {
+		var stdout, stderr bytes.Buffer
+		a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr, logPath: e.log,
+			getenv: func(k string) string { return map[string]string{"CLAUDECODE": "1"}[k] }}
+		cmd := a.rootCommand()
+		cmd.SetArgs(append([]string{"--db", e.db, "-C", e.repo.Dir}, args...))
+		return cmd.ExecuteContext(t.Context())
+	}
+	if err := run("comment", "-m", "as whom?"); err == nil || !strings.Contains(err.Error(), "set GR_AUTHOR") {
+		t.Errorf("comment under an agent with no author: %v, want it refused", err)
+	}
+	if err := run("threads"); err != nil {
+		t.Errorf("threads under an agent with no author: %v, want it read", err)
+	}
+	if err := run("--author", "Claude", "comment", "-m", "as Claude"); err != nil {
+		t.Errorf("comment under an agent with an author: %v", err)
+	}
+}
