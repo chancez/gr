@@ -250,3 +250,32 @@ func TestThreadsFollowFixups(t *testing.T) {
 		t.Errorf("threads after the fixup (-want +got):\n%s", diff)
 	}
 }
+
+// A thread started while a new revision is recorded is placed again on the new one, rather than
+// saved on the old one, which the new revision's re-anchoring never saw it on.
+func TestThreadStartedDuringARevision(t *testing.T) {
+	e, h, change := rebasedChange(t)
+	ctx := t.Context()
+	other := e.service(human)
+	once := false
+	h.SetBeforeThreadWrite(func() {
+		if once {
+			return
+		}
+		once = true
+		if _, _, err := other.Sync(ctx, change); err != nil {
+			t.Fatal(err)
+		}
+	})
+	v, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeDiff, Path: "a.go", StartLine: 5, Body: "late"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	latest, err := h.Store().LatestRevision(ctx, change.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !once || latest.Seq != 2 || v.Location.RevisionID != latest.ID || v.Location.Lines[0] != "feature 3" {
+		t.Errorf("thread placed on revision %s at %+v; want revision 2's line 5, feature 3", v.Location.RevisionID, v.Location.Anchor)
+	}
+}

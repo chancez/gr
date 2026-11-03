@@ -28,6 +28,8 @@ type Service struct {
 	diffs Diffs
 	// beforeReanchorWrite, if set, runs between re-anchoring's git work and its write transaction.
 	beforeReanchorWrite func()
+	// beforeThreadWrite, if set, runs between placing a new thread and its write transaction.
+	beforeThreadWrite func()
 }
 
 // Open identifies the repository and records where it was last seen.

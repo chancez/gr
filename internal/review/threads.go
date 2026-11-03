@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -40,6 +41,20 @@ func (s *Service) StartThread(ctx context.Context, change store.Change, nt NewTh
 	if strings.TrimSpace(nt.Body) == "" {
 		return ThreadView{}, errors.New("comment body is empty")
 	}
+	for range syncAttempts {
+		view, err := s.startThread(ctx, change, nt)
+		if !errors.Is(err, errStale) {
+			return view, err
+		}
+		slog.Info("a new revision was recorded while placing a thread, placing it again", "change", change.Seq)
+	}
+	return ThreadView{}, fmt.Errorf("start thread on change #%d: %w", change.Seq, errStale)
+}
+
+// startThread places a thread on the latest revision outside the write transaction, as it runs git,
+// and saves it there. It returns errStale if a newer revision was recorded in between, as the
+// thread would stay on the old one, missed by its re-anchoring, until the next.
+func (s *Service) startThread(ctx context.Context, change store.Change, nt NewThread) (ThreadView, error) {
 	rev, err := s.store.LatestRevision(ctx, change.ID)
 	if err != nil {
 		return ThreadView{}, err
@@ -48,8 +63,18 @@ func (s *Service) StartThread(ctx context.Context, change store.Change, nt NewTh
 	if err != nil {
 		return ThreadView{}, err
 	}
+	if s.beforeThreadWrite != nil {
+		s.beforeThreadWrite()
+	}
 	var view ThreadView
 	err = s.store.Tx(ctx, func(tx *store.Tx) error {
+		latest, err := tx.LatestRevision(ctx, change.ID)
+		if err != nil {
+			return err
+		}
+		if latest.ID != rev.ID {
+			return errStale
+		}
 		review, err := s.draft(ctx, tx, change, rev)
 		if err != nil {
 			return err
