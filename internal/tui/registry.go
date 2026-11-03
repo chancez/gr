@@ -418,6 +418,9 @@ var (
 	actNextThreadInOverview = jumpToThread("next thread", 1)
 	actPrevThreadInOverview = jumpToThread("previous thread", -1)
 
+	actNextUnresolved = paneAction("next unresolved thread", func(m *model) tea.Cmd { m.stepUnresolved(1); return nil })
+	actPrevUnresolved = paneAction("previous unresolved thread", func(m *model) tea.Cmd { m.stepUnresolved(-1); return nil })
+
 	actSelectLines = paneAction("select lines", func(m *model) tea.Cmd { m.toggleSelection(); return nil })
 	actFoldPrefix  = paneAction("folds", func(m *model) tea.Cmd {
 		m.pending = "z"
@@ -572,9 +575,9 @@ func init() {
 	sidebarPaneKind = interact.NewKind(func(paneSubject) string { return "Sidebar" }, sidebarMoves.actions()...)
 	diffPaneKind = interact.NewKind(func(paneSubject) string { return "Diff" }, append(diffMovesOf.actions(),
 		actMoveLeft, actMoveRight, actNextFile, actPrevFile, actNextHunk, actPrevHunk, actNextChange, actPrevChange,
-		actNextThreadInDiff, actPrevThreadInDiff, actSelectLines, actFoldPrefix)...)
+		actNextThreadInDiff, actPrevThreadInDiff, actNextUnresolved, actPrevUnresolved, actSelectLines, actFoldPrefix)...)
 	overviewPaneKind = interact.NewKind(func(paneSubject) string { return "Overview" }, append(readerMovesOf.actions(),
-		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actFoldPrefix)...)
+		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actNextUnresolved, actPrevUnresolved, actFoldPrefix)...)
 	appKind = interact.NewKind(func(appSubject) string { return "gr" },
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
 		actAutoAdvance, actSearch, actPickBase, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
@@ -652,6 +655,8 @@ func init() {
 		{actPrevChange, "", "", []string{"("}},
 		{actNextThreadInDiff, "t/T", "next/prev thread", []string{"t"}},
 		{actPrevThreadInDiff, "", "", []string{"T"}},
+		{actNextUnresolved, "i/I", "next/prev unresolved thread, across commits", []string{"i"}},
+		{actPrevUnresolved, "", "", []string{"I"}},
 		{actSelectLines, "v", "select lines", []string{"v", "V"}},
 		{actFoldPrefix, "z", "folds, then o c a O C R M", []string{"z"}},
 	} {
@@ -660,6 +665,8 @@ func init() {
 	overviewPaneKind.Bind(actToSidebar, "h", "sidebar", "h", "left")
 	overviewPaneKind.Bind(actNextThreadInOverview, "t/T", "next/prev thread", "t")
 	overviewPaneKind.Bind(actPrevThreadInOverview, "", "", "T")
+	overviewPaneKind.Bind(actNextUnresolved, "i/I", "next/prev unresolved thread", "i")
+	overviewPaneKind.Bind(actPrevUnresolved, "", "", "I")
 	overviewPaneKind.Bind(actFoldPrefix, "z", "folds, then o c a O C R M", "z")
 
 	for _, b := range []struct {

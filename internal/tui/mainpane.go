@@ -107,7 +107,7 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 		// Where the thread shows in the whole diff is known once the diff loads.
 		for i, v := range m.views {
 			if v.kind == viewDiff {
-				m.pendingThread = &t
+				m.pendingThread, m.pendingInDiff = &t, true
 				m.viewsNav.pos = i
 				m.openView()
 				return
@@ -137,6 +137,11 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 	m.viewsNav.pos = target
 	m.openView()
 	v := m.views[m.current]
+	if m.needsLoad(v) && !m.syncLoads {
+		// Its rows are built once its diff arrives.
+		m.pendingThread, m.pendingInDiff = &t, inDiff
+		return
+	}
 	for i, r := range m.main.rows {
 		if r.kind == rowThread && r.thread.ID == t.ID {
 			m.main.jump(i)
@@ -169,6 +174,65 @@ func (m *model) stepUnreviewed(dir int) {
 		}
 		m.setStatus("no unreviewed commit %s this one", way)
 	}
+}
+
+// stepUnresolved moves to the next or previous unresolved thread: further on in the view, or else
+// the nearest in the next or previous commit that has one, as a jump ctrl+o returns from.
+func (m *model) stepUnresolved(dir int) {
+	way := "after"
+	if dir < 0 {
+		way = "before"
+	}
+	before := m.main.cursor
+	m.jump(func() { m.jumpTo(dir, func(r row) bool { return r.kind == rowThread && unresolved(r.thread) }) })
+	if m.main.cursor != before {
+		m.syncNav()
+		return
+	}
+	if m.views[m.current].kind == viewCommit {
+		for i := m.current + dir; i >= 0 && i < len(m.views); i += dir {
+			if t, ok := m.nearestUnresolved(m.views[i], dir); ok && m.views[i].kind == viewCommit {
+				m.jump(func() { m.openThread(t, false) })
+				return
+			}
+		}
+	}
+	m.setStatus("no unresolved thread %s this one", way)
+}
+
+func unresolved(t *review.ThreadView) bool {
+	return t != nil && !t.Summary && t.State != store.ThreadResolved
+}
+
+// nearestUnresolved is v's first unresolved thread, in file and line order, or its last when dir
+// is back.
+func (m *model) nearestUnresolved(v view, dir int) (review.ThreadView, bool) {
+	file := map[string]int{}
+	for i, f := range v.files {
+		file[f.Path()] = i
+	}
+	var best *review.ThreadView
+	var bestAt [2]int
+	for i := range m.data.threads {
+		t := &m.data.threads[i]
+		loc, ok := m.data.locationIn(t, v)
+		if !ok || !unresolved(t) {
+			continue
+		}
+		f, inFile := file[loc.Path]
+		if !inFile {
+			f = -1
+		}
+		at := [2]int{f, loc.StartLine}
+		later := at[0] > bestAt[0] || at[0] == bestAt[0] && at[1] > bestAt[1]
+		if best == nil || later == (dir < 0) {
+			best, bestAt = t, at
+		}
+	}
+	if best == nil {
+		return review.ThreadView{}, false
+	}
+	return *best, true
 }
 
 // stepCommitWhere opens the next or previous commit that match accepts.

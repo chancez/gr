@@ -1868,3 +1868,58 @@ func TestOverviewFoldsThreads(t *testing.T) {
 		t.Errorf("after zO on review 1: %v, want every thread open", got)
 	}
 }
+
+// i and I go to the next and previous unresolved thread, in this commit or else the nearest commit
+// that has one, passing over resolved threads.
+func TestStepUnresolved(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	first := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hello, world\")", "}"))
+	second := e.repo.Commit("greet the world")
+	if _, _, err := e.svc.Sync(ctx, e.chg); err != nil {
+		t.Fatal(err)
+	}
+	start := func(sha, body string) review.ThreadView {
+		v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeCommit, Commit: sha,
+			Path: "main.go", StartLine: 4, Body: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	a := start(first, "in the first commit")
+	resolved := start(second, "resolved in the second")
+	b := start(second, "open in the second")
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.svc.SetThreadState(ctx, resolved.ID, store.ThreadResolved); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+	e.press("l", "g")
+	at := func() string {
+		if r := e.m.main.rows[e.m.main.cursor]; r.kind == rowThread {
+			return r.thread.ID
+		}
+		return ""
+	}
+	e.press("i")
+	if at() != a.ID {
+		t.Fatalf("i from the top of the first commit: cursor on %q, want its thread", at())
+	}
+	e.press("i")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit || v.commit.Subject() != "greet the world" || at() != b.ID {
+		t.Fatalf("i past the first commit's last thread: view %q, cursor on %q, want the second commit's open thread", v.commit.Subject(), at())
+	}
+	e.press("i")
+	if at() != b.ID || !strings.Contains(e.m.status, "no unresolved thread after") {
+		t.Errorf("i on the last unresolved thread: cursor on %q, status %q", at(), e.m.status)
+	}
+	e.press("I")
+	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" || at() != a.ID {
+		t.Errorf("I back: view %q, cursor on %q, want the first commit's thread", v.commit.Subject(), at())
+	}
+}

@@ -122,10 +122,11 @@ type model struct {
 	draggingSplit bool
 	// pendingLoads are views whose diffs to load once the current message is handled, and
 	// syncLoads loads them at once instead, for tests. pendingThread and pendingFile are where to go
-	// once the current view's diff arrives.
+	// once the current view's diff arrives, pendingThread in the whole diff when pendingInDiff.
 	pendingLoads  []int
 	syncLoads     bool
 	pendingThread *review.ThreadView
+	pendingInDiff bool
 	pendingFile   string
 	// jumps is the jump list and jumpAt the place in it, as in vim. restoring is set while going to
 	// a place in it, so that does not record a jump of its own.

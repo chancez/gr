@@ -84,7 +84,7 @@ func (m *model) applyView(msg viewLoadedMsg) {
 		}
 		if t := m.pendingThread; t != nil {
 			m.pendingThread = nil
-			m.openThread(*t, true)
+			m.openThread(*t, m.pendingInDiff)
 		}
 	}
 }
