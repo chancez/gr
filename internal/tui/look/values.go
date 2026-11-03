@@ -316,18 +316,34 @@ func Icon(g Glyph) Span {
 // key, so the diff stays the thing to read.
 
 // Link is a quiet control: its icon and label, and its key when lit. Unlit, the key's room is kept
-// blank, so lighting it, as the mouse reaches it, moves nothing after it.
+// as fill, so lighting it, as the mouse reaches it, moves nothing after it.
 func Link(icon Glyph, label, key string, lit bool) []Span {
 	if !lit {
 		out := []Span{glyph(elMuted, icon, true), sp(elMuted, label)}
 		if key != "" {
-			out = append(out, sp(elDefault, strings.Repeat(" ", 1+ansi.StringWidth(key))))
+			out = append(out, sp(elDefault, " "), Fill(ansi.StringWidth(key)+1))
 		}
 		return out
 	}
 	out := []Span{glyph(elKey, icon, true), sp(elText, label).With(Underlined)}
 	if key != "" {
-		out = append(out, sp(elDefault, " "), sp(elMuted, key))
+		out = append(out, sp(elDefault, " "), sp(elMuted, key), sp(elDefault, " "))
+	}
+	return out
+}
+
+// Fill is n cells of room between or after controls.
+func Fill(n int) Span { return sp(elFill, strings.Repeat(" ", n)) }
+
+// OnBorder draws spans in a border, active or not: their fill becomes the border's line, so the
+// controls in a box's border sit on it with nothing but the line between them.
+func OnBorder(active bool, spans ...Span) []Span {
+	out := make([]Span, len(spans))
+	for i, x := range spans {
+		if x.el == elFill {
+			x = Border(strings.Repeat("-", len(x.text)), active)
+		}
+		out[i] = x
 	}
 	return out
 }

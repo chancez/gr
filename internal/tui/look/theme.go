@@ -128,6 +128,9 @@ const (
 	elWarning
 	// elButton is a control's label.
 	elButton
+	// elFill is blank room between and after controls, which a border they sit in fills with its
+	// line.
+	elFill
 	numElements
 )
 
@@ -163,6 +166,7 @@ var elementNames = [numElements]string{
 	elMode:                  "mode",
 	elWarning:               "warning",
 	elButton:                "button",
+	elFill:                  "fill",
 }
 
 // Prop is an option a place asks an element for. The theme defines what each does.
@@ -280,6 +284,7 @@ func New(isDark bool, name string) *Theme {
 		elMode:                  fg(p.attention),
 		elWarning:               bold(p.attention),
 		elButton:                bold(p.text),
+		elFill:                  lipgloss.NewStyle(),
 	}
 	t.surfaces = [numSurfaces]surfaceStyle{
 		Plain:         {},

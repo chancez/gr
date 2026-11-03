@@ -439,13 +439,16 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 		lines = append(lines, "", r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
+	// Room between the last comment and the controls in the bottom border.
+	lines = append(lines, "")
 	out := strings.Split(r.th.Box(boxWidth, state.cursor).Render(strings.Join(lines, "\n")), "\n")
-	// The thread's controls sit in its bottom border, under its comments, where they take no line.
+	// The thread's controls sit in its bottom border, under its comments, where they take no line;
+	// the last one's room for its key runs into the border's line.
 	if n := len(out); len(state.controls) > 0 && n > 0 {
-		controls := r.th.Render(look.Plain, state.controls...)
+		controls := r.th.Render(look.Plain, look.OnBorder(state.cursor, state.controls...)...)
 		if dashes := boxWidth - 5 - ansi.StringWidth(controls); dashes > 0 {
 			out[n-1] = r.th.Render(look.Plain, look.Border("+- ", state.cursor)) + controls +
-				r.th.Render(look.Plain, look.Border(" "+strings.Repeat("-", dashes)+"+", state.cursor))
+				r.th.Render(look.Plain, look.Border(strings.Repeat("-", dashes+1)+"+", state.cursor))
 		}
 	}
 	for i := range out {

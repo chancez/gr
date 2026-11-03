@@ -175,12 +175,12 @@ func (m *model) controls(where string, md mode, t interact.Target[*model], cs ..
 			continue
 		}
 		if len(out) > 0 {
-			gap := " "
+			gap := look.Default(" ")
 			if c.look >= lookLink {
 				// Quiet controls have no chip to set them apart.
-				gap = "  "
+				out = append(out, look.Fill(2))
 			}
-			out = append(out, look.Default(gap))
+			out = append(out, gap)
 		}
 		if c.off {
 			out = append(out, look.DisabledButton(c.icon, c.label, key)...)
