@@ -336,10 +336,9 @@ func (l *navList) show(v, f int) bool {
 const sidebarGap = 1
 
 func (m *model) sidebarHeights(height int) (views, files int) {
-	if len(m.filesNav.items) == 0 {
-		return min(len(m.viewsNav.items)+1, height), 0
-	}
-	views = min(len(m.viewsNav.items)+1, max(4, height*2/5))
+	// Half each by default, and the file list there even when the view has no files, so the divider
+	// stays put as views change.
+	views = max(height/2, 2)
 	if m.viewsHeight > 0 {
 		// Dragged: the commit list keeps the height it was given, leaving the files a header and a row.
 		views = min(m.viewsHeight, max(height-sidebarGap-2, 2))
@@ -357,7 +356,11 @@ func (m *model) renderSidebar(width, height int) []string {
 	out := m.viewsNav.render(th, title, width, vh, m.focus == focusViews)
 	if fh > 0 {
 		out = append(out, th.Render(look.Plain, look.Border(strings.Repeat("-", width), false)))
-		out = append(out, m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)...)
+		files := m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)
+		if len(m.filesNav.items) == 0 && len(files) > 1 {
+			files[1] = th.DrawCut(look.Plain, width, look.Muted(" No files here"))
+		}
+		out = append(out, files...)
 	}
 	return out
 }

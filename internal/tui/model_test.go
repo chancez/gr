@@ -2021,3 +2021,25 @@ func TestStickyFileHeader(t *testing.T) {
 		t.Errorf("at the top, the header shows %d times in the diff:\n%s", shown, e.screen())
 	}
 }
+
+// The sidebar is split in half between the views and the files, the file list there even on the
+// overview, so the divider stays put as views change.
+func TestSidebarSplitStaysPut(t *testing.T) {
+	e := goldenEnv(t)
+	divider := func() int {
+		t.Helper()
+		for y, line := range strings.Split(e.screen(), "\n") {
+			if strings.HasPrefix(line, "-----") {
+				return y
+			}
+		}
+		t.Fatalf("no divider:\n%s", e.screen())
+		return 0
+	}
+	e.openNav("Overview")
+	on := divider()
+	e.openNav("say hello")
+	if got := divider(); got != on || on != 19 {
+		t.Errorf("divider on line %d on the overview and %d on a commit, want 19 on both", on, got)
+	}
+}
