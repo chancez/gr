@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"errors"
+	"fmt"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -191,7 +191,7 @@ func (m *model) toggleView(kind viewKind) {
 // is now, so a fix made after the comment shows beside it; it falls back to the thread's commit.
 func (m *model) openThread(t review.ThreadView, inDiff bool) {
 	if t.Outdated {
-		m.setError(errors.New("the code this thread is on changed; it is shown as it was"))
+		m.openWhereItWas(t, inDiff)
 		return
 	}
 	if inDiff && t.Location.Scope == store.ScopeCommit && t.Location.StartLine > 0 && !m.data.loaded[view{kind: viewDiff}.key()] && !m.syncLoads {
@@ -222,12 +222,19 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 		}
 	}
 	if target < 0 {
-		m.setError(errors.New("this thread is on the whole change"))
+		if t.Location.Scope == store.ScopeChange {
+			m.setError(fmt.Errorf("thread %s is on the whole change", t.Label()))
+		} else {
+			m.setError(fmt.Errorf("thread %s is in no commit or diff of this revision", t.Label()))
+		}
 		return
 	}
 	m.viewsNav.show(target, -1)
 	m.openView()
 	v := m.views[m.current]
+	if inDiff && v.kind == viewCommit {
+		m.setStatus("thread %s is shown in its commit: a later commit changes its lines", t.Label())
+	}
 	if m.needsLoad(v) && !m.syncLoads {
 		// Its rows are built once its diff arrives.
 		m.pendingThread, m.pendingInDiff = &t, inDiff
@@ -248,6 +255,81 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 			return
 		}
 	}
+	m.setError(fmt.Errorf("thread %s is not shown in %s", t.Label(), m.viewLabel(v)))
+}
+
+// openWhereItWas shows where an outdated thread's lines were: in its file in the whole diff, or
+// with !inDiff in its commit while the revision still has it, at the line nearest where the thread
+// was, and says so. The thread itself is shown as it was only in the overview.
+func (m *model) openWhereItWas(t review.ThreadView, inDiff bool) {
+	loc := t.Location
+	if loc.Path == "" {
+		m.setError(fmt.Errorf("thread %s is outdated: what it is on changed", t.Label()))
+		return
+	}
+	target := -1
+	for i, v := range m.views {
+		switch {
+		case v.kind == viewDiff && target < 0, v.kind == viewDiff && inDiff:
+			target = i
+		case v.kind == viewCommit && !inDiff && v.commit.SHA == loc.Commit:
+			target = i
+		}
+	}
+	if target < 0 {
+		m.setError(fmt.Errorf("thread %s is outdated, and there is no diff to show where it was", t.Label()))
+		return
+	}
+	m.viewsNav.show(target, -1)
+	m.openView()
+	v := m.views[m.current]
+	if m.needsLoad(v) {
+		if !m.syncLoads {
+			m.pendingThread, m.pendingInDiff = &t, inDiff
+			return
+		}
+		m.data.apply(loadView(m.ctx, m.svc, m.data, v))
+		m.views = buildViews(m.data)
+		m.rebuildMain()
+		v = m.views[m.current]
+	}
+	file := -1
+	for f, d := range v.files {
+		if d.NewPath == loc.Path || d.OldPath == loc.Path {
+			file = f
+		}
+	}
+	if file < 0 {
+		m.setError(fmt.Errorf("thread %s is outdated, and %s is no longer in %s", t.Label(), loc.Path, m.viewLabel(v)))
+		return
+	}
+	if m.collapsed(v, file) {
+		m.toggleCollapsed(v, file)
+	}
+	at, best := -1, 0
+	for i, r := range m.main.rows {
+		if r.file != file {
+			continue
+		}
+		if r.kind == rowFile && at < 0 {
+			at = i
+		}
+		if n := lineOn(r, sideOr(loc.Side)); r.kind == rowLine && n > 0 {
+			if d := abs(n - loc.StartLine); at < 0 || m.main.rows[at].kind != rowLine || d < best {
+				at, best = i, d
+			}
+		}
+	}
+	m.main.jump(at)
+	m.syncNav()
+	m.setStatus("thread %s is outdated: its lines changed, and this is about where they were", t.Label())
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // stepCommit opens the next or previous commit, starting from the first or last when the current

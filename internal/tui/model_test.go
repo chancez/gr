@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/gittest"
 	"github.com/chancez/gr/internal/review"
@@ -2046,5 +2047,67 @@ func TestSidebarSplitStaysPut(t *testing.T) {
 	e.openNav("say hello")
 	if got := divider(); got != on || on != 19 {
 		t.Errorf("divider on line %d on the overview and %d on a commit, want 19 on both", on, got)
+	}
+}
+
+// o and O never end silently. A thread whose lines change in a later commit opens in its commit,
+// saying so; an outdated thread opens its file at about where its lines were, saying so; and one
+// whose file is gone says that.
+func TestOpenThreadsThatMoved(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("gone.txt", gittest.Lines("one", "two", "three"))
+	e.repo.Commit("add gone")
+	sha := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	e.repo.Git("rm", "-q", "gone.txt")
+	e.repo.Commit("remove gone")
+	lines := gittest.Numbered(12)
+	e.repo.Write("notes.txt", gittest.Lines(lines...))
+	e.repo.Commit("change notes")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	later, err := e.svc.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeCommit, Commit: sha, Path: "gone.txt", StartLine: 2, Body: "two?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	onDiff, err := e.svc.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeDiff, Path: "notes.txt", StartLine: 6, Body: "still six?"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	open := func(id, key string) {
+		t.Helper()
+		e.drain(e.m.loadCmd())
+		e.openNav("Overview")
+		e.pressRun("l")
+		e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == id })
+		e.m.status = ""
+		e.press(key)
+	}
+	open(later.ID, "o")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit || !strings.Contains(e.m.status, "a later commit changes its lines") {
+		t.Errorf("o on a thread changed later opened %q, status %q", e.m.viewLabel(v), e.m.status)
+	}
+
+	// A new revision rewrites the line the diff's thread is on, which makes it outdated.
+	lines[5] = "line six, rewritten entirely"
+	e.repo.Write("notes.txt", gittest.Lines(lines...))
+	e.repo.Git("commit", "-q", "--amend", "-am", "change notes")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	open(onDiff.ID, "o")
+	r := e.m.main.rows[e.m.main.cursor]
+	if v := e.m.views[e.m.current]; v.kind != viewDiff || r.kind != rowLine || lineOn(r, anchor.SideNew) != 6 || !strings.Contains(e.m.status, "outdated") {
+		t.Errorf("o on an outdated thread opened %q at %+v, status %q; want line 6 of the whole diff", e.m.viewLabel(v), r, e.m.status)
+	}
+
+	e.repo.Git("rm", "-q", "notes.txt")
+	e.repo.Git("commit", "-q", "--amend", "--allow-empty", "-m", "change notes")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	open(onDiff.ID, "o")
+	if !e.m.statusErr || !strings.Contains(e.m.status, "notes.txt is no longer in") {
+		t.Errorf("o on a thread whose file is gone: status %q", e.m.status)
 	}
 }
