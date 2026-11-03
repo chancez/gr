@@ -382,15 +382,9 @@ func (m *model) mainHeader(width int) string {
 			}
 		}
 		label = fmt.Sprintf(" Commit %d of %d ", at, of)
-		// Prev and Next, where there is a commit that way, as GitHub's commit view has.
-		var steps []control
-		if at > 1 {
-			steps = append(steps, prevCommit)
-		}
-		if at < of {
-			steps = append(steps, nextCommit)
-		}
-		controls = m.controls("title", modeNormal, theApp.Target(appSubject{}), steps...)
+		// Prev and Next, as GitHub's commit view has, greyed where there is no commit that way.
+		controls = m.controls("title", modeNormal, theApp.Target(appSubject{}),
+			prevCommit.disabledIf(at <= 1), nextCommit.disabledIf(at >= of))
 	case v.kind != viewOverview && len(v.files) > 0:
 		size = filesSize(v.files)
 	}
@@ -413,18 +407,45 @@ func (m *model) mainHeader(width int) string {
 		}
 	}
 	th, focused := m.r.th, m.focus == focusMain
+	// The files' Prev and Next go before the file's name, whose length changes as the cursor moves.
+	if prev, next, ok := m.fileSteps(); ok {
+		steps := m.controls("title", modeNormal, theDiffPane.Target(paneSubject{}),
+			prevFile.disabledIf(!prev), nextFile.disabledIf(!next))
+		controls = append(append(controls, look.Default("  ")), steps...)
+	}
 	if size == nil && controls == nil {
 		return m.withStatus(paneTitle(th, label+title, width, focused), width)
 	}
 	// The size keeps its colors on a chip of its own, as the bar draws its text in one color, and
 	// the controls are drawn on the bar.
-	chip := th.Render(look.HeadingBar, append(append([]look.Span{look.Default(" ")}, size...), look.Default(" "))...)
-	if size == nil {
-		chip = th.Render(paneSurface(focused), append(append([]look.Span{look.Default(" ")}, controls...), look.Default(" "))...)
+	chip := ""
+	if size != nil {
+		chip = th.Render(look.HeadingBar, append(append([]look.Span{look.Default(" ")}, size...), look.Default(" "))...)
+	}
+	if controls != nil {
+		chip += th.Render(paneSurface(focused), append(append([]look.Span{look.Default(" ")}, controls...), look.Default(" "))...)
 	}
 	lead := paneTitle(th, label, min(ansi.StringWidth(label), width), focused)
 	rest := max(width-ansi.StringWidth(lead)-ansi.StringWidth(chip), 0)
 	return m.withStatus(lead+chip+paneTitle(th, title, rest, focused), width)
+}
+
+// fileSteps reports whether ] and [ have a file header to go to, after and before the cursor, for
+// the title bar's Next and Prev file, and whether the shown diff has files to step through at all.
+func (m *model) fileSteps() (prev, next, ok bool) {
+	p := &m.main
+	if m.views[m.current].kind == viewOverview {
+		return false, false, false
+	}
+	for i, r := range p.rows {
+		if r.kind != rowFile {
+			continue
+		}
+		ok = true
+		prev = prev || i < p.cursor
+		next = next || i > p.cursor
+	}
+	return prev, next, ok
 }
 
 // filesSize is how many lines files add and delete in all.

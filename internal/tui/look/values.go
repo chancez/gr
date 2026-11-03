@@ -289,6 +289,16 @@ func Button(label, key string) []Span {
 	return chip(append(out, sp(elDefault, " "))...)
 }
 
+// DisabledButton is a button that cannot be clicked now, as Next on the last commit: drawn in place,
+// greyed, so the controls around it stay put and it can be seen to be there.
+func DisabledButton(label, key string) []Span {
+	out := []Span{sp(elDefault, " "), sp(elMuted, label)}
+	if key != "" {
+		out = append(out, sp(elDefault, " "), sp(elMuted, key))
+	}
+	return chip(append(out, sp(elDefault, " "))...)
+}
+
 // Checkbox is a control that shows a state, checked when on: its label, and the key that toggles
 // it.
 func Checkbox(label, key string, on bool) []Span {

@@ -163,7 +163,9 @@ do there, and keys, menus, and the mouse all run actions through the registry.
   the mouse is. The `+` under the mouse is a chip, as there is one at a time;
   pressing it and dragging selects lines in its file, and letting go comments on them. A hint, which is
   clickable too, underlines its key. A control's label
-  is the drawing's, short as a button is, and its title stays the menu's. A control never adds a
+  is the drawing's, short as a button is, and its title stays the menu's. A chip with nothing to
+  do where it is, as Next on the last commit, is greyed in place rather than left out, so the
+  controls around it stay put. A control never adds a
   line, since rows are measured once: a thread's buttons sit in its box's bottom border.
 - **A command palette.** `ctrl+p` opens the picker on every action that applies to the cursor's
   subjects, by title, filtered as you type. It reaches what the keyboard cannot select,

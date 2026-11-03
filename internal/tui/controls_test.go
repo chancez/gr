@@ -256,15 +256,15 @@ func TestThreadAndTitleControls(t *testing.T) {
 	e.press("h")
 	e.openNav("say hello")
 	e.pressRun("l")
-	if got, want := e.shownControls("title"), []string{"next commit"}; !reflect.DeepEqual(got, want) {
-		t.Errorf("the first commit's title controls = %q, want %q", got, want)
+	if got, want := e.shownControls("title"), []string{"next commit", "next file"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the first commit's title controls = %q, want %q: Prev and Prev file greyed", got, want)
 	}
 	e.click("row", "mark reviewed")
 	if !e.m.viewReviewed(e.m.views[e.m.current]) {
 		t.Error("the commit's Viewed box did not mark it reviewed")
 	}
 	e.click("title", "next commit")
-	if got, want := e.shownControls("title"), []string{"previous commit"}; !reflect.DeepEqual(got, want) || e.m.views[e.m.current].commit.Subject() != "Add a greeting helper" {
+	if got, want := e.shownControls("title"), []string{"previous commit", "next file"}; !reflect.DeepEqual(got, want) || e.m.views[e.m.current].commit.Subject() != "Add a greeting helper" {
 		t.Errorf("after Next, commit %q has title controls %q, want the last with %q", e.m.views[e.m.current].commit.Subject(), got, want)
 	}
 }
@@ -327,5 +327,23 @@ func TestLitControlsStayPut(t *testing.T) {
 	lit := zones()
 	if len(quiet) == 0 || !reflect.DeepEqual(lit, quiet) {
 		t.Errorf("thread #1's controls lit at %+v, quiet at %+v; want them in the same place", lit, quiet)
+	}
+}
+
+// The title bar's Next file and Prev file go where ] and [ do, and are greyed where there is no
+// file that way.
+func TestFileSteps(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("All changes")
+	e.pressRun("l")
+	if got, want := e.shownControls("title"), []string{"next file"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("on the first file, title controls = %q, want %q", got, want)
+	}
+	e.click("title", "next file")
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
+		t.Errorf("Next file went to %+v, want the second file's header", r)
+	}
+	if got, want := e.shownControls("title"), []string{"previous file"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("on the last file, title controls = %q, want %q", got, want)
 	}
 }

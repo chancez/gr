@@ -18,6 +18,8 @@ type control struct {
 	on bool
 	// lit shows a quiet control as the mouse or cursor reaches it.
 	lit bool
+	// off draws the control greyed, for no click to run, where there is nothing for it to do.
+	off bool
 	// selects makes a press on the control start a line selection, and the release run it on what
 	// was selected, as dragging GitHub's + comments on several lines.
 	selects bool
@@ -64,6 +66,12 @@ func quietCheckbox[S any](a *interact.Action[*model, S], label string) control {
 // chevron is a quiet control for a that folds and unfolds.
 func chevron[S any](a *interact.Action[*model, S]) control {
 	return control{action: a, look: lookChevron}
+}
+
+// disabledIf is c, greyed and unclickable when off.
+func (c control) disabledIf(off bool) control {
+	c.off = off
+	return c
 }
 
 // lighted is c, lit when on.
@@ -118,6 +126,8 @@ var (
 	deleteReview    control
 	prevCommit      control
 	nextCommit      control
+	prevFile        control
+	nextFile        control
 	filterButton    control
 )
 
@@ -138,6 +148,8 @@ func init() {
 	deleteReview = link(actDeleteReview, "Delete")
 	prevCommit = button(actPrevCommit, "Prev")
 	nextCommit = button(actNextCommit, "Next")
+	prevFile = button(actPrevFile, "Prev file")
+	nextFile = button(actNextFile, "Next file")
 	filterButton = button(actFilterThreads, "")
 }
 
@@ -168,6 +180,10 @@ func (m *model) controls(where string, md mode, t interact.Target[*model], cs ..
 				gap = "  "
 			}
 			out = append(out, look.Default(gap))
+		}
+		if c.off {
+			out = append(out, look.DisabledButton(c.label, key)...)
+			continue
 		}
 		out = append(out, m.mark(where, md, b, c.selects, c.spans(key)...)...)
 	}
