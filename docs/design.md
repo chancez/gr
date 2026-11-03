@@ -103,6 +103,9 @@ processed in order:
 
 Threads on `/COMMIT_MSG` re-anchor to the commit with the same subject line, or become outdated.
 
+Git runs before the write transaction, so other writers do not wait on it. The transaction checks
+that the latest revision and the threads are as they were when git ran, and starts over if not.
+
 Expect most threads to become outdated after a heavy rebase. That is acceptable: outdated threads
 are listed for re-review, as on GitHub.
 

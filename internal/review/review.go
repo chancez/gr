@@ -26,6 +26,8 @@ type Service struct {
 	author store.Author
 	// diffs reads diffs and file lists, through a cache.
 	diffs Diffs
+	// beforeReanchorWrite, if set, runs between re-anchoring's git work and its write transaction.
+	beforeReanchorWrite func()
 }
 
 // Open identifies the repository and records where it was last seen.
@@ -249,6 +251,20 @@ func shortSHA(sha string) string {
 // and marks it merged once its commits have landed on the base branch. It returns the change and its
 // latest revision. Nothing is written when nothing moved.
 func (s *Service) Sync(ctx context.Context, change store.Change) (store.Change, store.Revision, error) {
+	for range syncAttempts {
+		synced, rev, err := s.sync(ctx, change)
+		if !errors.Is(err, errStale) {
+			return synced, rev, err
+		}
+		slog.Info("another writer changed threads while re-anchoring, retrying", "change", change.Seq)
+	}
+	return store.Change{}, store.Revision{}, fmt.Errorf("sync change #%d: %w", change.Seq, errStale)
+}
+
+// syncAttempts bounds how often Sync redoes re-anchoring that other writers raced.
+const syncAttempts = 3
+
+func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, store.Revision, error) {
 	latest, err := s.store.LatestRevision(ctx, change.ID)
 	if err != nil {
 		return store.Change{}, store.Revision{}, err
@@ -282,26 +298,41 @@ func (s *Service) Sync(ctx context.Context, change store.Change) (store.Change, 
 		return s.markMerged(ctx, change, latest)
 	}
 
+	// Git runs before the write transaction, so other writers do not wait on it.
+	threads, err := s.store.ListThreads(ctx, store.ThreadFilter{ChangeID: change.ID, AllDrafts: true})
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
 	r, err := s.newReanchorer(ctx, base, head)
 	if err != nil {
 		return store.Change{}, store.Revision{}, err
 	}
+	moves, err := r.plan(ctx, threads)
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	if s.beforeReanchorWrite != nil {
+		s.beforeReanchorWrite()
+	}
 	var revision store.Revision
 	err = s.store.Tx(ctx, func(tx *store.Tx) error {
-		// Another process may have recorded this revision first.
 		current, err := tx.LatestRevision(ctx, change.ID)
 		if err != nil {
 			return err
 		}
 		if current.BaseSHA == base && current.HeadSHA == head {
+			// Another process recorded this revision first, and re-anchored.
 			revision = current
 			return nil
+		}
+		if current.ID != latest.ID {
+			return errStale
 		}
 		if revision, err = tx.CreateRevision(ctx, change.ID, base, head); err != nil {
 			return err
 		}
 		slog.Info("new revision", "change", change.Seq, "revision", revision.Seq, "base", base, "head", head)
-		return r.reanchorAll(ctx, tx, change.ID, revision)
+		return apply(ctx, tx, change.ID, revision, moves)
 	})
 	if err != nil {
 		return store.Change{}, store.Revision{}, err

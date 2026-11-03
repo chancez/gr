@@ -10,7 +10,8 @@ daemon is another process to manage.
 ## Decision
 
 Whenever the CLI or TUI touches a branch change, resolve its branch and base. If either sha moved,
-record a new revision and re-anchor threads in the same transaction.
+record a new revision and re-anchor threads in the same transaction. Re-anchoring's git work runs
+before the transaction, which redoes it if another writer moved the revision or threads meanwhile.
 
 ## Consequences
 

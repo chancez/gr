@@ -2,7 +2,9 @@ package review
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"reflect"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -27,30 +29,67 @@ func (s *Service) newReanchorer(ctx context.Context, base, head string) (*reanch
 	return &reanchorer{s: s, base: base, head: head, commits: commits, commitFiles: map[string][]git.FileDiff{}}, nil
 }
 
-func (r *reanchorer) reanchorAll(ctx context.Context, tx *store.Tx, changeID string, rev store.Revision) error {
-	threads, err := tx.ListThreads(ctx, store.ThreadFilter{ChangeID: changeID, AllDrafts: true})
-	if err != nil {
-		return err
-	}
-	outdated := 0
-	defer func() {
-		slog.Info("re-anchored threads", "revision", rev.Seq, "threads", len(threads), "outdated", outdated)
-	}()
+// errStale is returned from a write transaction when threads or revisions changed after the git
+// work it writes was done.
+var errStale = errors.New("threads changed while re-anchoring")
+
+// threadMove is where re-anchoring puts one thread.
+type threadMove struct {
+	// from is the location the move was worked out from.
+	from     store.Location
+	to       store.Location
+	outdated bool
+}
+
+// plan works out where each thread moves. It runs git but writes nothing, so it runs before the write
+// transaction.
+func (r *reanchorer) plan(ctx context.Context, threads []store.Thread) (map[string]threadMove, error) {
+	moves := make(map[string]threadMove, len(threads))
 	for _, t := range threads {
-		loc, ok, err := r.locate(ctx, t.Location, rev.ID)
+		loc, ok, err := r.locate(ctx, t.Location)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if !ok {
-			outdated++
 			// Outdated threads keep their last location for display, and are retried on the next
 			// revision.
 			loc = t.Location
 		}
-		if err := tx.MoveThread(ctx, t.ID, loc, !ok); err != nil {
+		moves[t.ID] = threadMove{
+			from:     t.Location,
+			to:       loc,
+			outdated: !ok,
+		}
+	}
+	return moves, nil
+}
+
+// apply moves a change's threads onto rev as planned, without running git. It returns errStale if a
+// thread is not where the plan found it, or was started since.
+func apply(ctx context.Context, tx *store.Tx, changeID string, rev store.Revision, moves map[string]threadMove) error {
+	threads, err := tx.ListThreads(ctx, store.ThreadFilter{ChangeID: changeID, AllDrafts: true})
+	if err != nil {
+		return err
+	}
+	for _, t := range threads {
+		m, ok := moves[t.ID]
+		if !ok || !reflect.DeepEqual(m.from, t.Location) {
+			return errStale
+		}
+	}
+	outdated := 0
+	for _, t := range threads {
+		m := moves[t.ID]
+		if m.outdated {
+			outdated++
+		} else {
+			m.to.RevisionID = rev.ID
+		}
+		if err := tx.MoveThread(ctx, t.ID, m.to, m.outdated); err != nil {
 			return err
 		}
 	}
+	slog.Info("re-anchored threads", "revision", rev.Seq, "threads", len(threads), "outdated", outdated)
 	return nil
 }
 
@@ -78,21 +117,22 @@ func (r *reanchorer) wholeDiff(ctx context.Context) ([]git.FileDiff, error) {
 	return files, nil
 }
 
-// locate finds where a location belongs in the new revision.
-func (r *reanchorer) locate(ctx context.Context, loc store.Location, revID string) (store.Location, bool, error) {
+// locate finds where a location belongs in the new revision. The location found has no revision;
+// apply sets it.
+func (r *reanchorer) locate(ctx context.Context, loc store.Location) (store.Location, bool, error) {
 	switch loc.Scope {
 	case store.ScopeChange:
-		loc.RevisionID = revID
+		loc.RevisionID = ""
 		return loc, true, nil
 	case store.ScopeCommit:
 		for _, c := range r.commits {
 			if c.SHA == loc.Commit {
-				loc.RevisionID = revID
+				loc.RevisionID = ""
 				return loc, true, nil
 			}
 		}
 		if loc.Path == "" || loc.Path == CommitMsgPath {
-			return r.locateMessage(ctx, loc, revID)
+			return r.locateMessage(ctx, loc)
 		}
 		for _, c := range r.commits {
 			files, err := r.files(ctx, c)
@@ -105,7 +145,7 @@ func (r *reanchorer) locate(ctx context.Context, loc store.Location, revID strin
 			}
 			moved, ok, err := r.match(ctx, loc, files, oldRev, c.SHA)
 			if err != nil || ok {
-				moved.Scope, moved.Commit, moved.RevisionID = store.ScopeCommit, c.SHA, revID
+				moved.Scope, moved.Commit, moved.RevisionID = store.ScopeCommit, c.SHA, ""
 				return moved, ok, err
 			}
 		}
@@ -119,7 +159,7 @@ func (r *reanchorer) locate(ctx context.Context, loc store.Location, revID strin
 			return store.Location{}, false, err
 		}
 		moved, ok, err := r.match(ctx, loc, files, r.base, r.head)
-		moved.Scope, moved.Commit, moved.RevisionID = store.ScopeDiff, "", revID
+		moved.Scope, moved.Commit, moved.RevisionID = store.ScopeDiff, "", ""
 		return moved, ok, err
 	}
 	return store.Location{}, false, nil
@@ -155,7 +195,7 @@ func (r *reanchorer) match(ctx context.Context, loc store.Location, files []git.
 }
 
 // locateMessage moves a thread on a whole commit or its message to the commit with the same subject.
-func (r *reanchorer) locateMessage(ctx context.Context, loc store.Location, revID string) (store.Location, bool, error) {
+func (r *reanchorer) locateMessage(ctx context.Context, loc store.Location) (store.Location, bool, error) {
 	old, err := r.s.git.ReadCommit(ctx, loc.Commit)
 	if err != nil {
 		// The old commit has been garbage collected.
@@ -166,7 +206,7 @@ func (r *reanchorer) locateMessage(ctx context.Context, loc store.Location, revI
 			continue
 		}
 		moved := loc
-		moved.Commit, moved.RevisionID = c.SHA, revID
+		moved.Commit, moved.RevisionID = c.SHA, ""
 		if loc.StartLine == 0 {
 			return moved, true, nil
 		}
