@@ -184,8 +184,8 @@ func (p *picker) chosen() (pickerItem, bool) {
 }
 
 // layout places the popup in a screen of width by height, as wide as its longest entry allows:
-// near the top and centered, or, anchored, as a menu, with its top left corner just right of its
-// point, growing down, shifted up or left only as far as it needs to fit.
+// centered in the upper part of the screen and large, or, anchored, as a menu, with its top left
+// corner just right of its point, growing down, shifted up or left only as far as it needs to fit.
 func (p *picker) layout(width, height int) {
 	w := ansi.StringWidth(p.title) + 4
 	for _, it := range p.items {
@@ -194,6 +194,11 @@ func (p *picker) layout(width, height int) {
 	p.width = min(max(w, 40), width-4, 100)
 	p.height = min(len(p.items)+5, height-4)
 	p.x, p.y = (width-p.width)/2, 2
+	if !p.anchored {
+		// A popup of its own, as the palette, takes a good part of the screen, so it reads at a glance.
+		p.width = min(max(w, width*3/5), width-4)
+		p.x, p.y = (width-p.width)/2, max(height/8, 1)
+	}
 	if p.anchored {
 		p.x = min(max(p.anchorX+1, 0), max(width-p.width, 0))
 		p.y = max(min(p.anchorY, height-p.height), 0)
