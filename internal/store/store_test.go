@@ -425,3 +425,33 @@ func TestMarks(t *testing.T) {
 		t.Errorf("ListMarks mismatch (-want +got):\n%s", diff)
 	}
 }
+
+// A place is one per author and change: saving again replaces it, and another author's is their
+// own.
+func TestPlaces(t *testing.T) {
+	s := open(t)
+	ctx := t.Context()
+	f := setup(t, s)
+	if _, err := s.Place(ctx, f.change.ID, alice); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("place before any was saved: %v, want ErrNotFound", err)
+	}
+	for _, p := range []string{`{"view":"1"}`, `{"view":"2"}`} {
+		if err := s.SavePlace(ctx, f.change.ID, alice, []byte(p)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.SavePlace(ctx, f.change.ID, agent, []byte(`{"view":"3"}`)); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]string{}
+	for name, a := range map[string]store.Author{"alice": alice, "agent": agent} {
+		p, err := s.Place(ctx, f.change.ID, a)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got[name] = string(p)
+	}
+	if diff := cmp.Diff(map[string]string{"alice": `{"view":"2"}`, "agent": `{"view":"3"}`}, got); diff != "" {
+		t.Errorf("places (-want +got):\n%s", diff)
+	}
+}

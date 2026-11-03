@@ -70,11 +70,15 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 		m.main.scrolloff = *opts.Scrolloff
 	}
 	m.navWidth, m.autoAdvance, m.vim = opts.SidebarWidth, opts.AutoAdvance, opts.Vim
+	if p, ok := m.readPlace(change); ok {
+		m.savedPlace = &p
+	}
 	if opts.Notice != "" {
 		m.setStatus("%s", opts.Notice)
 	}
 	defer m.close()
 	_, err = tea.NewProgram(m, tea.WithContext(ctx)).Run()
+	m.savePlace()
 	return err
 }
 
@@ -125,6 +129,10 @@ type model struct {
 	picker *picker
 	// vim edits comments with vim's modes.
 	vim bool
+	// savedPlace is where you were in the change, to open once it loads, and pendingPlace where to
+	// go once its view's diff does.
+	savedPlace   *place
+	pendingPlace *jumpPoint
 	// glyphs are the symbols drawn with, and glyphsSet is set when they were asked for rather than
 	// picked from what the terminal is.
 	glyphs    look.Glyphs

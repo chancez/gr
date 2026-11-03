@@ -51,7 +51,8 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `s` | toggle split diff |
 | `B` | pick another base branch for the change, as for a stacked branch: type to filter, click or enter to pick |
 
-Comments are Markdown. `ctrl+e` writes one in `$EDITOR`.
+Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. Quitting remembers where you were in a change, the view,
+the line, folds, and split, and opening it again goes back there.
 
 Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in
 place of green and red.

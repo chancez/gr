@@ -81,6 +81,7 @@ func (m *model) switchChange(c store.Change) tea.Cmd {
 	if c.ID == m.changeID {
 		return nil
 	}
+	m.savePlace()
 	m.changeID = c.ID
 	m.data, m.views, m.current = nil, nil, 0
 	m.viewsNav, m.filesNav = navList{}, navList{}
@@ -91,6 +92,10 @@ func (m *model) switchChange(c store.Change) tea.Cmd {
 	m.contents, m.segments = map[string][]string{}, map[int][]int{}
 	scrolloff, height := m.main.scrolloff, m.main.height
 	m.main = pane{anchor: -1, side: m.main.side, scrolloff: scrolloff, height: height}
+	m.pendingPlace, m.savedPlace = nil, nil
+	if p, ok := m.readPlace(c); ok {
+		m.savedPlace = &p
+	}
 	m.setStatus("switched to %s", changeLabel(c))
 	return m.loadCmd()
 }

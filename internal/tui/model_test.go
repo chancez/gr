@@ -2152,3 +2152,33 @@ func TestCarriedThreadShowsWhatItWasOn(t *testing.T) {
 		}
 	}
 }
+
+// Quitting saves where you were in the change, and opening it again goes back there: the view,
+// the row the cursor is on, how far down the screen, and split mode.
+func TestReopenWhereYouWere(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("say hello")
+	e.pressRun("l")
+	e.cursorTo(func(r row) bool { return addedLine(r) && strings.Contains(r.line.Text, "println") })
+	e.press("s")
+	was := e.m.here()
+	e.m.savePlace()
+
+	m, err := newModel(t.Context(), e.svc, e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.close)
+	m.syncLoads, m.glyphsSet = true, true
+	p, ok := m.readPlace(e.chg)
+	if !ok {
+		t.Fatal("no place saved")
+	}
+	m.savedPlace = &p
+	again := &tuiEnv{t: t, repo: e.repo, svc: e.svc, m: m, chg: e.chg, store: e.store}
+	again.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	again.drain(m.loadCmd())
+	if got := m.here(); got != was || !m.split || m.focus != focusMain {
+		t.Errorf("reopened at %+v, split %v, focus %d; want %+v, split, the diff focused", got, m.split, m.focus, was)
+	}
+}

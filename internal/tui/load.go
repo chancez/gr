@@ -86,6 +86,10 @@ func (m *model) applyView(msg viewLoadedMsg) {
 			m.pendingThread = nil
 			m.openThread(*t, m.pendingInDiff)
 		}
+		if p := m.pendingPlace; p != nil {
+			m.pendingPlace = nil
+			m.restore(*p)
+		}
 	}
 }
 
@@ -167,4 +171,8 @@ func (m *model) applyData(d *changeData) {
 		}
 	}
 	m.buildNav()
+	if p := m.savedPlace; p != nil {
+		m.savedPlace = nil
+		m.goTo(*p)
+	}
 }

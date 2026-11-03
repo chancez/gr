@@ -143,6 +143,17 @@ UPDATE threads SET seq = -(SELECT seq FROM reviews WHERE reviews.id = threads.re
 -- A thread whose lines a rewrite changed moves to where they are now, keeping the lines it was on.
 ALTER TABLE threads ADD COLUMN was_lines TEXT NOT NULL DEFAULT '[]';
 `,
+	`
+-- Where an author was in a change in the TUI, to open there again. The place is the TUI's own JSON.
+CREATE TABLE places (
+	change_id    TEXT NOT NULL REFERENCES changes(id) ON DELETE CASCADE,
+	author_name  TEXT NOT NULL,
+	author_email TEXT NOT NULL,
+	place        TEXT NOT NULL,
+	updated_at   TEXT NOT NULL,
+	PRIMARY KEY (change_id, author_name, author_email)
+);
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.
