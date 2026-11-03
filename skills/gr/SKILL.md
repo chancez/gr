@@ -10,9 +10,9 @@ reviewer you think a thread is handled, and they **resolve** it or reopen it.
 
 ## Before any command
 
-- **Identify yourself.** Set `GR_AUTHOR` to your name on every command, for example
-  `GR_AUTHOR=Claude gr threads`. Without it gr writes as the human's git identity, and your replies
-  read as theirs.
+- **Identify yourself.** Set `GR_AUTHOR=Claude` on every command, for example
+  `GR_AUTHOR=Claude gr threads`, so your replies read as yours, not the human's or the reviewer's.
+  Without it gr would write as the human's git identity, and refuses to under an agent.
 - **Read with `--json`.** Threads carry their location and a `context` excerpt: the diff lines the
   comment is about.
 - **Pass bodies with `-m` or `-F -`** (stdin). Without either, gr wants an editor on a terminal and

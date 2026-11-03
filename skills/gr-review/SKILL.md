@@ -10,9 +10,10 @@ verdict. Comments are drafts until you submit.
 
 ## Before any command
 
-- **Identify yourself.** Set `GR_AUTHOR` to your name on every command, for example
-  `GR_AUTHOR=Claude gr comment ...`. Without it gr writes as the human's git identity, and your
-  review reads as theirs.
+- **Identify yourself.** Set `GR_AUTHOR="Claude Reviewer"` on every command, for example
+  `GR_AUTHOR="Claude Reviewer" gr comment ...`, so your review reads as a reviewer's, not the
+  human's, nor the agent's who addresses it. Without it gr would write as the human's git identity,
+  and refuses to under an agent.
 - **Pass bodies with `-m` or `-F -`** (stdin). Without either, gr wants an editor on a terminal and
   fails without one.
 
