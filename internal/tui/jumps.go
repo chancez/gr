@@ -77,7 +77,7 @@ func (m *model) restore(p jumpPoint) {
 	defer func() { m.restoring = false }()
 	for i, v := range m.views {
 		if v.key() == p.view {
-			m.viewsNav.pos = i
+			m.viewsNav.show(i, -1)
 			m.openView()
 		}
 	}

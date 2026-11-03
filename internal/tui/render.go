@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -124,6 +125,8 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	switch rw.kind {
 	case rowText:
 		return rw.text(width)
+	case rowBoxTop:
+		return []string{r.boxEdge(width)}
 	case rowCommit:
 		return r.renderCommit(v, width, state)
 	case rowFile:
@@ -154,11 +157,20 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return []string{r.hunkMarker(state) + r.th.Draw(surf, width-1, look.Hunk(*rw.hunk))}
 	case rowLine:
 		f := v.files[rw.file]
+		if isMessage(f) {
+			return []string{r.renderMessageLine(*rw.line, width, state)}
+		}
 		if rw.line != nil {
 			return []string{r.hunkMarker(state) + r.renderUnified(f, *rw.line, width-1, state)}
 		}
 		return []string{r.hunkMarker(state) + r.renderSplit(f, rw.left, rw.right, width-1, state)}
 	case rowThread:
+		if rw.file >= 0 && isMessage(v.files[rw.file]) {
+			// A thread on the message sits inside the commit's box, under its line.
+			inner := rw
+			inner.file = -1
+			return r.boxed(r.renderRow(d, v, inner, width-4, state), width)
+		}
 		if rw.collapsed {
 			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
 		}
@@ -229,35 +241,57 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
 
-// renderCommit draws a commit's header as GitHub does: its whole message in a box, the subject
-// first and strong, then a footer of who made it and when, its size, and its sha. The box's border
-// is the cursor's.
+// The commit's header is a box, as GitHub draws it: the message's lines, the subject strong, each
+// a row the cursor can be on, then a footer of who committed it and when, its size, and its sha.
+// A message's threads sit inside the box, under their lines.
+
+// boxed puts lines inside the box's sides.
+func (r *renderer) boxed(lines []string, width int) []string {
+	side := r.th.Render(look.Plain, look.Border("|", false))
+	out := make([]string, len(lines))
+	for i, l := range lines {
+		out[i] = side + " " + look.Fit(l, max(width-4, 0)) + " " + side
+	}
+	return out
+}
+
+func (r *renderer) boxEdge(width int) string {
+	return r.th.Render(look.Plain, look.Border("+"+strings.Repeat("-", max(width-2, 0))+"+", false))
+}
+
+// renderMessageLine draws line l of a commit's message in the box.
+func (r *renderer) renderMessageLine(l git.Line, width int, state rowState) string {
+	el := look.Text
+	if l.NewLine == 1 {
+		el = look.Heading
+	}
+	surf := look.Plain
+	switch {
+	case state.cursor:
+		surf = cursorSurface(state)
+	case state.selected:
+		surf = look.Selected
+	}
+	return r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), el(termtext.Line(l.Text)))}, width)[0]
+}
+
+// renderCommit draws the box's footer and its bottom.
 func (r *renderer) renderCommit(v view, width int, state rowState) []string {
 	c := v.commit
 	inner := max(width-4, 10)
-	wrap := func(text string, el func(string) look.Span) []string {
-		var out []string
-		for _, l := range strings.Split(ansi.Wordwrap(termtext.Line(text), inner, ""), "\n") {
-			out = append(out, r.th.Draw(look.Plain, inner, el(l)))
-		}
-		return out
-	}
-	subject, body, _ := strings.Cut(c.Message, "\n")
-	lines := wrap(subject, look.Heading)
-	if body = strings.Trim(body, "\n"); body != "" {
-		lines = append(lines, "")
-		for _, para := range strings.Split(body, "\n") {
-			lines = append(lines, wrap(para, look.Text)...)
-		}
+	surf := look.Plain
+	if state.cursor {
+		surf = cursorSurface(state)
 	}
 	by := look.CommitBy(c)
-	which := append(filesSize(v.files), look.Muted("  commit "), look.SHA(c.SHA).Short())
+	which := append(filesSize(slices.DeleteFunc(slices.Clone(v.files), isMessage)), look.Muted("  commit "), look.SHA(c.SHA).Short())
+	var foot []string
 	if gap := inner - ansi.StringWidth(look.TextOf(by...)) - ansi.StringWidth(look.TextOf(which...)); gap > 0 {
-		lines = append(lines, "", r.th.Draw(look.Plain, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...))
+		foot = []string{r.th.Draw(surf, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...)}
 	} else {
-		lines = append(lines, "", r.th.Draw(look.Plain, inner, by...), r.th.Draw(look.Plain, inner, which...))
+		foot = []string{r.th.Draw(surf, inner, by...), r.th.Draw(surf, inner, which...)}
 	}
-	return strings.Split(r.th.Box(width, state.cursor).Render(strings.Join(lines, "\n")), "\n")
+	return append(r.boxed(append([]string{""}, foot...), width), r.boxEdge(width))
 }
 
 // commentHeader is a comment's author and time, and whether it is a draft.

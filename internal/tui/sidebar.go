@@ -242,7 +242,7 @@ func (m *model) buildNav() {
 		}
 		m.viewsNav.items = append(m.viewsNav.items, it)
 	}
-	m.viewsNav.pos = m.current
+	m.viewsNav.show(m.current, -1)
 
 	keep := -1
 	if m.filesNav.pos < len(m.filesNav.items) && m.filesNav.items[m.filesNav.pos].view == m.current {
@@ -252,6 +252,10 @@ func (m *model) buildNav() {
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
 	for fi, f := range v.files {
+		// The message is the commit's header, not a file to list.
+		if isMessage(f) {
+			continue
+		}
 		badge := look.Badge(counts[f.Path()], m.draftThreads(v, f.Path()) > 0, m.fileReviewed(v, fi))
 		if size, ok := diffSize(f); ok {
 			// The file's size leads its badge, so it lines up at the right with the others.
@@ -283,11 +287,7 @@ func (m *model) openView() {
 func (m *model) openFileByPath(path string) {
 	for i, f := range m.views[m.current].files {
 		if f.Path() == path {
-			for j, n := range m.filesNav.items {
-				if n.file == i {
-					m.filesNav.pos = j
-				}
-			}
+			m.filesNav.show(m.current, i)
 			m.openFile()
 			return
 		}
@@ -313,9 +313,22 @@ func (m *model) syncNav() {
 	if m.main.cursor >= len(m.main.rows) {
 		return
 	}
-	if file := m.main.rows[m.main.cursor].file; file >= 0 && file < len(m.filesNav.items) {
-		m.filesNav.pos = file
+	if file := m.main.rows[m.main.cursor].file; file >= 0 {
+		m.filesNav.show(m.current, file)
 	}
+}
+
+// show selects the entry of file f of view v, or of view v itself when f is -1, and reports
+// whether the list has one. Entries are found by what they show, never by index: not every view
+// or file is listed, as the commit message is not, so an entry's index is no view's or file's.
+func (l *navList) show(v, f int) bool {
+	for i, it := range l.items {
+		if it.view == v && it.file == f {
+			l.pos = i
+			return true
+		}
+	}
+	return false
 }
 
 // sidebarHeights splits the sidebar between the views and files sections, header lines included.
@@ -376,7 +389,7 @@ func (m *model) mainHeader(width int) string {
 	}
 	if c := m.main.cursor; c < len(m.main.rows) {
 		r := m.main.rows[c]
-		if r.file >= 0 {
+		if r.file >= 0 && !isMessage(m.views[m.current].files[r.file]) {
 			f := m.views[m.current].files[r.file]
 			title += "  >  " + look.FileLabel(f)
 			if r.hunk != nil {

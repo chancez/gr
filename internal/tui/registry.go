@@ -561,6 +561,7 @@ var (
 	changeKind         *interact.Kind[*model, changeSubject]
 	fileKind           *interact.Kind[*model, fileSubject]
 	lineKind           *interact.Kind[*model, rowSubject]
+	messageLineKind    *interact.Kind[*model, rowSubject]
 	hunkKind           *interact.Kind[*model, rowSubject]
 	foldKind           *interact.Kind[*model, rowSubject]
 	diffThreadKind     *interact.Kind[*model, threadSubject]
@@ -589,6 +590,7 @@ func init() {
 	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
 
 	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actOpenRowInEditor)
+	messageLineKind = interact.NewKind(func(rowSubject) string { return "Message line" }, actCommentOnLine, actSelectLine)
 	hunkKind = interact.NewKind(func(rowSubject) string { return "Hunk" }, actSelectLine, actOpenRowInEditor)
 	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" }, actExpandFold, actOpenRowInEditor)
 
@@ -653,6 +655,8 @@ func init() {
 	fileKind.Bind(actOpenFileInEditor, "E", "open in $EDITOR, read-only, as it is here", "E")
 
 	writable(lineKind, actCommentOnLine, "c", "comment on the line or selection", "c")
+	messageLineKind.Bind(actCommentOnLine, "c", "comment on the message's line or selection", "c")
+	messageLineKind.Bind(actSelectLine, "v", "select lines", "v", "V")
 	lineKind.Bind(actSelectLine, "v", "select lines", "v", "V")
 	hunkKind.Bind(actSelectLine, "v", "select lines", "v", "V")
 	foldKind.BindQuiet(actNoCommentOnFold, "c", "C")
@@ -772,7 +776,12 @@ func init() {
 	for _, k := range []*interact.Kind[*model, rowSubject]{lineKind, hunkKind, foldKind} {
 		interact.Via(k, func(s rowSubject) (fileSubject, bool) { return s.file, s.hasFile }, fileKind)
 	}
-	interact.Via(diffThreadKind, func(s threadSubject) (fileSubject, bool) { return s.file, s.hasFile }, fileKind)
+	interact.Via(diffThreadKind, func(s threadSubject) (fileSubject, bool) { return s.file, s.hasFile && !isMessage(s.file.diff) }, fileKind)
+	// The message's lines, and its threads, are the commit's: it is no file of its own.
+	interact.Via(messageLineKind, func(s rowSubject) (commitSubject, bool) { return commitSubject{s.inView}, true }, commitKind)
+	interact.Via(diffThreadKind, func(s threadSubject) (commitSubject, bool) {
+		return commitSubject{s.inView}, s.hasFile && isMessage(s.file.diff)
+	}, commitKind)
 	// A thread on a commit as a whole carries the commit.
 	interact.Via(diffThreadKind, func(s threadSubject) (commitSubject, bool) {
 		return commitSubject{s.inView}, !s.hasFile && s.view.kind == viewCommit
@@ -797,6 +806,7 @@ var (
 	commitHeader     *interact.Place[*model, commitSubject]
 	fileHeaderList   *interact.Place[*model, fileSubject]
 	lines            *interact.Place[*model, rowSubject]
+	messageLines     *interact.Place[*model, rowSubject]
 	hunks            *interact.Place[*model, rowSubject]
 	folds            *interact.Place[*model, rowSubject]
 	diffThreads      *interact.Place[*model, threadSubject]
@@ -825,6 +835,7 @@ func init() {
 	commitHeader = interact.List(commitKind)
 	fileHeaderList = fileHeaders(fileKind)
 	lines = interact.List(lineKind)
+	messageLines = interact.List(messageLineKind)
 	hunks = interact.List(hunkKind)
 	folds = interact.List(foldKind)
 	diffThreads = interact.List(diffThreadKind)
@@ -954,6 +965,9 @@ func (m *model) mainRowTarget(i int, side anchor.Side) (interact.Target[*model],
 	case rowHunk:
 		return hunks.Target(row), true
 	case rowLine:
+		if hasFile && isMessage(file.diff) {
+			return messageLines.Target(row), true
+		}
 		return lines.Target(row), true
 	}
 	return m.viewTarget(m.current, false), true

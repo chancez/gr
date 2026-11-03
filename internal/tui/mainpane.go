@@ -87,7 +87,7 @@ func (m *model) toggleView(kind viewKind) {
 	for i, v := range m.views {
 		if v.kind == kind {
 			m.returns[kind] = m.here()
-			m.viewsNav.pos = i
+			m.viewsNav.show(i, -1)
 			m.openView()
 			return
 		}
@@ -108,7 +108,7 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 		for i, v := range m.views {
 			if v.kind == viewDiff {
 				m.pendingThread, m.pendingInDiff = &t, true
-				m.viewsNav.pos = i
+				m.viewsNav.show(i, -1)
 				m.openView()
 				return
 			}
@@ -134,7 +134,7 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 		m.setError(errors.New("this thread is on the whole change"))
 		return
 	}
-	m.viewsNav.pos = target
+	m.viewsNav.show(target, -1)
 	m.openView()
 	v := m.views[m.current]
 	if m.needsLoad(v) && !m.syncLoads {
@@ -239,7 +239,7 @@ func (m *model) nearestUnresolved(v view, dir int) (review.ThreadView, bool) {
 func (m *model) stepCommitWhere(dir int, match func(view) bool) bool {
 	for i := m.current + dir; i >= 0 && i < len(m.views); i += dir {
 		if m.views[i].kind == viewCommit && match(m.views[i]) {
-			m.viewsNav.pos = i
+			m.viewsNav.show(i, -1)
 			m.openView()
 			return true
 		}

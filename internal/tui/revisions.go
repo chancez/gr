@@ -77,7 +77,7 @@ func (m *model) compareRevisions(from, to int) {
 	for i, v := range m.views {
 		if v.kind == viewInterdiff {
 			m.buildNav()
-			m.viewsNav.pos = i
+			m.viewsNav.show(i, -1)
 			m.openView()
 		}
 	}

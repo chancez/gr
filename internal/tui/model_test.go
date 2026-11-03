@@ -213,9 +213,7 @@ func TestRangeSelection(t *testing.T) {
 func TestCommentOnCommitMessageAndThreadActions(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")
-	// The message's file starts folded, as the commit's header shows the message.
-	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 && r.collapsed })
-	e.press("enter")
+	// The message's lines are the commit header's.
 	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 0 })
 	e.press("c")
 	e.typeText("subject nit")
@@ -396,8 +394,8 @@ func TestSidebarOrderAndFileList(t *testing.T) {
 		}
 	}
 	e.openNav("say hello")
-	if got := len(e.m.filesNav.items); got != 2 {
-		t.Errorf("files for the commit = %d, want 2 (message and main.go)", got)
+	if got := len(e.m.filesNav.items); got != 1 {
+		t.Errorf("files for the commit = %d, want 1: main.go, as the message is the commit's header", got)
 	}
 }
 
@@ -480,15 +478,8 @@ func TestMarkReviewedAdvances(t *testing.T) {
 		t.Fatal("+ did not turn auto-advance on")
 	}
 
-	// Mark the message, then main.go: the commit is done and the next one opens.
-	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 })
-	e.pressRun("m")
-	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
-		t.Fatalf("after marking the message, cursor on %+v, want main.go's header", r)
-	}
-	if e.m.main.rows[0].kind != rowCommit || !e.m.main.rows[1].collapsed {
-		t.Errorf("reviewed file is not collapsed")
-	}
+	// Mark main.go, its one file: the commit is done and the next one opens.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
 	e.pressRun("m")
 	if v := e.m.views[e.m.current]; v.kind != viewCommit || v.commit.Subject() != "add other" {
 		t.Fatalf("after reviewing every file, view is %q, want the next commit", e.m.viewLabel(v))
@@ -514,19 +505,17 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(marks) != 3 {
-		t.Errorf("stored marks = %v, want the two files and one commit", marks)
+	if len(marks) != 2 {
+		t.Errorf("stored marks = %v, want main.go and one commit", marks)
 	}
 
-	// Turned off, marking stays put.
+	// Turned off, marking stays put, and unmarking a commit's one file leaves it unreviewed.
 	e.press("+")
-	// Unmarking one file of a fully reviewed commit keeps the others.
 	e.openNav("say hello")
 	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
 	e.pressRun("m")
-	v := e.m.views[e.m.current]
-	if e.m.fileReviewed(v, 1) || !e.m.fileReviewed(v, 0) {
-		t.Errorf("after unmarking main.go: message reviewed %v, main.go reviewed %v", e.m.fileReviewed(v, 0), e.m.fileReviewed(v, 1))
+	if v := e.m.views[e.m.current]; e.m.fileReviewed(v, 1) || e.m.viewReviewed(v) {
+		t.Errorf("after unmarking main.go: main.go reviewed %v, commit reviewed %v", e.m.fileReviewed(v, 1), e.m.viewReviewed(v))
 	}
 }
 
@@ -566,9 +555,9 @@ func TestSidebarDividerAndClicks(t *testing.T) {
 	if !strings.HasPrefix(lines[vh], "----") || !strings.Contains(lines[vh+1], "Files") {
 		t.Errorf("no divider before the files section:\n%s", e.screen())
 	}
-	// Clicking the second file selects it.
-	e.m.Update(tea.MouseClickMsg{X: 2, Y: vh + 3, Button: tea.MouseLeft})
-	if e.m.focus != focusFiles || e.m.filesNav.pos != 1 {
+	// Clicking a file selects it.
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: vh + 2, Button: tea.MouseLeft})
+	if e.m.focus != focusFiles || e.m.filesNav.pos != 0 {
 		t.Errorf("click on the second file: focus %d pos %d", e.m.focus, e.m.filesNav.pos)
 	}
 }
@@ -742,7 +731,7 @@ func TestFolds(t *testing.T) {
 	}
 	e.press("z", "M")
 	for _, r := range e.m.main.rows {
-		if r.kind == rowLine {
+		if r.kind == rowLine && !isMessage(e.m.views[e.m.current].files[r.file]) {
 			t.Fatalf("line shown after zM: %+v", r)
 		}
 	}
@@ -1056,7 +1045,7 @@ func TestCommentFromTheSidebar(t *testing.T) {
 	}
 	e.press("esc", "ctrl+j")
 	e.press("C")
-	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, review.CommitMsgPath) {
+	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, "main.go") {
 		t.Errorf("C in the file list: mode %d, title %q, want the selected file", e.m.mode, e.m.compose.title)
 	}
 }
@@ -1775,25 +1764,26 @@ func TestMarkingStaysPutByDefault(t *testing.T) {
 	// Marking every file of the commit leaves you on it, on the file just marked.
 	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
 	e.pressRun("m")
-	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 })
-	e.pressRun("m")
 	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" {
 		t.Fatalf("marking moved to %q", e.m.viewLabel(v))
 	}
-	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 0 {
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
 		t.Errorf("cursor on %+v, want the file just marked", r)
 	}
 }
 
 func TestAutoAdvanceOnlyMovesForward(t *testing.T) {
 	e := newTUIEnv(t)
-	e.openNav("say hello")
+	e.repo.Write("a.go", "package main\n", "b.go", "package main\n")
+	e.repo.Commit("two files")
+	e.drain(e.m.loadCmd())
+	e.openNav("two files")
 	e.press("+")
-	// Mark main.go, the last file, while the message above it is unreviewed: stay, and say so.
-	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 1 })
+	// Mark b.go, the last file, while a.go above it is unreviewed: stay, and say so.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 2 })
 	e.pressRun("m")
-	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 1 {
-		t.Errorf("cursor moved to %+v, want it kept on main.go", r)
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile || r.file != 2 {
+		t.Errorf("cursor moved to %+v, want it kept on b.go", r)
 	}
 	if !strings.Contains(e.m.status, "1 earlier file is still unreviewed") {
 		t.Errorf("status = %q", e.m.status)
@@ -1953,5 +1943,49 @@ func TestCommitHeaderShowsTheMessage(t *testing.T) {
 	}
 	if !shown {
 		t.Errorf("the message's thread is hidden with its folded file")
+	}
+}
+
+// j and k move through the file list both ways, though the commit message is not one of its
+// entries.
+func TestFileListMovesBothWays(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("a.go", "package main\n", "b.go", "package main\n")
+	e.repo.Commit("two files")
+	e.drain(e.m.loadCmd())
+	e.openNav("two files")
+	e.m.setFocus(focusFiles)
+	e.press("g")
+	var got []int
+	for _, k := range []string{"j", "k", "down", "up"} {
+		e.press(k)
+		got = append(got, e.m.filesNav.pos)
+	}
+	if want := []int{1, 0, 1, 0}; !reflect.DeepEqual(got, want) {
+		t.Errorf("file list positions after j k down up = %v, want %v", got, want)
+	}
+}
+
+// In every view, every view and file the main pane shows has its own entry in the sidebar, found
+// by what it shows: the cursor on any file selects that file's entry.
+func TestSidebarFollowsEveryFile(t *testing.T) {
+	e := goldenEnv(t)
+	for vi := range e.m.views {
+		// Setting the view loads its diff, so read it after.
+		e.m.setView(vi)
+		v := e.m.views[vi]
+		if !e.m.viewsNav.show(vi, -1) || e.m.viewsNav.items[e.m.viewsNav.pos].view != vi {
+			t.Errorf("view %q has no entry of its own", e.m.viewLabel(v))
+		}
+		for i, r := range e.m.main.rows {
+			if r.file < 0 || isMessage(v.files[r.file]) {
+				continue
+			}
+			e.m.main.cursor = i
+			e.m.syncNav()
+			if it := e.m.filesNav.items[e.m.filesNav.pos]; it.view != vi || it.file != r.file {
+				t.Errorf("view %q, cursor on %s: sidebar selects file %d of view %d", e.m.viewLabel(v), v.files[r.file].Path(), it.file, it.view)
+			}
+		}
 	}
 }

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/chancez/gr/internal/anchor"
@@ -68,6 +69,8 @@ const (
 	rowGap
 	// rowReview is a review in the overview: its header bar, then its summary when it has one.
 	rowReview
+	// rowBoxTop is the top border of a commit's header box, above its message's lines.
+	rowBoxTop
 )
 
 // row is one selectable or static block of the main pane.
@@ -93,7 +96,7 @@ type row struct {
 	review *store.Review
 }
 
-func (r row) selectable() bool { return r.kind != rowText }
+func (r row) selectable() bool { return r.kind != rowText && r.kind != rowBoxTop }
 
 // key identifies a row across reloads, so the cursor stays put when data refreshes.
 func (r row) key(files []git.FileDiff) string {
@@ -186,11 +189,31 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		}
 	}
 
+	msg := -1
 	if v.kind == viewCommit {
+		// The message is the commit header's own: its lines are rows in the header's box, each
+		// followed by its threads, rather than a file of added lines.
+		rows = append(rows, row{kind: rowBoxTop, file: -1})
+		if msg = slices.IndexFunc(v.files, isMessage); msg >= 0 {
+			mf := review.CommitMessageFile(v.commit)
+			for _, h := range mf.Hunks {
+				for li := range h.Lines {
+					l := &h.Lines[li]
+					rows = append(rows, row{kind: rowLine, file: msg, line: l})
+					threadRows(msg, byLine[threadKey{review.CommitMsgPath, anchor.SideNew, l.NewLine}])
+				}
+			}
+		}
 		rows = append(rows, row{kind: rowCommit, file: -1})
 		threadRows(-1, whole)
+		if msg >= 0 {
+			threadRows(msg, byFile[review.CommitMsgPath])
+		}
 	}
 	for fi := range v.files {
+		if fi == msg {
+			continue
+		}
 		f := &v.files[fi]
 		collapsed := opts.collapsed != nil && opts.collapsed(fi)
 		rows = append(rows, row{
@@ -198,15 +221,6 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 			reviewed: opts.reviewed != nil && opts.reviewed(fi),
 		})
 		if collapsed {
-			// The message's threads still show while its file is folded, as the header shows it.
-			if f.Path() == review.CommitMsgPath {
-				threadRows(fi, byFile[f.Path()])
-				for _, t := range lineThreads {
-					if locs[t].Path == f.Path() {
-						threadRows(fi, []*review.ThreadView{t})
-					}
-				}
-			}
 			continue
 		}
 		placed := map[*review.ThreadView]bool{}

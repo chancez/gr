@@ -3,6 +3,7 @@ package tui
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -33,7 +34,8 @@ func (m *model) fileReviewed(v view, f int) bool {
 func (m *model) viewReviewed(v view) bool {
 	switch v.kind {
 	case viewCommit:
-		return m.data.marks.CommitReviewed(v.commit.SHA, v.files)
+		// The message is reviewed with the commit, not as a file of its own.
+		return m.data.marks.CommitReviewed(v.commit.SHA, slices.DeleteFunc(slices.Clone(v.files), isMessage))
 	case viewDiff:
 		for f := range v.files {
 			if !m.fileReviewed(v, f) {
@@ -51,8 +53,7 @@ func (m *model) collapsed(v view, f int) bool {
 	if toggled {
 		return !expanded
 	}
-	// The commit's header shows its message, so the message's own file opens only to be commented on.
-	return v.files[f].Path() == review.CommitMsgPath || m.fileReviewed(v, f)
+	return m.fileReviewed(v, f)
 }
 
 func (m *model) toggleCollapsed(v view, f int) {
@@ -154,9 +155,7 @@ func (m *model) focusFile(f int) {
 			break
 		}
 	}
-	if f < len(m.filesNav.items) {
-		m.filesNav.pos = f
-	}
+	m.filesNav.show(m.current, f)
 }
 
 // advance runs an auto-advance move as a jump, so ctrl+o returns to what was marked, and returns
@@ -180,14 +179,14 @@ func (m *model) advance(move func()) string {
 func (m *model) nextUnreviewedFile(f int) {
 	v := m.views[m.current]
 	for next := f + 1; next < len(v.files); next++ {
-		if !m.fileReviewed(v, next) {
+		if !isMessage(v.files[next]) && !m.fileReviewed(v, next) {
 			m.focusFile(next)
 			return
 		}
 	}
 	left := 0
 	for i := range f {
-		if !m.fileReviewed(v, i) {
+		if !isMessage(v.files[i]) && !m.fileReviewed(v, i) {
 			left++
 		}
 	}
@@ -209,10 +208,10 @@ func (m *model) nextUnreviewedCommit() {
 		if v.kind != viewCommit || m.viewReviewed(v) {
 			continue
 		}
-		m.viewsNav.pos = vi
+		m.viewsNav.show(vi, -1)
 		m.openView()
 		for f := range v.files {
-			if !m.fileReviewed(v, f) {
+			if !isMessage(v.files[f]) && !m.fileReviewed(v, f) {
 				m.focusFile(f)
 				break
 			}

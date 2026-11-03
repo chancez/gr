@@ -98,6 +98,10 @@ func Location(l store.Location, p ...Prop) []Span {
 	}
 	if l.Path != "" {
 		loc := l.Path
+		if loc == review.CommitMsgPath {
+			// The message is anchored as a file, but shown as the commit's.
+			loc = "message"
+		}
 		if l.StartLine > 0 {
 			loc += ":" + strconv.Itoa(l.StartLine)
 			if l.EndLine != l.StartLine {
