@@ -4,21 +4,46 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
-// parseRaw parses the -z form of git's --raw output, ":mode mode blob blob status\0path\0" with a
-// second path for renames and copies, into file diffs without hunks.
+// parseRaw parses the -z form of git's --raw and --numstat output into file diffs without hunks:
+// the raw entries, ":mode mode blob blob status\0path\0" with a second path for renames and
+// copies, then a numstat entry for each file in the same order, "added\tdeleted\tpath\0", or
+// "added\tdeleted\t\0old\0new\0" for a rename, with "-" counts for a binary file.
 func parseRaw(out []byte) ([]FileDiff, error) {
 	tokens := strings.Split(string(out), "\x00")
 	var files []FileDiff
+	stats := 0
 	for i := 0; i < len(tokens); i++ {
 		tok := strings.TrimLeft(tokens[i], "\n")
 		if tok == "" {
 			continue
 		}
 		if !strings.HasPrefix(tok, ":") {
-			return nil, fmt.Errorf("unexpected raw diff field %q", tok)
+			counts := strings.SplitN(tok, "\t", 3)
+			if len(counts) != 3 || stats >= len(files) {
+				return nil, fmt.Errorf("unexpected raw diff field %q", tok)
+			}
+			if counts[2] == "" {
+				// A rename's or copy's paths follow, as their own fields.
+				i += 2
+			}
+			f := &files[stats]
+			stats++
+			if counts[0] == "-" {
+				f.Binary = true
+				continue
+			}
+			var err error
+			if f.Added, err = strconv.Atoi(counts[0]); err != nil {
+				return nil, fmt.Errorf("numstat entry %q: %w", tok, err)
+			}
+			if f.Deleted, err = strconv.Atoi(counts[1]); err != nil {
+				return nil, fmt.Errorf("numstat entry %q: %w", tok, err)
+			}
+			continue
 		}
 		fields := strings.Fields(tok[1:])
 		if len(fields) != 5 {
@@ -71,7 +96,7 @@ func (r *Repo) DiffFiles(ctx context.Context, from, to string) ([]FileDiff, erro
 	}
 	// No flag removes the hunks: git diff prints a patch only when no other output format is asked
 	// for, and --raw is one, so it prints the raw entries in place of the patch.
-	out, err := r.run(ctx, "diff", "--no-ext-diff", "--no-relative", "--no-abbrev", "--raw", "-z", "-M", from, to, "--")
+	out, err := r.run(ctx, "diff", "--no-ext-diff", "--no-relative", "--no-abbrev", "--raw", "--numstat", "-z", "-M", from, to, "--")
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +111,7 @@ func (r *Repo) CommitFiles(ctx context.Context, base, head string) (map[string][
 		rng = base + ".." + head
 	}
 	// As in DiffFiles, --raw takes the place of a patch; git log shows no diff at all by default.
-	out, err := r.run(ctx, "log", "--no-abbrev", "-M", "--raw", "-z", "--first-parent", "--root",
+	out, err := r.run(ctx, "log", "--no-abbrev", "-M", "--raw", "--numstat", "-z", "--first-parent", "--root",
 		"--format=%x1e%H", rng, "--")
 	if err != nil {
 		return nil, err

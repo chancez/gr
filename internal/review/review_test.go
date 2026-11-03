@@ -429,6 +429,7 @@ func TestInterdiffExcludesBase(t *testing.T) {
 	want := []git.FileDiff{{
 		OldPath: "a.go", NewPath: "a.go", Status: git.StatusModified, OldMode: "100644", NewMode: "100644",
 		OldBlob: e.repo.Git("rev-parse", rev1.HeadSHA+":a.go"), NewBlob: e.repo.Git("rev-parse", rev2.HeadSHA+":a.go"),
+		Added: 1,
 		Hunks: []git.Hunk{{
 			OldStart: 1, OldLines: 2, NewStart: 1, NewLines: 3,
 			Lines: []git.Line{

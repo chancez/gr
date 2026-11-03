@@ -11,13 +11,13 @@ import (
 )
 
 // TestFileListsMatchDiffs checks that the raw file lists name the same files and statuses as the
-// full diffs, without hunks, and the same blobs and modes wherever the patch has them. A pure rename
+// full diffs, without hunks, with the same counts of added and deleted lines, and the same blobs and modes wherever the patch has them. A pure rename
 // has no index line in a patch, so only the raw list carries its blobs.
 func TestFileListsMatchDiffs(t *testing.T) {
 	r := gittest.New(t)
 	r.Write("keep.txt", "keep\n", "old name.txt", gittest.Lines(gittest.Numbered(20)...), "gone.txt", "bye\n")
 	base := r.Commit("base")
-	r.Write("keep.txt", "kept\n", "new.txt", "hi\n")
+	r.Write("keep.txt", "kept\n", "new.txt", "hi\n", "image.bin", "\x00\x01\x02")
 	r.Git("mv", "old name.txt", "new name.txt")
 	r.Git("rm", "-q", "gone.txt")
 	one := r.Commit("one")

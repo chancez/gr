@@ -141,7 +141,7 @@ func TestCommitDiff(t *testing.T) {
 	rootBlob := r.Git("rev-parse", root+":a.txt")
 	secondBlob := r.Git("rev-parse", second+":a.txt")
 	want := []git.FileDiff{{
-		NewPath: "a.txt", Status: git.StatusAdded, NewMode: "100644", NewBlob: rootBlob,
+		NewPath: "a.txt", Status: git.StatusAdded, NewMode: "100644", NewBlob: rootBlob, Added: 2,
 		Hunks: []git.Hunk{{
 			OldStart: 0, OldLines: 0, NewStart: 1, NewLines: 2,
 			Lines: []git.Line{
@@ -164,7 +164,7 @@ func TestCommitDiff(t *testing.T) {
 	}
 	want = []git.FileDiff{{
 		OldPath: "a.txt", NewPath: "a.txt", Status: git.StatusModified, OldMode: "100644", NewMode: "100644",
-		OldBlob: rootBlob, NewBlob: secondBlob,
+		OldBlob: rootBlob, NewBlob: secondBlob, Added: 1, Deleted: 1,
 		Hunks: []git.Hunk{{
 			OldStart: 1, OldLines: 2, NewStart: 1, NewLines: 2,
 			Lines: []git.Line{

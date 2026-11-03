@@ -32,6 +32,8 @@ index 1111111..2222222 100644
 				NewMode: "100644",
 				OldBlob: "1111111",
 				NewBlob: "2222222",
+				Added:   1,
+				Deleted: 1,
 				Hunks: []Hunk{{
 					OldStart: 1, OldLines: 3, NewStart: 1, NewLines: 3,
 					Section: "package main",
@@ -60,6 +62,7 @@ index 0000000..3333333
 				Status:  StatusAdded,
 				NewMode: "100644",
 				NewBlob: "3333333",
+				Added:   1,
 				Hunks: []Hunk{{
 					OldStart: 0, OldLines: 0, NewStart: 1, NewLines: 1,
 					Lines: []Line{{Kind: LineAdded, Text: "hello", NewLine: 1, NoNewline: true}},
@@ -82,6 +85,7 @@ index 3333333..0000000
 				Status:  StatusDeleted,
 				OldMode: "100644",
 				OldBlob: "3333333",
+				Deleted: 2,
 				Hunks: []Hunk{{
 					OldStart: 1, OldLines: 2, NewStart: 0, NewLines: 0,
 					Lines: []Line{
@@ -141,7 +145,7 @@ diff --git a/b b/b
 `,
 			want: []FileDiff{
 				{
-					OldPath: "a", NewPath: "a", Status: StatusModified,
+					OldPath: "a", NewPath: "a", Status: StatusModified, Added: 1, Deleted: 1,
 					Hunks: []Hunk{{
 						OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1,
 						Lines: []Line{
@@ -151,7 +155,7 @@ diff --git a/b b/b
 					}},
 				},
 				{
-					OldPath: "b", NewPath: "b", Status: StatusModified,
+					OldPath: "b", NewPath: "b", Status: StatusModified, Added: 1,
 					Hunks: []Hunk{{
 						OldStart: 1, OldLines: 0, NewStart: 2, NewLines: 1,
 						Lines: []Line{{Kind: LineAdded, Text: "z", NewLine: 2}},

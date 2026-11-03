@@ -32,6 +32,10 @@ type FileDiff struct {
 	OldBlob string
 	NewBlob string
 	Binary  bool
+	// Added and Deleted count the file's added and deleted lines, from --numstat for a file list or
+	// from its hunks.
+	Added   int
+	Deleted int
 	Hunks   []Hunk
 }
 
@@ -102,6 +106,16 @@ func (p *diffParser) parse() ([]FileDiff, error) {
 		f, err := p.parseFile()
 		if err != nil {
 			return nil, err
+		}
+		for _, h := range f.Hunks {
+			for _, l := range h.Lines {
+				switch l.Kind {
+				case LineAdded:
+					f.Added++
+				case LineDeleted:
+					f.Deleted++
+				}
+			}
 		}
 		files = append(files, f)
 	}
