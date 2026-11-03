@@ -59,7 +59,7 @@ func TestRightClickMenu(t *testing.T) {
 		t.Fatalf("a second right click left mode %d, menu at x %d, want a new menu at %d", e.m.mode, e.m.picker.x, nw+31)
 	}
 	// The file's comment, under the line's.
-	e.press("down", "down")
+	e.press("down", "down", "down")
 	e.pressRun("enter")
 	if e.m.mode != modeCompose || !strings.Contains(e.m.compose.title, "main.go") {
 		t.Errorf("picking comment on file opened mode %d, title %q", e.m.mode, e.m.compose.title)
@@ -204,9 +204,11 @@ func menuTitles(m *model, t interact.Target[*model]) []string {
 var lineMenu = []pickerItem{
 	{value: "Line", heading: true},
 	{value: "comment", full: "Line: comment", note: "c"},
+	{value: "open in $EDITOR", full: "Line: open in $EDITOR", note: "E"},
 	{value: "File main.go", heading: true},
 	{value: "mark reviewed", full: "File main.go: mark reviewed", note: "m"},
 	{value: "comment", full: "File main.go: comment", note: "C"},
+	{value: "open in $EDITOR", full: "File main.go: open in $EDITOR"},
 	{value: "Commit b194130", heading: true},
 	{value: "mark reviewed", full: "Commit b194130: mark reviewed", note: "M"},
 	{value: "comment", full: "Commit b194130: comment"},

@@ -109,9 +109,9 @@ func (k *Kind[M, S]) Bind(a *Action[M, S], help, desc string, keys ...string) {
 	k.keys.bind(a, help, desc, keys...)
 }
 
-// BindQuiet binds keys to a, which the kind does not offer, so they run it but neither menus,
-// hints, nor help show it: a key that only says why it does nothing here, which keeps it from
-// reaching what the subject carries.
+// BindQuiet binds keys to a without describing them, so hints and help do not show them: a key
+// help describes on what the subject carries, or one that only says why it does nothing here,
+// which keeps it from reaching what the subject carries. Menus offer a only if the kind lists it.
 func (k *Kind[M, S]) BindQuiet(a *Action[M, S], keys ...string) {
 	k.keys.bind(a, "", "", keys...)
 }

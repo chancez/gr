@@ -238,6 +238,30 @@ var (
 	}
 )
 
+// Opening what the cursor is on in $EDITOR, as it is in the view.
+var (
+	actOpenFileInEditor = &interact.Action[*model, fileSubject]{
+		Title: "open in $EDITOR",
+		Help:  "open the file in $EDITOR, read-only, as it is here",
+		Run: func(m *model, s fileSubject) tea.Cmd {
+			line := 1
+			if len(s.diff.Hunks) > 0 {
+				line = s.diff.Hunks[0].NewStart
+			}
+			return m.openFileCmd(s.view, s.file, anchor.SideNew, line)
+		},
+	}
+	actOpenRowInEditor = &interact.Action[*model, rowSubject]{
+		Title:   "open in $EDITOR",
+		Help:    "open the file in $EDITOR at this line, read-only, as it is here",
+		Applies: func(m *model, s rowSubject) bool { return s.hasFile },
+		Run: func(m *model, s rowSubject) tea.Cmd {
+			side, line := openingLine(s)
+			return m.openFileCmd(s.view, s.file.file, side, line)
+		},
+	}
+)
+
 // Rows of a diff: lines, hunk headers, and folds of unchanged lines.
 var (
 	actCommentOnLine = &interact.Action[*model, rowSubject]{
@@ -560,11 +584,11 @@ func init() {
 	changeKind = interact.NewKind(func(changeSubject) string { return "Change" },
 		actCommentOnChange, actSubmit, actDiscardDraft)
 
-	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile)
+	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
 
-	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine)
-	hunkKind = interact.NewKind(func(rowSubject) string { return "Hunk" }, actSelectLine)
-	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" }, actExpandFold)
+	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actOpenRowInEditor)
+	hunkKind = interact.NewKind(func(rowSubject) string { return "Hunk" }, actSelectLine, actOpenRowInEditor)
+	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" }, actExpandFold, actOpenRowInEditor)
 
 	diffThreadKind = interact.NewKind(threadLabel, threadActions()...)
 	overviewThreadKind = interact.NewKind(threadLabel, append(threadActions(), actOpenThreadInDiff, actOpenThreadInCommit)...)
@@ -624,11 +648,16 @@ func init() {
 
 	writable(fileKind, actCommentOnFile, "c/C", "comment on the file", "c", "C")
 	writable(fileKind, actMarkFileReviewed, "m", "mark the file reviewed", "m")
+	fileKind.Bind(actOpenFileInEditor, "E", "open in $EDITOR, read-only, as it is here", "E")
 
 	writable(lineKind, actCommentOnLine, "c", "comment on the line or selection", "c")
 	lineKind.Bind(actSelectLine, "v", "select lines", "v", "V")
 	hunkKind.Bind(actSelectLine, "v", "select lines", "v", "V")
 	foldKind.BindQuiet(actNoCommentOnFold, "c", "C")
+	for _, k := range []*interact.Kind[*model, rowSubject]{lineKind, hunkKind, foldKind} {
+		// Described on the file it is in, which takes E wherever there is no line to open at.
+		k.BindQuiet(actOpenRowInEditor, "E")
+	}
 
 	bindThread(diffThreadKind)
 	bindThread(overviewThreadKind)

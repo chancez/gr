@@ -348,13 +348,7 @@ func (m *model) submitWith(verdict store.Verdict, now bool) tea.Cmd {
 
 // editorCmd suspends the TUI and edits text in $VISUAL or $EDITOR.
 func editorCmd(text string) tea.Cmd {
-	editor := os.Getenv("VISUAL")
-	if editor == "" {
-		editor = os.Getenv("EDITOR")
-	}
-	if editor == "" {
-		editor = "vi"
-	}
+	editor := editorProgram()
 	tmp, err := os.CreateTemp("", "gr-*.md")
 	if err != nil {
 		return func() tea.Msg { return editorMsg{err: err} }
