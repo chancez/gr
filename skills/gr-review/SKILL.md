@@ -33,6 +33,9 @@ Flags and their meanings are in `gr <command> --help`.
 
    Lines must be inside the diff: changed lines or the context lines around them. Use
    `--side old` for deleted lines. gr says so when a line is outside the diff.
+
+   After reading a commit, mark it reviewed with `gr mark --commit <sha>`. `gr change show` lists
+   what you marked, so a long review can resume where it stopped.
 3. **Submit**: `gr submit --request-changes -m "<summary>"`, or `--approve`, or neither for a plain
    comment. The summary becomes a thread the author can reply to.
 

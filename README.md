@@ -74,6 +74,7 @@ gr comment --commit HEAD -p main.go -l 10-12 -m "This can be nil."
 gr comment --commit HEAD -p /COMMIT_MSG -l 1 -m "Subject is too long."
 gr comment -p main.go -l 4 -m "On the whole diff."
 gr comment -m "Top-level comment."
+gr mark --commit HEAD                      # reviewed; -p for a file, gr change show lists marks
 gr submit --request-changes -m "Summary."
 ```
 
