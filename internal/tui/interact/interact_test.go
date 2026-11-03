@@ -1,0 +1,137 @@
+package interact_test
+
+import (
+	"reflect"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/chancez/gr/internal/tui/interact"
+)
+
+// env records what actions ran, as the TUI's model would interact.
+type env struct {
+	ran  []string
+	mine bool
+}
+
+type commit struct {
+	sha string
+}
+
+type file struct {
+	path   string
+	commit commit
+}
+
+func action[S any](title string, applies func(*env, S) bool) *interact.Action[*env, S] {
+	return &interact.Action[*env, S]{Title: title, Applies: applies,
+		Run: func(e *env, _ S) tea.Cmd { e.ran = append(e.ran, title); return nil }}
+}
+
+func press(s string) tea.KeyPressMsg { return tea.KeyPressMsg{Code: rune(s[0]), Text: s} }
+
+// kinds are commits and files, a file carrying its commit, each with keys of its own: a file takes
+// c and m, and a commit takes c and C, m and M, so C and M on a file reach its commit.
+func kinds() (*interact.Kind[*env, commit], *interact.Kind[*env, file]) {
+	openCommit := action[commit]("open", nil)
+	markCommit := action[commit]("mark commit reviewed", nil)
+	commentOnCommit := action[commit]("comment on commit", nil)
+	editCommit := action[commit]("edit", func(e *env, _ commit) bool { return e.mine })
+	commits := interact.NewKind(func(c commit) string { return "Commit " + c.sha }, openCommit, markCommit, commentOnCommit, editCommit)
+	commits.Bind(openCommit, "o", "open", "o")
+	commits.Bind(markCommit, "m/M", "mark reviewed", "m", "M")
+	commits.Bind(commentOnCommit, "c/C", "comment", "c", "C")
+	commits.Bind(editCommit, "e", "edit", "e")
+
+	markFile := action[file]("mark file reviewed", nil)
+	commentOnFile := action[file]("comment on file", nil)
+	files := interact.NewKind(func(f file) string { return "File " + f.path }, markFile, commentOnFile)
+	files.Bind(markFile, "m", "mark reviewed", "m")
+	files.Bind(commentOnFile, "c", "comment", "c")
+	interact.Via(files, func(f file) (commit, bool) { return f.commit, f.commit.sha != "" }, commits)
+	return commits, files
+}
+
+// A key runs on the most specific subject that takes it, and passes to what it carries otherwise:
+// a file takes m, its commit M and o, and nothing takes e while edit does not apply.
+func TestLookup(t *testing.T) {
+	_, files := kinds()
+	target := interact.List(files).Target(file{path: "a.go", commit: commit{sha: "abc"}})
+	e := &env{}
+	for _, k := range []string{"m", "M", "o", "e"} {
+		if a, ok := interact.Lookup(e, press(k), target); ok {
+			a.Run(e)
+		}
+	}
+	if want := []string{"mark file reviewed", "mark commit reviewed", "open"}; !reflect.DeepEqual(e.ran, want) {
+		t.Errorf("ran %q, want %q", e.ran, want)
+	}
+}
+
+// The keys that reach something on a target leave out what a subject before takes: on a file, the
+// commit's c/C shows as C, and its m/M as M.
+func TestKeys(t *testing.T) {
+	_, files := kinds()
+	target := interact.List(files).Target(file{path: "a.go", commit: commit{sha: "abc"}})
+	var got [][2]string
+	for _, k := range interact.Keys(&env{}, target) {
+		got = append(got, [2]string{k.Help().Key, k.Action.Title})
+	}
+	want := [][2]string{
+		{"m", "mark file reviewed"},
+		{"c", "comment on file"},
+		{"o", "open"},
+		{"M", "mark commit reviewed"},
+		{"C", "comment on commit"},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("keys = %q, want %q", got, want)
+	}
+}
+
+// A place's keys come before its kind's, and the cursor landing on a subject runs the place's
+// handler.
+func TestPlaces(t *testing.T) {
+	commits, _ := kinds()
+	open := action[commit]("open in the main pane", nil)
+	show := action[commit]("show", nil)
+	e := &env{}
+	p := interact.List(commits, interact.OnCursor(show))
+	p.Bind(open, "enter/o", "open", "enter", "o")
+	target := p.Target(commit{sha: "abc"})
+	target.OnCursor(e)
+	if a, ok := interact.Lookup(e, press("o"), target); ok {
+		a.Run(e)
+	}
+	if want := []string{"show", "open in the main pane"}; !reflect.DeepEqual(e.ran, want) {
+		t.Errorf("ran %q, want %q: the handler, then the place's o over the kind's", e.ran, want)
+	}
+	if !target.Involves(p) || !target.Involves(commits) || target.Involves(interact.List(commits)) {
+		t.Error("a target does not involve its own place and kind alone")
+	}
+}
+
+// Binding an action a kind does not list panics, so no key runs an action the kind does not have by
+// accident; BindQuiet does so on purpose, for a key that only says why it does nothing.
+func TestBindQuiet(t *testing.T) {
+	refuse := action[file]("read-only", nil)
+	files := interact.NewKind[*env, file](func(f file) string { return "File " + f.path })
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("binding an action the kind does not list did not panic")
+			}
+		}()
+		files.Bind(refuse, "c", "comment", "c")
+	}()
+	files.BindQuiet(refuse, "c")
+	target := interact.List(files).Target(file{path: "a.go"})
+	e := &env{}
+	if a, ok := interact.Lookup(e, press("c"), target); ok {
+		a.Run(e)
+	}
+	if !reflect.DeepEqual(e.ran, []string{"read-only"}) || files.Bindings()[0].Help().Desc != "" {
+		t.Errorf("quiet key ran %q, help %+v; want it run and undescribed", e.ran, files.Bindings())
+	}
+}
