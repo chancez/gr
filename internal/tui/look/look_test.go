@@ -2,9 +2,11 @@ package look
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -101,5 +103,33 @@ func TestThemeDraw(t *testing.T) {
 		if !reflect.DeepEqual(cells.Parse(tc.got), cells.Parse(tc.want)) {
 			t.Errorf("%s:\ngot  %q\nwant %q", name, tc.got, tc.want)
 		}
+	}
+}
+
+func TestZones(t *testing.T) {
+	th := New(true, ThemeDefault)
+	line := th.Render(Plain, append(append([]Span{Text("ab ")}, MarkSHA("commit:0123456789", SHA("0123456789").Short())...), Text(" cd"))...)
+	frame := "first line\n" + line + "\n" + th.Draw(Plain, 6, append([]Span{Text("xy ")}, MarkSHA("cut", SHA("0123456789").Short())...)...)
+	clean, zones := Scan(frame)
+	if strings.Contains(clean, "grz") {
+		t.Errorf("Scan left marks in %q", clean)
+	}
+	want := map[string][]Zone{"commit:0123456789": {{X: 3, Y: 1, W: 7}}, "cut": {{X: 3, Y: 2, W: 3}}}
+	if !reflect.DeepEqual(zones, want) {
+		t.Errorf("zones = %+v, want %+v", zones, want)
+	}
+}
+
+// Restyling marked text keeps its marks, and so its zones.
+func TestKeepMarks(t *testing.T) {
+	th := New(true, ThemeDefault)
+	line := th.Render(Plain, append(append([]Span{Text("ab ")}, MarkSHA("sha", SHA("0123456789").Short())...), Text(" cd"))...)
+	// Restyle "ab 01", cutting through the marked sha.
+	restyled := KeepMarks(line, func(s string) string {
+		return th.Render(SearchMatch, Text(ansi.Strip(ansi.Cut(s, 0, 5)))) + ansi.Cut(s, 5, ansi.StringWidth(s))
+	})
+	_, zones := Scan(restyled)
+	if want := map[string][]Zone{"sha": {{X: 3, Y: 0, W: 7}}}; !reflect.DeepEqual(zones, want) {
+		t.Errorf("zones = %+v, want %+v", zones, want)
 	}
 }

@@ -21,6 +21,8 @@ type Span struct {
 	// styled, when set, draws text a foreign renderer styles, such as syntax highlighting, on the
 	// surface's background.
 	styled func(bg color.Color) string
+	// zone, when set, marks where the span is drawn, for Scan.
+	zone string
 }
 
 func sp(el element, text string) Span {
@@ -82,7 +84,11 @@ func (t *Theme) Render(s Surface, spans ...Span) string {
 		if x.text == "" {
 			continue
 		}
-		b.WriteString(t.style(x.el, x.props, s).Render(termtext.Line(x.text)))
+		out := t.style(x.el, x.props, s).Render(termtext.Line(x.text))
+		if x.zone != "" {
+			out = markZone(x.zone, out)
+		}
+		b.WriteString(out)
 	}
 	return b.String()
 }
