@@ -80,11 +80,11 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	rows := []row{
 		plain(
 			[]look.Span{look.Heading(fmt.Sprintf("#%d %s", c.Seq, c.Title))},
-			[]look.Span{
+			append([]look.Span{
 				look.Muted(fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
 				look.SHA(rev.BaseSHA).Short(), look.Muted(".."), look.SHA(rev.HeadSHA).Short(),
-				look.Muted(fmt.Sprintf("), %d commits, %d files", len(d.commits), len(d.diffFiles))),
-			},
+				look.Muted(fmt.Sprintf("), %d commits, %d files, ", len(d.commits), len(d.diffFiles))),
+			}, filesSize(d.diffFiles)...),
 			[]look.Span{
 				look.Default("Threads: "),
 				look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),

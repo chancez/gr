@@ -352,14 +352,12 @@ func (m *model) renderSidebar(width, height int) []string {
 // mainHeader titles the main pane with the view and the file under the cursor.
 func (m *model) mainHeader(width int) string {
 	v := m.views[m.current]
-	title := " " + m.viewLabel(v)
+	label := " " + m.viewLabel(v) + " "
+	var size []look.Span
 	if v.kind != viewOverview && len(v.files) > 0 {
-		added, deleted := 0, 0
-		for _, f := range v.files {
-			added, deleted = added+f.Added, deleted+f.Deleted
-		}
-		title += "  " + look.TextOf(look.DiffSize(added, deleted)...)
+		size = filesSize(v.files)
 	}
+	title := ""
 	if m.needsLoad(v) {
 		title += "  (loading)"
 	}
@@ -377,7 +375,24 @@ func (m *model) mainHeader(width int) string {
 			}
 		}
 	}
-	return m.withStatus(paneTitle(m.r.th, title, width, m.focus == focusMain), width)
+	th, focused := m.r.th, m.focus == focusMain
+	if size == nil {
+		return m.withStatus(paneTitle(th, label+title, width, focused), width)
+	}
+	// The size keeps its colors on a chip of its own, as the bar draws its text in one color.
+	chip := th.Render(look.HeadingBar, append(append([]look.Span{look.Default(" ")}, size...), look.Default(" "))...)
+	lead := paneTitle(th, label, min(ansi.StringWidth(label), width), focused)
+	rest := max(width-ansi.StringWidth(lead)-ansi.StringWidth(chip), 0)
+	return m.withStatus(lead+chip+paneTitle(th, title, rest, focused), width)
+}
+
+// filesSize is how many lines files add and delete in all.
+func filesSize(files []git.FileDiff) []look.Span {
+	added, deleted := 0, 0
+	for _, f := range files {
+		added, deleted = added+f.Added, deleted+f.Deleted
+	}
+	return look.DiffSize(added, deleted)
 }
 
 // withStatus overlays the current message at the right of the main pane's title bar, so it does
