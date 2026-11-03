@@ -46,3 +46,24 @@ func (q queries) ListMarks(ctx context.Context, changeID string, author Author) 
 	}
 	return marks, rows.Err()
 }
+
+// ListChangeMarks lists every author's reviewed marks on a change.
+func (q queries) ListChangeMarks(ctx context.Context, changeID string) ([]AuthorMark, error) {
+	rows, err := q.q.QueryContext(ctx,
+		`SELECT author_name, author_email, commit_sha, path, blob_sha FROM reviewed WHERE change_id = ?
+		ORDER BY created_at, id`,
+		changeID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var marks []AuthorMark
+	for rows.Next() {
+		var m AuthorMark
+		if err := rows.Scan(&m.Author.Name, &m.Author.Email, &m.Mark.Commit, &m.Mark.Path, &m.Mark.Blob); err != nil {
+			return nil, err
+		}
+		marks = append(marks, m)
+	}
+	return marks, rows.Err()
+}

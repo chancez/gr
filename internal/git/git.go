@@ -445,6 +445,29 @@ func (r *Repo) ReadCommit(ctx context.Context, sha string) (Commit, error) {
 	return commits[0], nil
 }
 
+// PatchIDs returns the stable patch id of each commit that changes something, by sha: commits
+// with the same diff, as before and after a clean rebase, have the same one.
+func (r *Repo) PatchIDs(ctx context.Context, shas []string) (map[string]string, error) {
+	ids := map[string]string{}
+	if len(shas) == 0 {
+		return ids, nil
+	}
+	diffs, err := run(ctx, r.Dir, []byte(strings.Join(shas, "\n")+"\n"), "diff-tree", "--stdin", "-p", "--root", "--no-ext-diff")
+	if err != nil {
+		return nil, err
+	}
+	out, err := run(ctx, r.Dir, diffs, "patch-id", "--stable")
+	if err != nil {
+		return nil, err
+	}
+	for line := range strings.Lines(string(out)) {
+		if id, sha, ok := strings.Cut(strings.TrimSpace(line), " "); ok {
+			ids[sha] = id
+		}
+	}
+	return ids, nil
+}
+
 // EmptyTree returns the id of the empty tree in this repository's hash algorithm.
 func (r *Repo) EmptyTree(ctx context.Context) (string, error) {
 	out, err := run(ctx, r.Dir, []byte{}, "hash-object", "-t", "tree", "--stdin")

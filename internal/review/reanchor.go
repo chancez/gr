@@ -19,6 +19,7 @@ type reanchorer struct {
 	commitFiles map[string][]git.FileDiff
 	rangeFiles  []git.FileDiff
 	rangeLoaded bool
+	rewrites    *rewrites
 }
 
 func (s *Service) newReanchorer(ctx context.Context, base, head string) (*reanchorer, error) {
@@ -26,7 +27,8 @@ func (s *Service) newReanchorer(ctx context.Context, base, head string) (*reanch
 	if err != nil {
 		return nil, err
 	}
-	return &reanchorer{s: s, base: base, head: head, commits: commits, commitFiles: map[string][]git.FileDiff{}}, nil
+	return &reanchorer{s: s, base: base, head: head, commits: commits, commitFiles: map[string][]git.FileDiff{},
+		rewrites: newRewrites(s, commits)}, nil
 }
 
 // errStale is returned from a write transaction when threads or revisions changed after the git

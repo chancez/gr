@@ -182,6 +182,12 @@ type Mark struct {
 	Blob   string
 }
 
+// AuthorMark is a mark and the author who made it.
+type AuthorMark struct {
+	Author Author
+	Mark   Mark
+}
+
 // Ref is how a thread is referred to: its number, or for a summary thread "r" and its review's
 // number.
 func (t Thread) Ref() string {

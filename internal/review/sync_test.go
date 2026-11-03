@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -144,4 +145,59 @@ func TestReanchorRedoesForAThreadStartedMeanwhile(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertSynced(t, a, change, []store.Location{rebasedLocation, rebasedLocation})
+}
+
+// Reviewed marks follow commits a rewrite keeps: a clean rebase keeps a commit's mark, and a fixup
+// squashed into a commit keeps the marks of the files it left alone.
+func TestMarksFollowRewrites(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.txt", "a\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("b.txt", "b\n")
+	e.repo.Commit("add b")
+	e.repo.Write("c.txt", "c\n")
+	e.repo.Write("d.txt", "d\n")
+	e.repo.Commit("add c and d")
+	h := e.service(human)
+	change, _ := e.ensure(h, "")
+	ctx := t.Context()
+	commits := func() []string {
+		t.Helper()
+		return strings.Fields(e.repo.Git("rev-list", "--reverse", "main..feature"))
+	}
+	first, second := commits()[0], commits()[1]
+	if err := h.SetReviewed(ctx, change, review.CommitMark(first), true); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetReviewed(ctx, change, review.CommitMark(second), true); err != nil {
+		t.Fatal(err)
+	}
+
+	// main moves on, and the branch is rebased onto it, then d.txt is fixed in the second commit.
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Write("z.txt", "z\n")
+	e.repo.Commit("main moves")
+	e.repo.Git("checkout", "-q", "feature")
+	e.repo.Git("rebase", "-q", "main")
+	e.repo.Write("d.txt", "d, fixed\n")
+	e.repo.Git("commit", "-q", "--amend", "-a", "--no-edit")
+	if _, _, err := h.Sync(ctx, change); err != nil {
+		t.Fatal(err)
+	}
+	marks, err := h.Marks(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebased, fixed := commits()[0], commits()[1]
+	got := map[string]bool{
+		"first commit":  marks[review.CommitMark(rebased)],
+		"second commit": marks[review.CommitMark(fixed)],
+		"c.txt":         marks[store.Mark{Commit: fixed, Path: "c.txt"}],
+		"d.txt":         marks[store.Mark{Commit: fixed, Path: "d.txt"}],
+	}
+	want := map[string]bool{"first commit": true, "second commit": false, "c.txt": true, "d.txt": false}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("marks after the rewrite (-want +got):\n%s", diff)
+	}
 }

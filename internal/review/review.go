@@ -332,6 +332,14 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 	if err != nil {
 		return store.Change{}, store.Revision{}, err
 	}
+	marks, err := s.store.ListChangeMarks(ctx, change.ID)
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	carried, err := r.carryMarks(ctx, marks)
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
 	if s.beforeReanchorWrite != nil {
 		s.beforeReanchorWrite()
 	}
@@ -353,6 +361,14 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 			return err
 		}
 		slog.Info("new revision", "change", change.Seq, "revision", revision.Seq, "base", base, "head", head)
+		for _, m := range carried {
+			if err := tx.AddMark(ctx, change.ID, m.Author, m.Mark); err != nil {
+				return err
+			}
+		}
+		if len(carried) > 0 {
+			slog.Info("carried reviewed marks to rewritten commits", "revision", revision.Seq, "marks", len(carried))
+		}
 		return apply(ctx, tx, change.ID, revision, moves)
 	})
 	if err != nil {

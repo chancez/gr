@@ -3,6 +3,7 @@ package git_test
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -396,5 +397,34 @@ func TestStackParentsIgnoresWhatLandedUpstream(t *testing.T) {
 	got, err := open(t, r.Dir).StackParents(t.Context(), "feature", "main")
 	if err != nil || len(got) != 0 {
 		t.Errorf("StackParents = %q, %v; want none, since landed is on main's upstream", got, err)
+	}
+}
+
+// A clean rebase keeps a commit's patch id, and changing its diff does not.
+func TestPatchIDs(t *testing.T) {
+	r := gittest.New(t)
+	repo := open(t, r.Dir)
+	r.Write("a.txt", "a\n")
+	r.Commit("root")
+	r.Git("checkout", "-q", "-b", "topic")
+	r.Write("b.txt", "b\n")
+	r.Commit("add b")
+	before := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+	r.Git("checkout", "-q", "main")
+	r.Write("c.txt", "c\n")
+	r.Commit("add c")
+	r.Git("checkout", "-q", "topic")
+	r.Git("rebase", "-q", "main")
+	rebased := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+	r.Write("b.txt", "b, fixed\n")
+	r.Git("commit", "-q", "--amend", "-a", "--no-edit")
+	amended := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+
+	ids, err := repo.PatchIDs(t.Context(), []string{before, rebased, amended})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ids) != 3 || ids[before] == "" || ids[before] != ids[rebased] || ids[amended] == ids[before] {
+		t.Errorf("patch ids = %v; want the rebased commit's the same as before, and the amended one's not", ids)
 	}
 }
