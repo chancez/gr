@@ -4,11 +4,10 @@ In priority order. Foundations come first because every feature built before the
 
 ## Foundations
 
-1. Harder skill evals, in `skills/*/evals`. Iteration 1 only separated the skills from no skill on
-   `GR_AUTHOR`. Next: an outdated thread, an ask narrowed by a later reply, running off the change's
-   branch, open threads mixed with addressed ones, and a fix touching code under another open thread.
-   Also check for wasted calls: agents list the open threads, then fetch a thread by ref that the
-   list already showed in full.
+1. Keep agents from reading the thread list twice. When the open threads' JSON runs past what a tool
+   shows of a command's output, about 30,000 characters, agents with the skill list them again to
+   read them from a file; the huge-review eval shows it. A compact list, or the skill saying to
+   save a long list once, would avoid it.
 
 ## Quick wins, on the new foundations
 
