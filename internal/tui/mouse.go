@@ -106,6 +106,10 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, m.landed(true)
 	}
 	i := m.main.rowAt(msg.Y - 1)
+	if h, ok := m.stickyFile(); ok && msg.Y == 1 {
+		// The pinned header is its file's, whatever row it covers.
+		i = h
+	}
 	if i < 0 || !m.main.rows[i].selectable() {
 		if !right {
 			m.setFocus(focusMain)

@@ -1989,3 +1989,35 @@ func TestSidebarFollowsEveryFile(t *testing.T) {
 		}
 	}
 }
+
+// Scrolled into a file, its header stays pinned at the top of the diff, and a click there is on
+// the header.
+func TestStickyFileHeader(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("long.txt", gittest.Lines(gittest.Numbered(40)...))
+	e.repo.Commit("add long file")
+	e.drain(e.m.loadCmd())
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	e.openNav("add long file")
+	e.press("l")
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.Text == "line 30" })
+	nw, _, _ := e.m.layoutSizes()
+	top := func() string { return strings.Split(e.screen(), "\n")[1][nw+1:] }
+	if !strings.Contains(top(), "A long.txt") {
+		t.Fatalf("top of the diff, scrolled into long.txt: %q", top())
+	}
+	e.m.Update(tea.MouseClickMsg{X: nw + 10, Y: 1, Button: tea.MouseLeft})
+	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile {
+		t.Errorf("click on the pinned header put the cursor on %+v", r)
+	}
+	e.press("g")
+	shown := 0
+	for _, l := range strings.Split(e.screen(), "\n")[1:] {
+		if len(l) > nw && strings.Contains(l[nw+1:], "A long.txt") {
+			shown++
+		}
+	}
+	if shown != 1 {
+		t.Errorf("at the top, the header shows %d times in the diff:\n%s", shown, e.screen())
+	}
+}

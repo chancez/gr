@@ -49,30 +49,28 @@ In priority order. Foundations come first because every feature built before the
 
 ## Features
 
-15. Keep the header of the file at the top of the diff pinned, like GitHub's sticky file headers, so
-    the file being read is always named while scrolling through it.
-16. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
+15. Toggle hiding reviewed commits and files, with a visible marker wherever entries are hidden, so
     skipping past them is obvious.
-17. Comment on lines outside diff hunks, on context opened from a fold.
-18. Test mouse handling in a real terminal.
-19. Suggestions on line comments, as GitHub's: a ```` ```suggestion ```` block the author can apply,
+16. Comment on lines outside diff hunks, on context opened from a fold.
+17. Test mouse handling in a real terminal.
+18. Suggestions on line comments, as GitHub's: a ```` ```suggestion ```` block the author can apply,
     over one line or several, filled in with the selected lines to edit.
-20. A visible control for most actions, so the mouse reaches them without a menu: save and discard
+19. A visible control for most actions, so the mouse reaches them without a menu: save and discard
     on the comment box and in the unsaved comment prompt, a + in a diff line's left margin to comment
     on it as on GitHub, and so on through the registry's actions.
-21. The mouse in the comment box and other text boxes: click to move the cursor, drag to select.
-22. Select text in a diff with the mouse, to copy it or act on it.
-23. Tabs in the TUI, and switching the repository or change from inside it, so several reviews run
+20. The mouse in the comment box and other text boxes: click to move the cursor, drag to select.
+21. Select text in a diff with the mouse, to copy it or act on it.
+22. Tabs in the TUI, and switching the repository or change from inside it, so several reviews run
     in one gr rather than one instance each.
-24. gr on the web, or as an app in a native shell, through
+23. gr on the web, or as an app in a native shell, through
     [go-booba](https://github.com/NimbleMarkets/go-booba) or similar. Needs the tabs above, to run
     several reviews in one window.
-25. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
+24. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
     text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 
-26. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+25. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later

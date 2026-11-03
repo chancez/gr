@@ -508,6 +508,9 @@ func (m *model) frame() string {
 	}
 	nw, mw, bh := m.layoutSizes()
 	body := m.main.visible(m.renderMainRow)
+	if h, ok := m.stickyFile(); ok && len(body) > 0 {
+		body[0] = m.renderMainRow(h, rowState{cursor: h == m.main.cursor})[0]
+	}
 	if m.search != "" {
 		for i := range body {
 			body[i] = m.highlightMatches(body[i])

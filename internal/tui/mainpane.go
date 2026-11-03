@@ -42,6 +42,25 @@ func (m *model) rebuildMain() {
 	m.main.layout(m.renderMainRow)
 }
 
+// stickyFile is the header row of the file the top of the diff is in, once that header has
+// scrolled out of view, so it can stay pinned at the top, as GitHub's file headers do.
+func (m *model) stickyFile() (int, bool) {
+	p := &m.main
+	if p.reader {
+		return 0, false
+	}
+	first := p.rowAt(0)
+	if first < 0 || p.rows[first].file < 0 || isMessage(m.views[m.current].files[p.rows[first].file]) {
+		return 0, false
+	}
+	for h := first; h >= 0; h-- {
+		if r := p.rows[h]; r.kind == rowFile && r.file == p.rows[first].file {
+			return h, p.starts[h] < p.offset
+		}
+	}
+	return 0, false
+}
+
 func (m *model) renderMainRow(i int, state rowState) []string {
 	state.dim = m.focus != focusMain
 	width := m.main.width
