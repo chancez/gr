@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/chancez/gr/internal/git"
@@ -22,6 +23,10 @@ type pane struct {
 	width  int
 	height int
 	side   anchor.Side
+	// attached, while attach is a row, draws lines of something open under that row, as the
+	// comment box under the line it comments on. They take room in the pane as the row's own do.
+	attach   int
+	attached func(width int) []string
 	// hovering is set while the mouse is over row hover, on side hoverSide in split mode.
 	hovering  bool
 	hover     int
@@ -72,6 +77,9 @@ func (p *pane) layout(render func(i int, state rowState) []string) {
 			p.cache[i] = out
 			line += len(out)
 		}
+		if p.attaching(i) {
+			line += len(p.attached(p.width))
+		}
 	}
 	p.total = line
 	p.buildItems()
@@ -104,6 +112,31 @@ func (p *pane) buildItems() {
 		}
 	}
 	p.item = min(max(p.item, 0), max(len(p.items)-1, 0))
+}
+
+// attaching reports whether lines are attached under row i.
+func (p *pane) attaching(i int) bool {
+	return p.attached != nil && i == p.attach
+}
+
+// showAttached scrolls so the attached lines show, and the rows from top to the one they hang
+// under, as a selection being commented on, when the pane fits them all. The attached lines come
+// first, as what is being written, and their top when they are taller than the pane.
+func (p *pane) showAttached(top int) {
+	if p.attached == nil || p.attach < 0 || p.attach >= len(p.rows) {
+		return
+	}
+	end := p.starts[p.attach] + p.rowHeight(p.attach)
+	if end > p.offset+p.height {
+		p.offset = end - p.height
+	}
+	if start := p.starts[min(top, p.attach)]; start < p.offset && end-start <= p.height {
+		p.offset = start
+	}
+	if start := end - len(p.attached(p.width)); start < p.offset {
+		p.offset = start
+	}
+	p.clamp()
 }
 
 func (p *pane) rowHeight(i int) int {
@@ -478,13 +511,16 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 		state.hover = p.hovering && i == p.hover
 		state.hoverSide = p.hoverSide
 		var lines []string
-		if state.cursor || state.selected || state.activeHunk || state.hover {
+		if state.cursor || state.selected || state.activeHunk || state.hover || p.attaching(i) {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {
 			lines = cached
 		} else {
 			lines = render(i, state)
 			p.cache[i] = lines
+		}
+		if p.attaching(i) {
+			lines = append(slices.Clip(lines), p.attached(p.width)...)
 		}
 		skip := 0
 		if i == first {

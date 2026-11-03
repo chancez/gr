@@ -99,7 +99,7 @@ func TestControls(t *testing.T) {
 	}
 
 	e.press("c")
-	if got, want := e.shownControls(""), []string{"open $EDITOR", "close, asking if unsaved", "save"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls(""), []string{"save", "close, asking if unsaved", "open $EDITOR"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("comment box controls = %q, want %q", got, want)
 	}
 	e.typeText("first")
@@ -110,7 +110,7 @@ func TestControls(t *testing.T) {
 			e.m.fileReviewed(e.m.views[e.m.current], 1))
 	}
 	e.click("box", "close, asking if unsaved")
-	if got, want := e.shownControls(""), []string{"open $EDITOR", "close, asking if unsaved", "save", "save", "discard it", "keep editing"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls(""), []string{"save", "close, asking if unsaved", "open $EDITOR", "save", "discard it", "keep editing"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("unsaved comment controls = %q, want %q", got, want)
 	}
 	e.click("closing", "keep editing")

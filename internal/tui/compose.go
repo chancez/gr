@@ -13,6 +13,8 @@ import (
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/look"
+	"github.com/charmbracelet/x/ansi"
 )
 
 type composeKind int
@@ -38,6 +40,8 @@ type composer struct {
 	initial string
 	// closing is set while esc asks what to do with unsaved text.
 	closing bool
+	// at is the key of the row the box opens under, to find it again when the rows are rebuilt.
+	at string
 }
 
 // commentOnRow opens the comment box on row i of the main pane: its line, on side in split mode, or
@@ -244,11 +248,108 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 	c.area.SetStyles(m.composeStyles())
 	c.initial = initial
 	c.area.SetValue(initial)
+	c.area.SetHeight(composeHeight)
+	top, at := m.composeAnchor(c)
+	if at < len(m.main.rows) {
+		c.at = m.main.rows[at].key(m.views[m.current].files)
+	}
 	m.compose = c
 	m.mode = modeCompose
+	// The box opens under what it comments on, as GitHub's, so the lines above stay put.
+	m.main.attach, m.main.attached = at, m.composeLines
 	m.relayout(false)
-	m.main.ensureVisible()
+	m.main.layout(m.renderMainRow)
+	m.main.showAttached(top)
 	return m.compose.area.Focus()
+}
+
+// composeAnchor is the row the comment box opens under, and the first row of what it comments on:
+// a thread's row for a reply or an edit, the last line commented on with the threads already
+// under it, a file's header, or the commit's; otherwise the cursor's.
+func (m *model) composeAnchor(c composer) (top, at int) {
+	p := &m.main
+	files := m.views[m.current].files
+	path := func(r row) (string, string) {
+		if r.file < 0 || r.file >= len(files) {
+			return "", ""
+		}
+		return files[r.file].NewPath, files[r.file].OldPath
+	}
+	switch {
+	case c.kind == composeReply || c.kind == composeEdit:
+		for i, r := range p.rows {
+			if (r.kind == rowThread || r.kind == rowReview) && r.thread != nil && r.thread.ID == c.threadID {
+				return i, i
+			}
+		}
+	case c.kind == composeThread && c.thread.StartLine > 0:
+		nt := c.thread
+		end := max(nt.EndLine, nt.StartLine)
+		top, at = -1, -1
+		for i, r := range p.rows {
+			newPath, oldPath := path(r)
+			if r.kind != rowLine || (newPath != nt.Path && oldPath != nt.Path) {
+				continue
+			}
+			if n := lineOn(r, sideOr(nt.Side)); n >= nt.StartLine && n <= end {
+				if top < 0 {
+					top = i
+				}
+				at = i
+			}
+		}
+		if at >= 0 {
+			for at+1 < len(p.rows) && p.rows[at+1].kind == rowThread {
+				at++
+			}
+			return top, at
+		}
+	case c.kind == composeThread && c.thread.Path != "":
+		for i, r := range p.rows {
+			if newPath, oldPath := path(r); r.kind == rowFile && (newPath == c.thread.Path || oldPath == c.thread.Path) {
+				return i, i
+			}
+		}
+	case c.kind == composeThread && c.thread.Scope == store.ScopeCommit:
+		for i, r := range p.rows {
+			if r.kind == rowCommit {
+				return i, i
+			}
+		}
+	}
+	return p.cursor, p.cursor
+}
+
+// sideOr is s, or the new side when it is unset.
+func sideOr(s anchor.Side) anchor.Side {
+	if s == "" {
+		return anchor.SideNew
+	}
+	return s
+}
+
+// composeLines draws the comment box, width wide, as it hangs under its row.
+func (m *model) composeLines(width int) []string {
+	th := m.r.th
+	const indent = 2
+	boxWidth := max(width-indent, 24)
+	inner := boxWidth - 4
+	title := look.Heading(m.compose.title)
+	if m.compose.warn {
+		title = look.Warning(m.compose.title)
+	}
+	buttons := th.Render(look.Plain, m.controls("box", modeCompose, theComposer.Target(composeSubject{}),
+		button(actComposeSave, look.GlyphSave, "Save"),
+		button(actComposeClose, look.GlyphCancel, "Cancel"),
+		button(actComposeEditor, look.GlyphEditor, "$EDITOR"))...)
+	m.compose.area.SetWidth(inner)
+	box := th.Box(boxWidth, true).Render(th.DrawCut(look.Plain, inner, title) + "\n" + m.compose.area.View() + "\n" +
+		ansi.Truncate(buttons, inner, ""))
+	lines := strings.Split(box, "\n")
+	for i := range lines {
+		lines[i] = strings.Repeat(" ", indent) + lines[i]
+	}
+	return lines
 }
 
 // composeStyles colors the comment editor from the palette, so text and hints are readable on any
@@ -260,6 +361,8 @@ func (m *model) composeStyles() textarea.Styles {
 func (m *model) closeComposer() {
 	m.mode = modeNormal
 	m.compose = composer{}
+	m.main.attach, m.main.attached = -1, nil
+	m.main.layout(m.renderMainRow)
 	m.relayout(false)
 }
 

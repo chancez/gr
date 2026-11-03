@@ -44,6 +44,15 @@ func (m *model) rebuildMain() {
 	m.main.width, m.main.height = mw, mainHeight(bh)
 	// The rows' controls go with the rows' drawings.
 	m.drawnControls = nil
+	if m.mode == modeCompose {
+		// The comment box stays under the row it opened under, wherever that row now is.
+		m.main.attach = m.main.cursor
+		for i, r := range m.main.rows {
+			if m.compose.at != "" && r.key(v.files) == m.compose.at {
+				m.main.attach = i
+			}
+		}
+	}
 	m.main.layout(m.renderMainRow)
 }
 

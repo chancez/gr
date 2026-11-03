@@ -11,7 +11,6 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/review"
@@ -408,13 +407,11 @@ func (m *model) layoutSizes() (navWidth, mainWidth, bodyHeight int) {
 		mainWidth--
 	}
 	bodyHeight = m.height - 1
-	if m.mode == modeCompose {
-		bodyHeight -= composeHeight + 4
-	}
 	return navWidth, max(mainWidth, 10), max(bodyHeight, 1)
 }
 
-const composeHeight = 8
+// composeHeight is the comment box's text area, in lines.
+const composeHeight = 6
 
 // mainHeight is the main pane's row area, below its header line.
 func mainHeight(bodyHeight int) int { return max(bodyHeight-1, 1) }
@@ -428,10 +425,6 @@ func (m *model) relayout(resized bool) {
 		if m.data != nil {
 			m.main.layout(m.renderMainRow)
 		}
-	}
-	if m.mode == modeCompose {
-		m.compose.area.SetWidth(m.width - 4)
-		m.compose.area.SetHeight(composeHeight)
 	}
 	m.main.clamp()
 }
@@ -586,23 +579,6 @@ func (m *model) frame() string {
 	var b strings.Builder
 	for _, line := range screen {
 		b.WriteString(line)
-		b.WriteString("\n")
-	}
-	if m.mode == modeCompose {
-		th := m.r.th
-		title := look.Heading(m.compose.title)
-		if m.compose.warn {
-			title = look.Warning(m.compose.title)
-		}
-		// The buttons sit under the text.
-		inner := m.width - 4
-		buttons := th.Render(look.Plain, m.controls("box", modeCompose, theComposer.Target(composeSubject{}),
-			button(actComposeEditor, look.GlyphEditor, "$EDITOR"),
-			button(actComposeClose, look.GlyphCancel, "Cancel"),
-			button(actComposeSave, look.GlyphSave, "Save"))...)
-		box := th.Box(m.width, true).Render(th.DrawCut(look.Plain, inner, title) + "\n" + m.compose.area.View() + "\n" +
-			ansi.Truncate(buttons, inner, ""))
-		b.WriteString(box)
 		b.WriteString("\n")
 	}
 	b.WriteString(m.renderStatus())
