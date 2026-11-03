@@ -53,6 +53,45 @@ func kinds() (*interact.Kind[*env, commit], *interact.Kind[*env, file]) {
 	return commits, files
 }
 
+type groupTitles struct {
+	Label   string
+	Actions []string
+}
+
+func titles(gs []interact.Group[*env]) []groupTitles {
+	var out []groupTitles
+	for _, g := range gs {
+		n := groupTitles{Label: g.Label}
+		for _, a := range g.Actions {
+			n.Actions = append(n.Actions, a.Title)
+		}
+		out = append(out, n)
+	}
+	return out
+}
+
+// A subject's actions come first, then those of the subjects it carries, each under its label, and
+// only those that apply.
+func TestGroups(t *testing.T) {
+	_, files := kinds()
+	p := interact.List(files)
+	e := &env{}
+	got := titles(p.Target(file{path: "a.go", commit: commit{sha: "abc"}}).Groups(e))
+	want := []groupTitles{
+		{Label: "File a.go", Actions: []string{"mark file reviewed", "comment on file"}},
+		{Label: "Commit abc", Actions: []string{"open", "mark commit reviewed", "comment on commit"}},
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("groups = %+v, want %+v", got, want)
+	}
+	e.mine = true
+	got = titles(p.Target(file{path: "a.go"}).Groups(e))
+	want = []groupTitles{{Label: "File a.go", Actions: []string{"mark file reviewed", "comment on file"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("groups without a commit = %+v, want %+v", got, want)
+	}
+}
+
 // A key runs on the most specific subject that takes it, and passes to what it carries otherwise:
 // a file takes m, its commit M and o, and nothing takes e while edit does not apply.
 func TestLookup(t *testing.T) {
@@ -90,8 +129,8 @@ func TestKeys(t *testing.T) {
 	}
 }
 
-// A place's keys come before its kind's, and the cursor landing on a subject runs the place's
-// handler.
+// A place's keys come before its kind's, and its actions first in its menu; the cursor landing on
+// a subject runs the place's handler.
 func TestPlaces(t *testing.T) {
 	commits, _ := kinds()
 	open := action[commit]("open in the main pane", nil)
@@ -107,12 +146,15 @@ func TestPlaces(t *testing.T) {
 	if want := []string{"show", "open in the main pane"}; !reflect.DeepEqual(e.ran, want) {
 		t.Errorf("ran %q, want %q: the handler, then the place's o over the kind's", e.ran, want)
 	}
-	if !target.Involves(p) || !target.Involves(commits) || target.Involves(interact.List(commits)) {
-		t.Error("a target does not involve its own place and kind alone")
+	if got := titles(target.Groups(e))[0].Actions[0]; got != "open in the main pane" {
+		t.Errorf("the place's menu starts with %q", got)
+	}
+	if !p.Holds(target) || interact.List(commits).Holds(target) || !target.Involves(p) || !target.Involves(commits) {
+		t.Error("a target is not held by its own place alone, or does not involve its place and kind")
 	}
 }
 
-// Binding an action a kind does not list panics, so no key runs an action the kind does not have by
+// Binding an action a kind does not list panics, so no key runs what menus never offer by
 // accident; BindQuiet does so on purpose, for a key that only says why it does nothing.
 func TestBindQuiet(t *testing.T) {
 	refuse := action[file]("read-only", nil)
@@ -131,7 +173,7 @@ func TestBindQuiet(t *testing.T) {
 	if a, ok := interact.Lookup(e, press("c"), target); ok {
 		a.Run(e)
 	}
-	if !reflect.DeepEqual(e.ran, []string{"read-only"}) || files.Bindings()[0].Help().Desc != "" {
-		t.Errorf("quiet key ran %q, help %+v; want it run and undescribed", e.ran, files.Bindings())
+	if !reflect.DeepEqual(e.ran, []string{"read-only"}) || len(target.Groups(e)) != 0 || files.Bindings()[0].Help().Desc != "" {
+		t.Errorf("quiet key ran %q, menu %+v, help %+v; want it run, unlisted, and undescribed", e.ran, target.Groups(e), files.Bindings())
 	}
 }

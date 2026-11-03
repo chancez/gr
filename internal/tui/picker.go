@@ -25,6 +25,13 @@ type picker struct {
 	top   int
 	// pick acts on the chosen item.
 	pick func(pickerItem) tea.Cmd
+	// bound marks a menu of actions bound to subjects, which new data makes stale.
+	bound bool
+	// anchored places the popup at a point, as a menu opens where it was clicked, rather than near
+	// the top and centered.
+	anchored bool
+	anchorX  int
+	anchorY  int
 	// x, y, width, and height are where the popup was last drawn, for the mouse.
 	x      int
 	y      int
@@ -32,10 +39,25 @@ type picker struct {
 	height int
 }
 
-// pickerItem is one entry: its value, and a note shown after it, such as "current".
+// pickerItem is one entry: its value, and a note shown after it, such as "current". A heading
+// names the entries after it and cannot be picked; it shows only while nothing is typed.
 type pickerItem struct {
 	value string
-	note  string
+	// full is the entry with what it acts on, for when typing hides the headings, as "File main.go:
+	// comment" under "File main.go". Empty is the value.
+	full    string
+	note    string
+	heading bool
+	// run is what picking the entry does, for menus of actions.
+	run func(*model) tea.Cmd
+}
+
+// text is how the entry shows: in full while filtering, when the headings are hidden.
+func (it pickerItem) text(filtering bool) string {
+	if filtering && it.full != "" {
+		return it.full
+	}
+	return it.value
 }
 
 func newPicker(title string, items []pickerItem, pick func(pickerItem) tea.Cmd) *picker {
@@ -79,13 +101,28 @@ func fuzzyScore(value, pattern string) (int, bool) {
 
 func (p *picker) refilter() {
 	pattern := p.filter.Value()
+	if pattern == "" {
+		p.shown = p.shown[:0]
+		for i := range p.items {
+			p.shown = append(p.shown, i)
+		}
+		// Start on the first entry, with any heading above it in view.
+		p.pos, p.top = 0, 0
+		for p.pos < len(p.shown)-1 && p.items[p.shown[p.pos]].heading {
+			p.pos++
+		}
+		return
+	}
 	type scored struct {
 		i     int
 		score int
 	}
 	var matches []scored
 	for i, it := range p.items {
-		if s, ok := fuzzyScore(it.value, pattern); ok {
+		if it.heading {
+			continue
+		}
+		if s, ok := fuzzyScore(it.text(true), pattern); ok {
 			matches = append(matches, scored{i, s})
 		}
 	}
@@ -103,14 +140,36 @@ func pickerRows(height int) int {
 	return max(height-5, 1)
 }
 
+// move moves the selection n entries, past headings.
 func (p *picker) move(n int) {
 	if len(p.shown) == 0 {
 		return
 	}
-	p.pos = min(max(p.pos+n, 0), len(p.shown)-1)
+	dir := 1
+	if n < 0 {
+		dir = -1
+	}
+	pos := min(max(p.pos+n, 0), len(p.shown)-1)
+	for pos >= 0 && pos < len(p.shown) && p.items[p.shown[pos]].heading {
+		pos += dir
+	}
+	if pos < 0 || pos >= len(p.shown) {
+		// Only headings that way: look the other way.
+		for pos = min(max(p.pos+n, 0), len(p.shown)-1); pos >= 0 && pos < len(p.shown) && p.items[p.shown[pos]].heading; pos -= dir {
+		}
+		if pos < 0 || pos >= len(p.shown) {
+			return
+		}
+	}
+	p.pos = pos
 	rows := pickerRows(p.height)
-	if p.pos < p.top {
-		p.top = p.pos
+	// Keep the heading of an entry in view with it.
+	first := p.pos
+	if first > 0 && p.items[p.shown[first-1]].heading {
+		first--
+	}
+	if first < p.top {
+		p.top = first
 	}
 	if p.pos >= p.top+rows {
 		p.top = p.pos - rows + 1
@@ -118,22 +177,27 @@ func (p *picker) move(n int) {
 }
 
 func (p *picker) chosen() (pickerItem, bool) {
-	if p.pos >= len(p.shown) {
+	if p.pos >= len(p.shown) || p.items[p.shown[p.pos]].heading {
 		return pickerItem{}, false
 	}
 	return p.items[p.shown[p.pos]], true
 }
 
-// layout places the popup in a screen of width by height: near the top, centered, as wide as its
-// longest entry allows.
+// layout places the popup in a screen of width by height, as wide as its longest entry allows:
+// near the top and centered, or, anchored, as a menu, with its top left corner just right of its
+// point, growing down, shifted up or left only as far as it needs to fit.
 func (p *picker) layout(width, height int) {
 	w := ansi.StringWidth(p.title) + 4
 	for _, it := range p.items {
-		w = max(w, ansi.StringWidth(it.value)+ansi.StringWidth(it.note)+6)
+		w = max(w, ansi.StringWidth(it.text(true))+ansi.StringWidth(it.note)+8)
 	}
 	p.width = min(max(w, 40), width-4, 100)
 	p.height = min(len(p.items)+5, height-4)
 	p.x, p.y = (width-p.width)/2, 2
+	if p.anchored {
+		p.x = min(max(p.anchorX+1, 0), max(width-p.width, 0))
+		p.y = max(min(p.anchorY, height-p.height), 0)
+	}
 	p.filter.SetWidth(p.width - 8)
 }
 
@@ -141,23 +205,44 @@ func (p *picker) render(th *look.Theme) []string {
 	inner := p.width - 4
 	lines := []string{th.Draw(look.Plain, inner, look.Heading(p.title)), look.Fit(p.filter.View(), inner)}
 	rows := pickerRows(p.height)
+	// Entries under headings are indented beneath them.
+	grouped := slices.ContainsFunc(p.shown, func(i int) bool { return p.items[i].heading })
 	for i := p.top; i < p.top+rows; i++ {
 		if i >= len(p.shown) {
 			lines = append(lines, look.Fit("", inner))
 			continue
 		}
 		it := p.items[p.shown[i]]
+		if it.heading {
+			// A heading is a divider naming the entries under it, as the overview's are.
+			label := "-- " + it.value + " "
+			lines = append(lines, th.Draw(look.Plain, inner, look.Muted(label+strings.Repeat("-", max(inner-len(label), 0)))))
+			continue
+		}
 		surf := look.Plain
 		if i == p.pos {
 			surf = look.Cursor
 		}
-		spans := []look.Span{look.Text(it.value)}
+		value := it.text(p.filter.Value() != "")
+		if grouped {
+			value = "  " + value
+		}
+		spans := []look.Span{look.Text(value)}
 		if it.note != "" {
 			spans = append(spans, look.Muted("  "+it.note))
 		}
 		lines = append(lines, th.DrawCut(surf, inner, spans...))
 	}
-	count := fmt.Sprintf("%d of %d", len(p.shown), len(p.items))
+	shown, all := 0, 0
+	for i, it := range p.items {
+		if !it.heading {
+			all++
+			if slices.Contains(p.shown, i) {
+				shown++
+			}
+		}
+	}
+	count := fmt.Sprintf("%d of %d", shown, all)
 	lines = append(lines, th.Draw(look.Plain, inner, look.Muted(count), look.Muted("  enter picks, esc closes")))
 	return strings.Split(th.Box(p.width, true).Render(strings.Join(lines, "\n")), "\n")
 }
@@ -245,7 +330,10 @@ func (m *model) pickerClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	p.pos = i
-	it, _ := p.chosen()
+	it, ok := p.chosen()
+	if !ok {
+		return m, nil
+	}
 	m.closePicker()
 	return m, p.pick(it)
 }

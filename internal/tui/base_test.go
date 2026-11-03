@@ -12,7 +12,7 @@ func TestChangeTheBase(t *testing.T) {
 	e := newTUIEnv(t)
 	e.repo.Git("branch", "parent", "main")
 	e.pressRun("B")
-	if it, _ := e.m.picker.chosen(); it != (pickerItem{value: "main", note: "current"}) {
+	if it, _ := e.m.picker.chosen(); it.value != "main" || it.note != "current" {
 		t.Fatalf("the base picker starts at %+v, want the current base main", it)
 	}
 	e.typeText("par")

@@ -163,6 +163,23 @@ func TestGoldenScreens(t *testing.T) {
 		e.pressRun("B")
 		e.golden("dark-base-picker")
 	})
+	t.Run("menu", func(t *testing.T) {
+		e := goldenEnv(t)
+		e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#000000")})
+		e.openNav("say hello")
+		e.pressRun("l")
+		e.cursorTo(func(r row) bool { return addedLine(r) && strings.Contains(r.line.Text, "println") })
+		y := 0
+		for i, line := range strings.Split(e.screen(), "\n") {
+			if strings.Contains(line, `+     println("hello")`) {
+				y = i
+			}
+		}
+		nw, _, _ := e.m.layoutSizes()
+		_, cmd := e.m.Update(tea.MouseClickMsg{X: nw + 20, Y: y, Button: tea.MouseRight})
+		e.drain(cmd)
+		e.golden("dark-menu")
+	})
 	t.Run("colorblind", func(t *testing.T) {
 		e := goldenEnv(t)
 		e.m.theme = ThemeColorblind

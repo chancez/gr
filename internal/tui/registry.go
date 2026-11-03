@@ -453,6 +453,7 @@ var (
 	actPrevCommit  = loadedApp("previous commit", func(m *model) tea.Cmd { m.stepCommit(-1); return nil })
 	actNextUnseen  = loadedApp("next unreviewed commit", func(m *model) tea.Cmd { m.stepUnreviewed(1); return nil })
 	actPrevUnseen  = loadedApp("previous unreviewed commit", func(m *model) tea.Cmd { m.stepUnreviewed(-1); return nil })
+	actPalette     = loadedApp("actions here", func(m *model) tea.Cmd { return m.openPalette() })
 )
 
 // The comment box, its unsaved comment prompt, the verdict prompt, and the fold prefix: modes that
@@ -566,7 +567,7 @@ func init() {
 	appKind = interact.NewKind(func(appSubject) string { return "gr" },
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
 		actAutoAdvance, actSearch, actPickBase, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
-		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen)
+		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette)
 
 	composeBoxKind = interact.NewKind(func(composeSubject) string { return "Comment" },
 		actComposeSave, actComposeEditor, actComposeClose)
@@ -675,6 +676,7 @@ func init() {
 		{actSplitView, "s", "split/unified", []string{"s"}},
 		{actPickBase, "B", "change the base branch", []string{"B"}},
 		{actReload, "R", "reload", []string{"R", "ctrl+r"}},
+		{actPalette, "ctrl+p", "actions here", []string{"ctrl+p"}},
 		{actShowHelp, "?", "help", []string{"?"}},
 		{actQuit, "q", "quit", []string{"q", "ctrl+c"}},
 	} {
@@ -942,6 +944,17 @@ func (m *model) chain(t interact.Target[*model], has bool, sidebar bool) []inter
 func (m *model) cursorChain() []interact.Target[*model] {
 	t, ok := m.cursorTarget()
 	return m.chain(t, ok, m.focus != focusMain)
+}
+
+// chainOf is what a key would reach from t, for a menu opened on it.
+func (m *model) chainOf(t interact.Target[*model]) []interact.Target[*model] {
+	sidebar := false
+	for _, p := range []interface {
+		Holds(interact.Target[*model]) bool
+	}{sidebarOverview, sidebarDiff, sidebarInterdiff, sidebarCommits, sidebarFileList} {
+		sidebar = sidebar || p.Holds(t)
+	}
+	return m.chain(t, true, sidebar)
 }
 
 // dispatch runs what msg reaches where focus is, and reports whether anything ran.

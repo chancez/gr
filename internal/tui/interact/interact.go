@@ -218,8 +218,8 @@ func List[M, S any](k *Kind[M, S], opts ...Option[M, S]) *Place[M, S] {
 	return p
 }
 
-// Bind binds keys to a on the place's subjects, before the kind's keys. The kind need not have
-// a.
+// Bind binds keys to a on the place's subjects, before the kind's keys. a is offered first in
+// the place's menus, though the kind need not have it.
 func (p *Place[M, S]) Bind(a *Action[M, S], help, desc string, keys ...string) {
 	if !slices.Contains(p.actions, a) && !slices.Contains(p.kind.actions, a) {
 		p.actions = append(p.actions, a)
@@ -229,6 +229,9 @@ func (p *Place[M, S]) Bind(a *Action[M, S], help, desc string, keys ...string) {
 
 // Bindings are the place's own keys, for help.
 func (p *Place[M, S]) Bindings() []key.Binding { return p.keys.bindings() }
+
+// Holds reports whether t is one of the place's subjects.
+func (p *Place[M, S]) Holds(t Target[M]) bool { return t.place == p }
 
 // Target is a subject in its place.
 func (p *Place[M, S]) Target(s S) Target[M] {
@@ -269,6 +272,25 @@ func (t Target[M]) Involves(kp any) bool {
 		return true
 	}
 	return slices.ContainsFunc(t.groups, func(g Group[M]) bool { return g.from == kp })
+}
+
+// Groups are the target's actions that apply, by subject, its own first. Subjects with none are
+// left out.
+func (t Target[M]) Groups(m M) []Group[M] {
+	var out []Group[M]
+	for _, g := range t.groups {
+		var kept []Bound[M]
+		for _, a := range g.Actions {
+			if a.Applies(m) {
+				kept = append(kept, a)
+			}
+		}
+		if len(kept) > 0 {
+			g.Actions = kept
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // Lookup is what msg runs on a chain of targets, the most specific first, such as the cursor's

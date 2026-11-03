@@ -62,6 +62,7 @@ func (m *model) applyView(msg viewLoadedMsg) {
 	if m.data == nil || msg.head != m.data.revision.HeadSHA {
 		return
 	}
+	m.closeStaleMenus()
 	m.data.apply(msg)
 	key := m.views[m.current].key()
 	var cur row
@@ -142,6 +143,7 @@ func (m *model) applyData(d *changeData) {
 	}
 	prevY := m.main.cursorY()
 	prevSeg := m.main.itemSegment()
+	m.closeStaleMenus()
 	m.data = d
 	m.views = buildViews(d)
 	m.current = 0
