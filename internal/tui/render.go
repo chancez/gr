@@ -382,6 +382,16 @@ func commentHeader(d *changeData, c store.Comment) []look.Span {
 	return out
 }
 
+// maxBoxWidth caps a thread's or the comment box's width, so on a wide display a box is its own
+// beside the code rather than spanning the pane.
+const maxBoxWidth = 120
+
+// boxWidthIn is the width of a box indented by indent in a pane width wide: up to maxBoxWidth, and
+// on a narrower pane as wide as it, less a column, so the box always has a border of its own.
+func boxWidthIn(width, indent int) int {
+	return max(min(width-indent-1, maxBoxWidth), 24)
+}
+
 // threadIndent is how far a thread's box is indented: to where the code starts, past the line
 // numbers, for a thread on lines, so the box hangs off the lines its numbers are tinted on, and a
 // little for one on a file, a commit, or the change.
@@ -508,7 +518,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
 func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState, indent int) ([]string, []int) {
-	boxWidth := max(width-indent, 20)
+	boxWidth := boxWidthIn(width, indent)
 	inner := boxWidth - 4
 	title := []look.Span{look.Ref(t), look.Default(" ")}
 	if t.Summary {

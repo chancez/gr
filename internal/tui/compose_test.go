@@ -206,3 +206,32 @@ func TestVimCursor(t *testing.T) {
 		t.Errorf("cursor %+v once the box closed", c)
 	}
 }
+
+// Boxes are capped in width on a wide pane, and on a narrower one fill it but for a column, so
+// they always have a border of their own.
+func TestBoxWidths(t *testing.T) {
+	for _, tc := range []struct {
+		width int
+		want  int
+	}{{width: 300, want: maxBoxWidth}, {width: 120, want: 0}} {
+		e := goldenEnv(t)
+		e.m.Update(tea.WindowSizeMsg{Width: tc.width, Height: 40})
+		e.openNav("say hello")
+		_, mw, _ := e.m.layoutSizes()
+		want := tc.want
+		if want == 0 {
+			// The pane's width, less the box's indent and a column of margin.
+			want = mw - codeIndent(e.m.views[e.m.current], row{file: 1}, false) - 1
+		}
+		var got int
+		for _, l := range strings.Split(e.screen(), "\n") {
+			if i := strings.Index(l, "| #1 "); i >= 0 {
+				box := l[i:]
+				got = strings.LastIndex(box, "|") + 1
+			}
+		}
+		if got != want {
+			t.Errorf("%d columns wide: thread box %d wide, want %d", tc.width, got, want)
+		}
+	}
+}

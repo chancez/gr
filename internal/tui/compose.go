@@ -398,7 +398,7 @@ func (m *model) composeCursor() *tea.Cursor {
 func (m *model) composeLines(width int) []string {
 	th := m.r.th
 	indent := m.composeIndent()
-	boxWidth := max(width-indent, 24)
+	boxWidth := boxWidthIn(width, indent)
 	inner := boxWidth - 4
 	title := []look.Span{look.Heading(m.compose.title)}
 	if m.compose.warn {
