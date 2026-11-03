@@ -126,9 +126,9 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 		case i >= len(l.items):
 		case first && y == 0:
 			// The indicator covers this entry, so it counts as hidden too.
-			out = append(out, th.Draw(look.Plain, width, look.Muted(fmt.Sprintf("^ %d more", l.top+1))))
+			out = append(out, th.Draw(look.Plain, width, look.More(true, l.top+1)...))
 		case last && y == rows-1:
-			out = append(out, th.Draw(look.Plain, width, look.Muted(fmt.Sprintf("v %d more", len(l.items)-i))))
+			out = append(out, th.Draw(look.Plain, width, look.More(false, len(l.items)-i)...))
 		default:
 			out = append(out, l.items[i].render(th, width, i == l.pos, focused))
 		}
@@ -142,13 +142,13 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 // render draws one entry at width: the label, truncated so the badge always shows at the right.
 func (it navItem) render(th *look.Theme, width int, selected, focused bool) string {
 	room := width
-	badge := look.TextOf(it.badge...)
+	badge := th.TextOf(it.badge...)
 	if badge != "" {
 		room -= ansi.StringWidth(badge) + 1
 	}
 	lead := 0
 	if it.sha != "" {
-		lead = ansi.StringWidth(look.TextOf(look.SHA(it.sha).Short())) + 1
+		lead = ansi.StringWidth(th.TextOf(look.SHA(it.sha).Short())) + 1
 	}
 	label := ansi.Truncate(it.label, room-lead, "...")
 	if it.prefix != "" {

@@ -56,6 +56,11 @@ Comments are Markdown. `ctrl+e` writes one in `$EDITOR`.
 Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in
 place of green and red.
 
+Symbols are Unicode by default, and Nerd Font icons in terminals that bundle them: kitty, WezTerm,
+and Ghostty, recognized by their answer to XTVERSION or their environment. A font's glyphs cannot be
+detected, so elsewhere set `GR_GLYPHS=nerd` if your font is a Nerd Font, or `GR_GLYPHS=ascii` for
+plain ASCII.
+
 ## For agents
 
 Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name.

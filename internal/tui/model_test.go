@@ -65,6 +65,9 @@ func newTUIEnv(t *testing.T, opts ...store.Option) *tuiEnv {
 		t.Fatal(err)
 	}
 	m.syncLoads = true
+	// ASCII, as a model starts, so tests read the screen as text; the golden screens cover the
+	// other glyphs.
+	m.glyphsSet = true
 	t.Cleanup(m.close)
 	e := &tuiEnv{t: t, repo: r, svc: svc, m: m, chg: chg, store: st}
 	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
@@ -487,7 +490,7 @@ func TestMarkReviewedAdvances(t *testing.T) {
 	reviewedItem := false
 	for _, it := range e.m.viewsNav.items {
 		if strings.Contains(it.label, "say hello") {
-			reviewedItem = look.TextOf(it.badge...) == look.MarkReviewed
+			reviewedItem = e.m.r.th.TextOf(it.badge...) == e.m.r.th.Glyph(look.GlyphReviewed)
 		}
 	}
 	if !reviewedItem || !strings.Contains(e.screen(), "1/2 commits reviewed") {
@@ -750,19 +753,21 @@ func TestSidebarMarks(t *testing.T) {
 	e.pressRun("ctrl+s")
 
 	for _, it := range e.m.viewsNav.items {
-		if strings.Contains(it.label, "say hello") && look.TextOf(it.badge...) != look.MarkDraft {
-			t.Errorf("commit badge %q, want the draft mark", look.TextOf(it.badge...))
+		if strings.Contains(it.label, "say hello") && e.m.r.th.TextOf(it.badge...) != e.m.r.th.Glyph(look.GlyphDraft) {
+			t.Errorf("commit badge %q, want the draft mark", e.m.r.th.TextOf(it.badge...))
 		}
 	}
 	for _, it := range e.m.filesNav.items {
-		if strings.Contains(it.label, "main.go") && look.TextOf(it.badge...) != "+1 -1 (1) "+look.MarkDraft {
-			t.Errorf("main.go badge %q, want the open thread count and the draft mark", look.TextOf(it.badge...))
+		if strings.Contains(it.label, "main.go") && e.m.r.th.TextOf(it.badge...) != "+1 -1 (1) "+e.m.r.th.Glyph(look.GlyphDraft) {
+			t.Errorf("main.go badge %q, want the open thread count and the draft mark", e.m.r.th.TextOf(it.badge...))
 		}
 		if strings.Contains(it.label, "COMMIT_MSG") && len(it.badge) != 0 {
-			t.Errorf("message badge %q, want none", look.TextOf(it.badge...))
+			t.Errorf("message badge %q, want none", e.m.r.th.TextOf(it.badge...))
 		}
 	}
-	if got := look.TextOf(look.Badge(0, true, true)...); got != "*x" {
+	ascii := look.New(true, ThemeDefault)
+	ascii.SetGlyphs(look.GlyphsASCII)
+	if got := ascii.TextOf(look.Badge(0, true, true)...); got != "*x" {
 		t.Errorf("marks = %q, want drafts first", got)
 	}
 

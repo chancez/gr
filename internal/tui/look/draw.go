@@ -23,8 +23,14 @@ type Span struct {
 	styled func(bg color.Color) string
 	// zone, when set, marks where the span is drawn, for Scan.
 	zone string
-	// chip draws the span on the Control surface, whatever surface it is drawn on.
-	chip bool
+	// chip draws the span on the Control surface, or ControlSolid when solid, whatever surface it
+	// is drawn on.
+	chip  bool
+	solid bool
+	// glyph, when set, draws the theme's symbol for it in place of text; gap puts a space after it
+	// when there is one.
+	glyph Glyph
+	gap   bool
 }
 
 func sp(el element, text string) Span {
@@ -56,13 +62,25 @@ func DimIf(on bool, spans ...Span) []Span {
 	return out
 }
 
-// TextOf is the text of spans, without styles.
-func TextOf(spans ...Span) string {
+// TextOf is the text of spans as the theme draws them, without styles.
+func (t *Theme) TextOf(spans ...Span) string {
 	var b strings.Builder
 	for _, x := range spans {
-		b.WriteString(x.text)
+		b.WriteString(t.text(x))
 	}
 	return b.String()
+}
+
+// text is what x draws: its text, or the theme's glyph.
+func (t *Theme) text(x Span) string {
+	if x.glyph == GlyphNone {
+		return x.text
+	}
+	g := t.Glyph(x.glyph)
+	if g != "" && x.gap {
+		g += " "
+	}
+	return g
 }
 
 // IsDark reports whether the theme is for a dark background.
@@ -83,14 +101,18 @@ func (t *Theme) Render(s Surface, spans ...Span) string {
 			b.WriteString(x.styled(t.surfaces[s].bg))
 			continue
 		}
-		if x.text == "" {
+		text := t.text(x)
+		if text == "" {
 			continue
 		}
 		on := s
 		if x.chip {
 			on = Control
 		}
-		out := t.style(x.el, x.props, on).Render(termtext.Line(x.text))
+		if x.solid {
+			on = ControlSolid
+		}
+		out := t.style(x.el, x.props, on).Render(termtext.Line(text))
 		if x.zone != "" {
 			out = markZone(x.zone, out)
 		}

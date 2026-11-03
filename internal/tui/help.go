@@ -208,12 +208,12 @@ func (m *model) renderHints(keys []interact.Key[*model], width, keep int) string
 	n := len(keys)
 	used := 0
 	for _, k := range keys[max(n-keep, 0):] {
-		used += ansi.StringWidth(look.TextOf(hint(k)...)) + sep
+		used += ansi.StringWidth(th.TextOf(hint(k)...)) + sep
 	}
 	shown := keys[max(n-keep, 0):]
 	var head []interact.Key[*model]
 	for _, k := range keys[:max(n-keep, 0)] {
-		w := ansi.StringWidth(look.TextOf(hint(k)...))
+		w := ansi.StringWidth(th.TextOf(hint(k)...))
 		if used+w+sep > width {
 			break
 		}

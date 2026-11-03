@@ -197,6 +197,9 @@ const (
 	SearchMatch
 	// Control is a control's own background, a chip on whatever it sits on, as GitHub's buttons.
 	Control
+	// ControlSolid is a one-cell control that has to stand out on any line, as the + that comments,
+	// a + on the solid accent, as GitHub's blue square.
+	ControlSolid
 	numSurfaces
 )
 
@@ -216,6 +219,7 @@ var surfaceNames = [numSurfaces]string{
 	StatusError:   "surface.status-error",
 	SearchMatch:   "surface.search-match",
 	Control:       "surface.control",
+	ControlSolid:  "surface.control-solid",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -235,6 +239,7 @@ type Theme struct {
 	roles    roles
 	elements [numElements]lipgloss.Style
 	surfaces [numSurfaces]surfaceStyle
+	glyphs   Glyphs
 }
 
 // New is the named theme, one of Themes, for a light or dark background.
@@ -292,6 +297,7 @@ func New(isDark bool, name string) *Theme {
 		StatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
 		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
 		Control:       {bg: p.controlBg},
+		ControlSolid:  {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
 	}
 	return t
 }

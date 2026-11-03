@@ -44,6 +44,10 @@ The TUI polls `PRAGMA data_version` to reload when another process writes.
   surface owns the background. Clickable spans are marked with zero-width APC zone sequences that
   `look.Scan` strips from the final frame, recording where each landed. Restyling a line must keep
   marks (`look.KeepMarks`).
+- Symbols are roles (`look.Glyph`), drawn from the theme's glyph set: ASCII, Unicode (the
+  default), or Nerd Font icons where the terminal is known to bundle them (`look/glyphs.go`).
+  Glyphs are written as `\u` escapes, so the source stays ASCII. A bare `look.Theme`, and the
+  test model, draw ASCII.
 - `interact` is how things are acted on (ADR 10). Typed `Action[M,S]`s, `Kind`s (what a subject
   is), and `Place`s (where it is: a list, or a mention inside something else). Nothing has a name;
   everything is used by address. A key goes to the cursor's subject in its place, then its kind,

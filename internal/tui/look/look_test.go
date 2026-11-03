@@ -58,7 +58,7 @@ func TestValues(t *testing.T) {
 			want: []Span{{el: elPath, text: "a.go"}},
 		},
 		"gutter":   {got: []Span{Gutter(3, 0, 12)}, want: []Span{{el: elGutter, text: "     12 "}}},
-		"badge":    {got: Badge(2, true, true), want: []Span{{el: elCount, text: "(2)"}, {el: elDefault, text: " "}, {el: elDraft, text: "*", props: Strong}, {el: elReviewed, text: "x", props: Strong}}},
+		"badge":    {got: Badge(2, true, true), want: []Span{{el: elCount, text: "(2)"}, {el: elDefault, text: " "}, {el: elDraft, glyph: GlyphDraft, props: Strong}, {el: elReviewed, glyph: GlyphReviewed, props: Strong}}},
 		"no badge": {got: Badge(0, false, false), want: nil},
 		"file": {
 			got:  []Span{File(git.FileDiff{OldPath: "a.go", NewPath: "b.go", Status: git.StatusRenamed})},

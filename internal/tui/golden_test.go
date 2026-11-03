@@ -15,6 +15,7 @@ import (
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui/cells"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 var update = flag.Bool("update", false, "rewrite the golden screens in testdata/golden")
@@ -199,6 +200,29 @@ func TestGoldenScreens(t *testing.T) {
 		e.press("esc", "D")
 		e.golden("dark-confirm")
 	})
+	for _, g := range []struct {
+		name   string
+		glyphs look.Glyphs
+	}{{"unicode", look.GlyphsUnicode}, {"nerd", look.GlyphsNerd}} {
+		t.Run(g.name, func(t *testing.T) {
+			e := goldenEnv(t)
+			e.m.glyphs = g.glyphs
+			e.m.Update(tea.BackgroundColorMsg{Color: lipgloss.Color("#000000")})
+			e.openNav("Overview")
+			e.pressRun("l")
+			e.press("j", "j")
+			e.golden(g.name + "-overview")
+			e.press("h")
+			e.openNav("say hello")
+			e.pressRun("l")
+			e.cursorTo(func(r row) bool { return addedLine(r) && strings.Contains(r.line.Text, "println") })
+			e.hoverRow(e.m.main.cursor)
+			e.golden(g.name + "-commit")
+			e.m.main.hovering = false
+			e.press("S")
+			e.golden(g.name + "-verdict")
+		})
+	}
 	t.Run("colorblind", func(t *testing.T) {
 		e := goldenEnv(t)
 		e.m.theme = ThemeColorblind

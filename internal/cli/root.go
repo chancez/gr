@@ -70,6 +70,8 @@ reviews: threads on the change, a commit, a file, or lines, batched into a revie
 
 Run without a command to review in the TUI. A target is a branch (default: the current one), a
 range A..B, or a commit. GR_THEME=colorblind uses blue and orange in place of green and red.
+GR_GLYPHS=ascii, unicode, or nerd sets the symbols drawn with; by default Nerd Font icons are used
+in terminals that bundle them, such as kitty, WezTerm, and Ghostty, and Unicode elsewhere.
 
 Logs go to $XDG_STATE_HOME/gr/gr.log, by default ~/.local/state/gr/gr.log.
 
@@ -87,7 +89,7 @@ commands only find one, and take a change number such as 4 directly.`,
 		if err != nil {
 			return err
 		}
-		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME"), Notice: a.notice})
+		return tui.Run(cmd.Context(), svc, change, tui.Options{Theme: os.Getenv("GR_THEME"), Glyphs: os.Getenv("GR_GLYPHS"), Notice: a.notice})
 	}
 	root.SetIn(a.stdin)
 	root.SetOut(a.stdout)

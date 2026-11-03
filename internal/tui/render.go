@@ -30,8 +30,10 @@ type renderer struct {
 	segments []int
 }
 
-func newRenderer(isDark bool, theme string) *renderer {
-	return &renderer{th: look.New(isDark, theme), hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
+func newRenderer(isDark bool, theme string, glyphs look.Glyphs) *renderer {
+	th := look.New(isDark, theme)
+	th.SetGlyphs(glyphs)
+	return &renderer{th: th, hl: newHighlighter(isDark), markdown: map[int]*glamour.TermRenderer{}}
 }
 
 // rowState is how a row is highlighted.
@@ -320,7 +322,7 @@ func (r *renderer) renderCommit(v view, width int, state rowState) []string {
 		which = append(append(which, look.Default("  ")), state.controls...)
 	}
 	var foot []string
-	if gap := inner - ansi.StringWidth(look.TextOf(by...)) - ansi.StringWidth(look.TextOf(which...)); gap > 0 {
+	if gap := inner - ansi.StringWidth(r.th.TextOf(by...)) - ansi.StringWidth(r.th.TextOf(which...)); gap > 0 {
 		foot = []string{r.th.Draw(surf, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...)}
 	} else {
 		foot = []string{r.th.Draw(surf, inner, by...), r.th.Draw(surf, inner, which...)}
@@ -401,7 +403,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	spans := []look.Span{look.Muted("  > " + t.Label() + " ")}
+	spans := []look.Span{look.Muted("  "), look.Chevron(false, false), look.Muted(" " + t.Label() + " ")}
 	spans = append(spans, look.State(t, d.isDraft(t.ReviewID))...)
 	spans = append(spans, look.Muted("  "))
 	spans = append(spans, where...)

@@ -135,11 +135,11 @@ func State(t review.ThreadView, draft bool) []Span {
 	var out []Span
 	switch t.State {
 	case store.ThreadOpen:
-		out = append(out, sp(elStateOpen, "open"))
+		out = append(out, glyph(elStateOpen, GlyphStateOpen, true), sp(elStateOpen, "open"))
 	case store.ThreadAddressed:
-		out = append(out, sp(elStateAddressed, "addressed"))
+		out = append(out, glyph(elStateAddressed, GlyphStateAddressed, true), sp(elStateAddressed, "addressed"))
 	case store.ThreadResolved:
-		out = append(out, sp(elStateResolved, "resolved"))
+		out = append(out, glyph(elStateResolved, GlyphStateResolved, true), sp(elStateResolved, "resolved"))
 	}
 	if t.State != store.ThreadOpen && t.StateBy.Name != "" {
 		out = append(out, sp(elMuted, " by "+t.StateBy.Name))
@@ -213,16 +213,6 @@ func Gutter(width int, lines ...int) Span {
 	return sp(elGutter, b.String())
 }
 
-// Sidebar marks, shown in an entry's right-aligned badge.
-//
-// TODO: make these configurable, so icons such as checkboxes can replace the ASCII defaults.
-const (
-	// MarkReviewed is shown on files and commits marked reviewed.
-	MarkReviewed = "x"
-	// MarkDraft is shown where you have draft comments not yet submitted.
-	MarkDraft = "*"
-)
-
 // Badge is an entry's open thread count and its marks.
 func Badge(open int, draft, reviewed bool) []Span {
 	var out []Span
@@ -234,10 +224,10 @@ func Badge(open int, draft, reviewed bool) []Span {
 			out = append(out, sp(elDefault, " "))
 		}
 		if draft {
-			out = append(out, sp(elDraft, MarkDraft).With(Strong))
+			out = append(out, glyph(elDraft, GlyphDraft, false).With(Strong))
 		}
 		if reviewed {
-			out = append(out, sp(elReviewed, MarkReviewed).With(Strong))
+			out = append(out, glyph(elReviewed, GlyphReviewed, false).With(Strong))
 		}
 	}
 	return out
@@ -280,9 +270,9 @@ func chip(spans ...Span) []Span {
 	return out
 }
 
-// Button is a control: its label, and the key that does the same.
-func Button(label, key string) []Span {
-	out := []Span{sp(elDefault, " "), sp(elButton, label)}
+// Button is a control: its icon and label, and the key that does the same.
+func Button(icon Glyph, label, key string) []Span {
+	out := []Span{sp(elDefault, " "), glyph(elButton, icon, true), sp(elButton, label)}
 	if key != "" {
 		out = append(out, sp(elDefault, " "), sp(elMuted, key))
 	}
@@ -291,8 +281,8 @@ func Button(label, key string) []Span {
 
 // DisabledButton is a button that cannot be clicked now, as Next on the last commit: drawn in place,
 // greyed, so the controls around it stay put and it can be seen to be there.
-func DisabledButton(label, key string) []Span {
-	out := []Span{sp(elDefault, " "), sp(elMuted, label)}
+func DisabledButton(icon Glyph, label, key string) []Span {
+	out := []Span{sp(elDefault, " "), glyph(elMuted, icon, true), sp(elMuted, label)}
 	if key != "" {
 		out = append(out, sp(elDefault, " "), sp(elMuted, key))
 	}
@@ -302,35 +292,40 @@ func DisabledButton(label, key string) []Span {
 // Checkbox is a control that shows a state, checked when on: its label, and the key that toggles
 // it.
 func Checkbox(label, key string, on bool) []Span {
-	box := "[ ]"
+	box := glyph(elButton, GlyphUnchecked, true)
 	if on {
-		box = "[x]"
+		box = glyph(elButton, GlyphChecked, true)
 	}
-	out := []Span{sp(elDefault, " "), sp(elButton, box+" "+label)}
+	out := []Span{sp(elDefault, " "), box, sp(elButton, label)}
 	if key != "" {
 		out = append(out, sp(elDefault, " "), sp(elMuted, key))
 	}
 	return chip(append(out, sp(elDefault, " "))...)
 }
 
-// Icon is a control drawn as one character, such as the + that comments on a line.
-func Icon(glyph string) Span { return chip(sp(elKey, glyph))[0] }
+// Icon is a control drawn as one symbol that stands out on any line, such as the + that comments
+// on a line.
+func Icon(g Glyph) Span {
+	x := glyph(elKey, g, false)
+	x.solid = true
+	return x
+}
 
 // Controls inside content, as a diff's, are quiet: their label muted, without a chip or a key,
 // until lit, as on the row under the mouse or the cursor, when they are underlined and show their
 // key, so the diff stays the thing to read.
 
-// Link is a quiet control: its label, and its key when lit. Unlit, the key's room is kept blank, so
-// lighting it, as the mouse reaches it, moves nothing after it.
-func Link(label, key string, lit bool) []Span {
+// Link is a quiet control: its icon and label, and its key when lit. Unlit, the key's room is kept
+// blank, so lighting it, as the mouse reaches it, moves nothing after it.
+func Link(icon Glyph, label, key string, lit bool) []Span {
 	if !lit {
-		out := []Span{sp(elMuted, label)}
+		out := []Span{glyph(elMuted, icon, true), sp(elMuted, label)}
 		if key != "" {
 			out = append(out, sp(elDefault, strings.Repeat(" ", 1+ansi.StringWidth(key))))
 		}
 		return out
 	}
-	out := []Span{sp(elText, label).With(Underlined)}
+	out := []Span{glyph(elKey, icon, true), sp(elText, label).With(Underlined)}
 	if key != "" {
 		out = append(out, sp(elDefault, " "), sp(elMuted, key))
 	}
@@ -340,24 +335,33 @@ func Link(label, key string, lit bool) []Span {
 // QuietCheckbox is a quiet control that shows a state: its box, in the reviewed color when on, and
 // its label as a Link.
 func QuietCheckbox(label, key string, on, lit bool) []Span {
-	box := sp(elMuted, "[ ]")
+	box := glyph(elMuted, GlyphUnchecked, true)
 	if on {
-		box = sp(elReviewed, "[x]")
+		box = glyph(elReviewed, GlyphChecked, true)
 	}
-	return append([]Span{box, sp(elDefault, " ")}, Link(label, key, lit)...)
+	return append([]Span{box}, Link(GlyphNone, label, key, lit)...)
 }
 
-// Chevron is a quiet control that folds what it heads: v when open, > when folded, in the accent
+// Chevron is a quiet control that folds what it heads, pointing down when open, in the accent
 // when lit.
 func Chevron(open, lit bool) Span {
-	g := ">"
+	g := GlyphFolded
 	if open {
-		g = "v"
+		g = GlyphOpen
 	}
 	if lit {
-		return sp(elKey, g)
+		return glyph(elKey, g, false)
 	}
-	return sp(elMuted, g)
+	return glyph(elMuted, g, false)
+}
+
+// More marks entries of a list scrolled out of view, n of them, above or below.
+func More(above bool, n int) []Span {
+	g := GlyphMoreBelow
+	if above {
+		g = GlyphMoreAbove
+	}
+	return []Span{glyph(elMuted, g, false), sp(elMuted, fmt.Sprintf(" %d more", n))}
 }
 
 // Free text, styled by what it is for.

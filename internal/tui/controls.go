@@ -12,6 +12,7 @@ import (
 // control is an action to draw as a control, and how it looks.
 type control struct {
 	action any
+	icon   look.Glyph
 	label  string
 	look   controlLook
 	// on is whether a checkbox is checked, or a chevron open.
@@ -38,9 +39,9 @@ const (
 	lookChevron
 )
 
-// button is a control for a, a button labeled label.
-func button[S any](a *interact.Action[*model, S], label string) control {
-	return control{action: a, label: label, look: lookButton}
+// button is a control for a, a button with an icon and a label.
+func button[S any](a *interact.Action[*model, S], icon look.Glyph, label string) control {
+	return control{action: a, icon: icon, label: label, look: lookButton}
 }
 
 // checkbox is a control for a, a box labeled label, for an action that toggles what the box shows.
@@ -48,14 +49,14 @@ func checkbox[S any](a *interact.Action[*model, S], label string) control {
 	return control{action: a, label: label, look: lookCheckbox}
 }
 
-// icon is a control for a drawn as one character, glyph, without its key.
-func icon[S any](a *interact.Action[*model, S], glyph string) control {
-	return control{action: a, label: glyph, look: lookIcon}
+// icon is a control for a drawn as one symbol, without a label or its key.
+func icon[S any](a *interact.Action[*model, S], g look.Glyph) control {
+	return control{action: a, icon: g, look: lookIcon}
 }
 
-// link is a quiet control for a, labeled label.
-func link[S any](a *interact.Action[*model, S], label string) control {
-	return control{action: a, label: label, look: lookLink}
+// link is a quiet control for a, with an icon and a label.
+func link[S any](a *interact.Action[*model, S], icon look.Glyph, label string) control {
+	return control{action: a, icon: icon, label: label, look: lookLink}
 }
 
 // quietCheckbox is a quiet checkbox for a, labeled label.
@@ -98,15 +99,15 @@ func (c control) spans(key string) []look.Span {
 	case lookCheckbox:
 		return look.Checkbox(c.label, key, c.on)
 	case lookIcon:
-		return []look.Span{look.Icon(c.label)}
+		return []look.Span{look.Icon(c.icon)}
 	case lookLink:
-		return look.Link(c.label, key, c.lit)
+		return look.Link(c.icon, c.label, key, c.lit)
 	case lookQuietCheckbox:
 		return look.QuietCheckbox(c.label, key, c.on, c.lit)
 	case lookChevron:
 		return []look.Span{look.Chevron(c.on, c.lit)}
 	}
-	return look.Button(c.label, key)
+	return look.Button(c.icon, c.label, key)
 }
 
 // The controls of rows and the title bar. They are made in init, as kinds are: their actions draw
@@ -136,21 +137,21 @@ func init() {
 	viewedBox = quietCheckbox(actMarkFileReviewed, "Viewed")
 	commitViewedBox = quietCheckbox(actMarkCommitReviewed, "Viewed")
 	fileFold = chevron(actFoldFile)
-	expandFold = link(actExpandFold, "")
-	commentHere = icon(actCommentOnLine, "+")
+	expandFold = link(actExpandFold, look.GlyphNone, "")
+	commentHere = icon(actCommentOnLine, look.GlyphComment)
 	commentHere.selects = true
-	replyButton = link(actReplyToThread, "Reply")
-	resolveButton = link(actResolveThread, "Resolve")
-	reopenButton = link(actResolveThread, "Reopen")
-	addressedButton = link(actAddressThread, "Addressed")
-	editButton = link(actEditComment, "Edit")
-	deleteButton = link(actDeleteComment, "Delete")
-	deleteReview = link(actDeleteReview, "Delete")
-	prevCommit = button(actPrevCommit, "Prev")
-	nextCommit = button(actNextCommit, "Next")
-	prevFile = button(actPrevFile, "Prev file")
-	nextFile = button(actNextFile, "Next file")
-	filterButton = button(actFilterThreads, "")
+	replyButton = link(actReplyToThread, look.GlyphReply, "Reply")
+	resolveButton = link(actResolveThread, look.GlyphResolve, "Resolve")
+	reopenButton = link(actResolveThread, look.GlyphReopen, "Reopen")
+	addressedButton = link(actAddressThread, look.GlyphAddressed, "Addressed")
+	editButton = link(actEditComment, look.GlyphEdit, "Edit")
+	deleteButton = link(actDeleteComment, look.GlyphDelete, "Delete")
+	deleteReview = link(actDeleteReview, look.GlyphDelete, "Delete")
+	prevCommit = button(actPrevCommit, look.GlyphPrev, "Prev")
+	nextCommit = button(actNextCommit, look.GlyphNext, "Next")
+	prevFile = button(actPrevFile, look.GlyphPrev, "Prev file")
+	nextFile = button(actNextFile, look.GlyphNext, "Next file")
+	filterButton = button(actFilterThreads, look.GlyphFilter, "")
 }
 
 const controlZone = "control:"
@@ -182,7 +183,7 @@ func (m *model) controls(where string, md mode, t interact.Target[*model], cs ..
 			out = append(out, look.Default(gap))
 		}
 		if c.off {
-			out = append(out, look.DisabledButton(c.label, key)...)
+			out = append(out, look.DisabledButton(c.icon, c.label, key)...)
 			continue
 		}
 		out = append(out, m.mark(where, md, b, c.selects, c.spans(key)...)...)

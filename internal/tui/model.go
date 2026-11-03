@@ -35,6 +35,8 @@ type Options struct {
 	Theme string
 	// Notice is shown in the status bar when the TUI opens, such as a base gr chose.
 	Notice string
+	// Glyphs is "ascii", "unicode", or "nerd". Empty picks them from what the terminal is.
+	Glyphs string
 }
 
 // Run opens the TUI on a change.
@@ -47,6 +49,15 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 		return err
 	}
 	m.theme = opts.Theme
+	if opts.Glyphs != "" {
+		g, ok := look.ParseGlyphs(opts.Glyphs)
+		if !ok {
+			return fmt.Errorf("unknown glyphs %q, want ascii, unicode, or nerd", opts.Glyphs)
+		}
+		m.glyphs, m.glyphsSet = g, true
+	} else {
+		m.glyphs = look.GlyphsFromEnv()
+	}
 	m.setTheme(true)
 	if opts.Notice != "" {
 		m.setStatus("%s", opts.Notice)
@@ -101,6 +112,10 @@ type model struct {
 	searchInput textinput.Model
 	// picker is the popup open in modePicker.
 	picker *picker
+	// glyphs are the symbols drawn with, and glyphsSet is set when they were asked for rather than
+	// picked from what the terminal is.
+	glyphs    look.Glyphs
+	glyphsSet bool
 	// zones are where the last frame drew marked spans, such as mentions, by id.
 	zones map[string][]look.Zone
 	// drawnControls are the controls drawn, by zone id. They are kept as long as the rows, whose
@@ -234,7 +249,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 // setTheme rebuilds colors for a dark or light background.
 func (m *model) setTheme(isDark bool) {
 	m.isDark = isDark
-	m.r = newRenderer(isDark, m.theme)
+	m.r = newRenderer(isDark, m.theme, m.glyphs)
 	h := help.New()
 	h.ShortSeparator, h.FullSeparator, h.Ellipsis = " | ", "   ", "..."
 	m.r.th.StyleHelp(&h)
@@ -249,7 +264,11 @@ func (m *model) close() {
 }
 
 func (m *model) Init() tea.Cmd {
-	return tea.Batch(m.loadCmd(), tick(), tea.RequestBackgroundColor)
+	cmds := []tea.Cmd{m.loadCmd(), tick(), tea.RequestBackgroundColor}
+	if !m.glyphsSet {
+		cmds = append(cmds, tea.RequestTerminalVersion)
+	}
+	return tea.Batch(cmds...)
 }
 
 // How long messages stay in the status bar before the key hints come back.
@@ -283,6 +302,16 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Rows drawn so far hold the old theme's renderer.
 		m.rebuildMain()
 		m.relayout(true)
+		return m, nil
+	case tea.TerminalVersionMsg:
+		// The terminal's name only adds Nerd Font icons, for a terminal that bundles them: a
+		// multiplexer answers as itself, though the terminal outside it may bring them.
+		if !m.glyphsSet && look.GlyphsFor(msg.Name) == look.GlyphsNerd && m.glyphs != look.GlyphsNerd {
+			m.glyphs = look.GlyphsNerd
+			m.setTheme(m.isDark)
+			m.rebuildMain()
+			m.relayout(true)
+		}
 		return m, nil
 	case dataMsg:
 		if msg.err == nil && msg.data.change.ID != m.changeID {
@@ -568,9 +597,9 @@ func (m *model) frame() string {
 		// The buttons sit under the text.
 		inner := m.width - 4
 		buttons := th.Render(look.Plain, m.controls("box", modeCompose, theComposer.Target(composeSubject{}),
-			button(actComposeEditor, "$EDITOR"),
-			button(actComposeClose, "Cancel"),
-			button(actComposeSave, "Save"))...)
+			button(actComposeEditor, look.GlyphEditor, "$EDITOR"),
+			button(actComposeClose, look.GlyphCancel, "Cancel"),
+			button(actComposeSave, look.GlyphSave, "Save"))...)
 		box := th.Box(m.width, true).Render(th.DrawCut(look.Plain, inner, title) + "\n" + m.compose.area.View() + "\n" +
 			ansi.Truncate(buttons, inner, ""))
 		b.WriteString(box)

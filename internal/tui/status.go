@@ -44,23 +44,23 @@ func (m *model) renderStatus() string {
 	case modeVerdict:
 		t := theVerdict.Target(verdictSubject{})
 		spans := append([]look.Span{look.Heading("Submit review: ")}, m.controls("verdict", modeVerdict, t,
-			button(actVerdictApprove, "Approve"),
-			button(actVerdictRequestChanges, "Request changes"),
-			button(actVerdictComment, "Comment"),
-			button(actVerdictCancel, "Cancel"))...)
+			button(actVerdictApprove, look.GlyphApprove, "Approve"),
+			button(actVerdictRequestChanges, look.GlyphRequestChanges, "Request changes"),
+			button(actVerdictComment, look.GlyphVerdictComment, "Comment"),
+			button(actVerdictCancel, look.GlyphCancel, "Cancel"))...)
 		spans = append(append(spans, look.Default("  ")), look.Hint("A R C", "skip the summary")...)
 		return th.DrawCut(look.Plain, m.width, spans...)
 	case modeConfirm:
 		spans := append([]look.Span{look.Error(m.confirm.prompt), look.Default("  ")}, m.controls("confirm", modeConfirm, theConfirm.Target(confirmSubject{}),
-			button(actConfirmYes, "Yes"),
-			button(actConfirmNo, "No"))...)
+			button(actConfirmYes, look.GlyphYes, "Yes"),
+			button(actConfirmNo, look.GlyphNo, "No"))...)
 		return th.DrawCut(look.Plain, m.width, spans...)
 	case modeCompose:
 		if m.compose.closing {
 			spans := append([]look.Span{look.Warning("Unsaved comment: ")}, m.controls("closing", modeCompose, theClosing.Target(composeSubject{}),
-				button(actComposeSave, "Save"),
-				button(actClosingDiscard, "Discard"),
-				button(actClosingKeep, "Keep editing"))...)
+				button(actComposeSave, look.GlyphSave, "Save"),
+				button(actClosingDiscard, look.GlyphDelete, "Discard"),
+				button(actClosingKeep, look.GlyphEdit, "Keep editing"))...)
 			return th.DrawCut(look.Plain, m.width, spans...)
 		}
 	}
