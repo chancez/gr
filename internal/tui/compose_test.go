@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/guygrigsby/vimbubble/v2"
 
 	"github.com/chancez/gr/internal/review"
 )
@@ -130,5 +131,48 @@ func TestCommentBoxNearTheBottom(t *testing.T) {
 		if got := []bool{strings.Contains(screen, "Save ctrl+s"), strings.Contains(screen, `println("hello")`)}; !reflect.DeepEqual(got, []bool{true, tc.line}) {
 			t.Errorf("%d lines high: box and line shown = %v, want [true %v]:\n%s", tc.height, got, tc.line, screen)
 		}
+	}
+}
+
+// With vim, the box opens in insert mode; esc goes to normal mode, where keys are vim's, and esc
+// in normal mode is the box's, closing it or asking first. ctrl+s saves from any mode.
+func TestVimInTheCommentBox(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.vim = true
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+	e.press("c")
+	e.typeText("hello")
+	if got := e.m.compose.vim.Mode(); got != vimbubble.Insert || e.m.compose.area.Value() != "hello" {
+		t.Fatalf("typing in a new box gave mode %s, text %q", got, e.m.compose.area.Value())
+	}
+	if !strings.Contains(e.screen(), "-- INSERT --") {
+		t.Errorf("the box does not say it is in insert mode:\n%s", e.screen())
+	}
+	e.press("esc")
+	if got := e.m.compose.vim.Mode(); e.m.mode != modeCompose || got != vimbubble.Normal {
+		t.Fatalf("esc in insert mode left mode %d, vim %s; want the box open in normal mode", e.m.mode, got)
+	}
+	e.press("0", "x")
+	if got := e.m.compose.area.Value(); got != "ello" {
+		t.Errorf("0 x in normal mode left %q, want the first letter deleted", got)
+	}
+	e.press("esc")
+	if !e.m.compose.closing {
+		t.Fatalf("esc in normal mode with unsaved text did not ask: mode %d", e.m.mode)
+	}
+	e.press("esc")
+	if got := e.m.compose.vim.Mode(); e.m.mode != modeCompose || e.m.compose.closing || got != vimbubble.Normal {
+		t.Fatalf("keep editing left mode %d, closing %v, vim %s", e.m.mode, e.m.compose.closing, got)
+	}
+	e.press("i")
+	e.typeText("j")
+	e.pressRun("ctrl+s")
+	threads, err := e.svc.Threads(t.Context(), e.chg, review.ThreadFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e.m.mode != modeNormal || len(threads) != 1 || threads[0].Comments[0].Body != "jello" {
+		t.Errorf("ctrl+s in insert mode left mode %d, threads %+v; want jello saved", e.m.mode, threads)
 	}
 }

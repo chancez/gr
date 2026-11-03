@@ -14,7 +14,15 @@ import (
 
 // Config is the config file's settings. What the file leaves out is zero, for gr's defaults.
 type Config struct {
-	UI UI `toml:"ui"`
+	UI     UI     `toml:"ui"`
+	Editor Editor `toml:"editor"`
+}
+
+// Editor is how comments are written in the TUI's comment box.
+type Editor struct {
+	// Vim edits with vim's modes: the box opens in insert mode, esc goes to normal mode, and esc in
+	// normal mode closes the box.
+	Vim bool `toml:"vim"`
 }
 
 // UI is how the TUI looks and moves.

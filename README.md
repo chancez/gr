@@ -73,6 +73,9 @@ glyphs = "nerd"        # "ascii", "unicode", or "nerd"; unset picks from the ter
 scrolloff = 5          # lines kept between the cursor and the diff's edges
 sidebar_width = 30     # columns, until the divider is dragged
 auto_advance = true    # move on to the next unreviewed file after marking one reviewed
+
+[editor]
+vim = true             # vim's modes in the comment box: esc to normal mode, esc again to close
 ```
 
 ## For agents

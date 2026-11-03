@@ -42,6 +42,8 @@ type Options struct {
 	SidebarWidth int
 	// AutoAdvance starts with moving on to the next unreviewed file after marking one reviewed.
 	AutoAdvance bool
+	// Vim edits comments with vim's modes.
+	Vim bool
 }
 
 // Run opens the TUI on a change.
@@ -67,7 +69,7 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 	if opts.Scrolloff != nil {
 		m.main.scrolloff = *opts.Scrolloff
 	}
-	m.navWidth, m.autoAdvance = opts.SidebarWidth, opts.AutoAdvance
+	m.navWidth, m.autoAdvance, m.vim = opts.SidebarWidth, opts.AutoAdvance, opts.Vim
 	if opts.Notice != "" {
 		m.setStatus("%s", opts.Notice)
 	}
@@ -121,6 +123,8 @@ type model struct {
 	searchInput textinput.Model
 	// picker is the popup open in modePicker.
 	picker *picker
+	// vim edits comments with vim's modes.
+	vim bool
 	// glyphs are the symbols drawn with, and glyphsSet is set when they were asked for rather than
 	// picked from what the terminal is.
 	glyphs    look.Glyphs

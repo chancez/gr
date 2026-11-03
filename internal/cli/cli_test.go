@@ -401,7 +401,7 @@ func TestMarkAndUnmark(t *testing.T) {
 // The TUI's settings come from the config file, with GR_THEME and GR_GLYPHS over it.
 func TestTUIOptions(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.toml")
-	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"colorblind\"\nglyphs = \"ascii\"\nscrolloff = 2\nsidebar_width = 28\nauto_advance = true\n"), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte("[ui]\ntheme = \"colorblind\"\nglyphs = \"ascii\"\nscrolloff = 2\nsidebar_width = 28\nauto_advance = true\n[editor]\nvim = true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GR_CONFIG", path)
@@ -411,7 +411,7 @@ func TestTUIOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := tui.Options{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(2), SidebarWidth: 28, AutoAdvance: true}
+	want := tui.Options{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(2), SidebarWidth: 28, AutoAdvance: true, Vim: true}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("tuiOptions (-want +got):\n%s", diff)
 	}

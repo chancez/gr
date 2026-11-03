@@ -62,8 +62,6 @@ In priority order. Foundations come first because every feature built before the
 23. gr on the web, or as an app in a native shell, through
     [go-booba](https://github.com/NimbleMarkets/go-booba) or similar. Needs the tabs above, to run
     several reviews in one window.
-24. Vim keys in the comment editor, without leaving for `$EDITOR`: normal and insert modes over the
-    text area, with the common motions and operators, turned on in the config.
 
 ## Polish
 

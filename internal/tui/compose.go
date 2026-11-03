@@ -15,6 +15,7 @@ import (
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/guygrigsby/vimbubble/v2"
 )
 
 type composeKind int
@@ -42,6 +43,8 @@ type composer struct {
 	closing bool
 	// at is the key of the row the box opens under, to find it again when the rows are rebuilt.
 	at string
+	// vim, when set, edits the text with vim's modes.
+	vim *vimbubble.Modal
 }
 
 // commentOnRow opens the comment box on row i of the main pane: its line, on side in split mode, or
@@ -254,6 +257,12 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 		c.at = m.main.rows[at].key(m.views[m.current].files)
 	}
 	m.compose = c
+	if m.vim {
+		// It edits the box's own text area, so it is made once the box is in place.
+		m.compose.vim = vimbubble.New(&m.compose.area)
+		m.compose.vim.SetEnabled(true)
+		m.compose.vim.SetMode(vimbubble.Insert)
+	}
 	m.mode = modeCompose
 	// The box opens under what it comments on, as GitHub's, so the lines above stay put.
 	m.main.attach, m.main.attached = at, m.composeLines
@@ -334,16 +343,19 @@ func (m *model) composeLines(width int) []string {
 	const indent = 2
 	boxWidth := max(width-indent, 24)
 	inner := boxWidth - 4
-	title := look.Heading(m.compose.title)
+	title := []look.Span{look.Heading(m.compose.title)}
 	if m.compose.warn {
-		title = look.Warning(m.compose.title)
+		title = []look.Span{look.Warning(m.compose.title)}
+	}
+	if m.compose.vim != nil {
+		title = append(title, look.Default("  "), look.Mode(m.compose.vim.ModeLabel()))
 	}
 	buttons := th.Render(look.Plain, m.controls("box", modeCompose, theComposer.Target(composeSubject{}),
 		button(actComposeSave, look.GlyphSave, "Save"),
 		button(actComposeClose, look.GlyphCancel, "Cancel"),
 		button(actComposeEditor, look.GlyphEditor, "$EDITOR"))...)
 	m.compose.area.SetWidth(inner)
-	box := th.Box(boxWidth, true).Render(th.DrawCut(look.Plain, inner, title) + "\n" + m.compose.area.View() + "\n" +
+	box := th.Box(boxWidth, true).Render(th.DrawCut(look.Plain, inner, title...) + "\n" + m.compose.area.View() + "\n" +
 		ansi.Truncate(buttons, inner, ""))
 	lines := strings.Split(box, "\n")
 	for i := range lines {
@@ -374,8 +386,19 @@ func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		c, _ := m.runOn(msg, theClosing.Target(composeSubject{}))
 		return m, c
 	}
+	vim := m.compose.vim
+	// With vim, esc leaves insert and visual mode first; in normal mode it is the box's, as without.
+	if vim != nil && msg.Key().Code == tea.KeyEscape && vim.Mode() != vimbubble.Normal {
+		_, c := vim.Update(msg)
+		return m, c
+	}
 	if c, ok := m.runOn(msg, box); ok {
 		return m, c
+	}
+	if vim != nil {
+		if consumed, c := vim.Update(msg); consumed {
+			return m, c
+		}
 	}
 	var cmd tea.Cmd
 	m.compose.area, cmd = m.compose.area.Update(msg)

@@ -11,6 +11,7 @@ require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/google/go-cmp v0.7.0
+	github.com/guygrigsby/vimbubble/v2 v2.0.0-20260909172522-60c478e36763
 	github.com/spf13/cobra v1.10.2
 	modernc.org/sqlite v1.54.0
 )

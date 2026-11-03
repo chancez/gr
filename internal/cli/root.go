@@ -362,6 +362,7 @@ func tuiOptions() (tui.Options, error) {
 		Scrolloff:    c.UI.Scrolloff,
 		SidebarWidth: c.UI.SidebarWidth,
 		AutoAdvance:  c.UI.AutoAdvance,
+		Vim:          c.Editor.Vim,
 	}
 	if v := os.Getenv("GR_THEME"); v != "" {
 		opts.Theme = v

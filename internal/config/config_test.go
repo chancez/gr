@@ -25,11 +25,17 @@ glyphs = "nerd"
 scrolloff = 0
 sidebar_width = 30
 auto_advance = true
+
+[editor]
+vim = true
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := Config{UI: UI{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(0), SidebarWidth: 30, AutoAdvance: true}}
+	want := Config{
+		UI:     UI{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(0), SidebarWidth: 30, AutoAdvance: true},
+		Editor: Editor{Vim: true},
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load = %+v, want %+v", got, want)
 	}
