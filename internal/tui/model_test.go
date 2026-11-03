@@ -2111,3 +2111,22 @@ func TestOpenThreadsThatMoved(t *testing.T) {
 		t.Errorf("o on a thread whose file is gone: status %q", e.m.status)
 	}
 }
+
+// Advancing to the next commit opens it at its top, with its message in view, and the cursor on
+// its first unreviewed file.
+func TestAdvancingToACommitShowsItsMessage(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("notes.txt", gittest.Lines(gittest.Numbered(80)...))
+	e.repo.Commit("Add notes\n\n" + strings.Repeat("A paragraph of the why, at some length.\n", 10))
+	e.drain(e.m.loadCmd())
+	e.m.autoAdvance = true
+	e.openNav("say hello")
+	e.pressRun("l")
+	e.cursorTo(func(r row) bool { return r.kind == rowCommit })
+	e.pressRun("m")
+	v := e.m.views[e.m.current]
+	r := e.m.main.rows[e.m.main.cursor]
+	if v.commit.Subject() != "Add notes" || r.kind != rowFile || e.m.main.offset != 0 {
+		t.Errorf("advanced to %q, cursor on %+v, offset %d; want the next commit at its top, on its first file", v.commit.Subject(), r, e.m.main.offset)
+	}
+}

@@ -216,6 +216,9 @@ func (m *model) nextUnreviewedCommit() {
 				break
 			}
 		}
+		// A commit opens at its top, its message in view, scrolled only as far as its file needs.
+		m.main.offset = 0
+		m.main.ensureVisible()
 		return
 	}
 	m.setStatus("no unreviewed commit after this one; S to submit")
