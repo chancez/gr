@@ -19,176 +19,156 @@ own copy of what every action does and where.
 
 ## Decision
 
-Each kind of value defines the actions on it, each place says what its subjects do when the cursor
-lands on them, is activated, or is asked for a menu, and keys, menus, and the mouse all run
-actions through the registry.
+Each kind of subject defines its actions and the keys bound to them, each place what its subjects
+do there, and keys, menus, and the mouse all run actions through the registry.
 
-- **Subjects.** A subject is a value an action acts on, typed by its kind: change, commit, file,
-  hunk, line, selection, thread, comment, review, and branch. A subject carries what acting on it
-  needs, such as the commit and path of a file. The kinds are the ones ADR 8 draws, so a value
-  that is drawn as a sha is a commit subject wherever it appears.
-- **Actions belong to subject kinds.** Each kind defines its actions: a commit can be opened,
-  marked reviewed, commented on, or have its sha copied. An action has a name, such as
-  `commit.mark-reviewed`, a title for menus and help, a check of whether it applies to a given
-  subject, such as only to your own comments, and what it runs. Every action of a kind is
-  available wherever a subject of that kind is, so a commit offers the same actions in the sidebar
-  as in a thread's location. Every kind also has a menu action, which opens a menu of every action
-  of the subject that applies. An action several kinds share by name, as `comment` on a
-  selection, a line, a file, a commit, or the change, is one action per kind, so a key finds the
-  most specific one the cursor has.
+- **Subjects and kinds.** A subject is a value an action acts on, typed by its kind. A kind is
+  what a thing is: the change, the overview, the whole diff, the interdiff, a commit, a file, a
+  line, a hunk, a fold of unchanged lines, a thread, a review's summary, a review, and each pane.
+  Where a thing is belongs to its place, and what state it is in to its actions. So no action asks
+  what sort of subject it was given, and a kind is split where its sorts share few actions: the
+  overview and a commit are kinds of their own, not one kind of view. Sorts that differ only in
+  what they allow stay one kind: the interdiff's files are files the interdiff does not let you
+  comment on or mark, since its lines are between two revisions, with none to anchor a thread to.
+- **Actions.** An action has a title for menus and hints, a longer help where the title is not
+  enough, a check of whether it applies to a subject now, such as only to your own comments, and
+  what it runs. It has no name: kinds, places, and keys hold the action itself, so two actions are
+  never confused and nothing is looked up by a string. Kinds that do the same thing share it:
+  every thread replies the same way, through one action listed on each, and sorts of subject of
+  different types share behavior through a generic constructor over what they have in common.
+- **What a subject carries.** A subject carries the subjects it is part of, through typed
+  projections: a line its file, a file of a commit its commit, a review its summary. Its kind
+  reaches theirs, so a line's menu offers its file's and its commit's actions, and a key a line
+  does not take reaches its file. The change is about everything on screen, so every key reaches
+  it, after the pane, and only the overview, the change's own page, carries it into its menu.
 - **Places.** A subject is always found somewhere: a place. Places are finer than panes, since one
   pane holds several, and come in two sorts:
   - **A list** is a place you navigate through, whose entries are its subjects: the sidebar's
     commit list, the sidebar's file list, the lines and file headers of a diff, the overview's
     threads and reviews, a picker's rows. The cursor moves from entry to entry.
   - **A mention** is a place where a subject shows up inside something else, and is not navigated
-    through: the sha in a thread's location, the author in a comment's header, the sha in a
-    commit's header. The cursor is on the thread or the commit, never on the mention.
+    through: the sha in a thread's location, the author in a comment's header. The cursor is on the
+    thread or the commit, never on the mention.
 
   The same subject can be in both: a commit is an entry in the sidebar's list and a mention in a
-  thread's location, with the same actions in each.
-- **Fewer actions in a place.** Whether an action applies to a subject's state is the action's own
-  check: opening a commit does not apply in that commit's own view. Where a place should offer
-  fewer of its kind's actions, as a picker offering only to pick, the place names the ones it
-  offers, and by default it offers them all.
+  thread's location, with the same actions in each. A place has actions and keys of its own, for
+  what its subjects do there: a sidebar entry opens on enter, a file header folds, a mention offers
+  to open what it names. A list also says what happens when the cursor lands on an entry: a sidebar
+  commit shows itself in the main pane.
 - **Pane focus and the cursor.** Pane focus is which pane gets keys: the sidebar or the main pane.
   The cursor is the entry keys act on within a list: the sidebar's selected commit, the diff line
   under the cursor. Only a list's entries hold the cursor; a mention never does.
-- **Three handlers.** Each subject in a place, a pair registered together, says what it does. A
-  list's subjects can have all three; a mention, which never holds the cursor, has only the menu:
-  - **on cursor**, when the cursor lands on it, by key or by click. A sidebar commit shows itself
-    in the main pane; a diff line does nothing more.
-  - **activate**, when it is chosen, by enter or, in the sidebar, l. A sidebar commit shows itself
-    and moves pane focus to the main pane; a file header collapses or expands its file.
-  - **menu**, its menu action unless the place says otherwise.
-
-  The handlers run actions of the subject's kind. A subject with no on cursor or activate handler
-  does nothing for them.
-- **Moves belong to places.** j and k, arrows, pages, and jumps such as next hunk or next thread
-  move the cursor through a place, and the place runs the on cursor handler of where it lands.
-  They are not actions on a subject, but they are bound in the same keymap and shown in help.
-- **Other keys act on the cursor's subject.** The cursor's subject carries the rest, most specific
-  first: a diff line carries its hunk, its file, the commit, and the change. A key bound to an
-  action, as `m` to marking reviewed, runs it on the first of those that has it, so `m` on a line
-  marks its file. This replaces the per-pane logic that decides what a key acts on.
-- **Clicks follow from the handlers.** A left click on an entry moves the cursor there, so its on
-  cursor handler runs as if the keyboard had moved it, and pane focus moves to the click's pane. A
-  left click on a mention, which cannot hold the cursor, runs its menu. A right click runs the
-  menu of whatever is under it. A double click could activate, as in most interfaces, though
-  bubbletea does not report one, so gr would tell it from two clicks in quick succession. The
+- **Keys are bound where their subject is.** A key is bound on a kind, for wherever its subjects
+  are, or on a place, for its subjects there. A key press goes to the cursor's subject in its
+  place, then to its kind, then to what it carries, then to the pane focus is in, the change, and
+  gr itself, and runs the first binding of the key whose action applies. So a subject that takes a
+  key keeps it from those after it: a line takes `c`, so on a line `C` reaches its file, and a file
+  takes both, so its commit's are passed over. Panes are kinds too, each with moves of its own
+  from the same keys, through one helper, and so are modes, such as the comment box and the verdict
+  prompt. A key that only says why it does nothing there, as `c` in the interdiff, is bound quietly,
+  shown in no menu, hint, or help, so the key does not reach what the subject carries. Bindings are
+  written beside the kinds and places, so what a key does on a subject reads where the subject is.
+  Remapping keys from the config file will need a stable name for each action, which actions get
+  then, for the config alone.
+- **Clicks follow from places.** A left click on an entry moves the cursor there, so what the
+  list does when the cursor lands runs as if the keyboard had moved it, and pane focus moves to the
+  click's pane. A left click on a mention, which cannot hold the cursor, opens its menu. A right
+  click opens the menu of whatever is under it, and moves neither the cursor nor the selection. The
   wheel scrolls without moving the cursor.
 
-  | Place | Subject | Moves | On cursor | Activate | Keys | Left click | Right click |
-  | --- | --- | --- | --- | --- | --- | --- | --- |
-  | Sidebar commit list | commit | j k | show it in the main pane | show it, focus the main pane | `m` reviewed, `C` comment | cursor | menu |
-  | Sidebar file list | file | j k | jump to it in the main pane | jump, focus the main pane | `m` reviewed, `c` comment | cursor | menu |
-  | Diff | line | j k, J K, ] [ | | | `c` comment, `v` select, `m` its file | cursor | menu: line, file, commit |
-  | Diff | file header | j k, ] [ | | collapse or expand | `m` reviewed | cursor | menu |
-  | Diff | gap | j k | | expand | `zo` | cursor | menu |
-  | Overview | thread | j k, t T | | expand or collapse | `r` `x` `a` `o` `O` | cursor | menu |
-  | Overview | review bar | j k | | expand the summary | `D` delete | cursor | menu |
-  | Thread title | sha | | | | | menu | menu |
-  | Picker | branch | up down | | pick it | | cursor, then pick | |
+  | Place | Subject | On cursor | Its keys | A key passes to | Left click | Right click |
+  | --- | --- | --- | --- | --- | --- | --- |
+  | Sidebar commit list | commit | show it | `enter` open, `c` comment, `m` reviewed | the change | cursor | menu |
+  | Sidebar file list | file | jump to it | `enter` open, `c` comment, `m` reviewed | its commit | cursor | menu |
+  | Diff | line | | `c` comment, `v` select | its file, its commit | cursor | menu |
+  | Diff | file header | | `enter` fold, `c` comment, `m` reviewed | its commit | cursor | menu |
+  | Diff | fold | | `enter` expand | its file | cursor | menu |
+  | Overview | thread | | `enter` expand, `r` `x` `a` `e` `X`, `o` `O` | the overview | cursor | menu |
+  | Overview | review bar | | `enter` the summary, `D` delete | its summary, the overview | cursor | menu |
+  | Thread title | sha | | | | menu | menu |
+  | Picker | branch | | `enter` pick | | cursor, then pick | |
 
   A place can override a click, as the picker does, where choosing on a click is expected; the
   override is written where the place is registered, so the defaults stay the rule.
+- **One package.** The registry's machinery is the `interact` package, beside `look`: how the TUI
+  is acted on, as `look` is how it is drawn. The TUI's own kinds, actions, places, and keys are
+  registered in one file of the TUI.
 - **Places are types.** A place is a typed value, made only by the registry, and holds subjects of
   one kind: the sidebar's commit list is a list of commits, and a thread's location a mention of
-  one. A subject is used in a place by asking
-  that place for it, so a commit cannot be put in a place of files, and a subject cannot appear in
-  a place that was never registered: the compiler refuses both. The component that draws a place,
-  such as the sidebar's commit list, is given its place when it is built, so drawing code does not
-  choose a place at each call and cannot name the wrong one. Roughly:
+  one. A subject is used in a place by asking that place for it, so a commit cannot be put in a
+  place of files, and a subject cannot appear in a place that was never registered: the compiler
+  refuses both. Roughly:
 
   ```go
   // An action is typed by the subject it takes, so it can only be given that subject.
-  type Action[S any] struct {
-  	Name    string
+  type Action[M, S any] struct {
   	Title   string
-  	Applies func(S) bool
-  	Run     func(S) tea.Cmd
+  	Applies func(M, S) bool
+  	Run     func(M, S) tea.Cmd
   }
 
-  var CopySHA = Action[CommitSubject]{Name: "commit.copy-sha", Title: "Copy the sha",
-  	Run: func(c CommitSubject) tea.Cmd { return copyText(c.SHA) }}
+  var markCommit = &Action[*model, commitSubject]{Title: "mark reviewed", Run: ...}
 
-  // A kind's actions, defined once. kind[S] takes only Action[S], so listing an action on files
-  // here does not compile. Commit.Menu is the kind's menu, as an Action[CommitSubject].
-  var Commit = kind("commit", OpenCommit, ShowCommit, MarkCommitReviewed, CommentOnCommit, CopySHA)
+  // A kind's actions, and keys bound to them. Bind takes only an action the kind lists, of its
+  // own S, so binding an action on files here does not compile.
+  commitKind = interact.NewKind(commitLabel, markCommit, commentOnCommit)
+  commitKind.Bind(markCommit, "m/M", "mark the commit reviewed", "m", "M")
 
-  // Places, made only in the registry: lists, with their handlers, and mentions. A kind's
-  // OnCursor, Activate, and Menu take an Action[S] for its own S, so a list of commits cannot run
-  // an action on files.
-  var SidebarCommits = Commit.list("sidebar.commits", Commit.OnCursor(ShowCommit), Commit.Activate(OpenCommit))
-  var ThreadLocation = Commit.mention("thread.location")
+  // What a subject carries, through a projection to a T for a kind of T.
+  interact.Via(lineKind, func(r rowSubject) (fileSubject, bool) { return r.file, r.hasFile }, fileKind)
 
-  // In the TUI, the list holds its place, and only the place makes its targets. Target takes the
-  // place's S, so a sidebar of commits cannot be handed a file.
-  commits := newNavList(act.SidebarCommits)
-  line := commits.place.Target(c).Draw(look.SHA(c.SHA).Short())
+  // Places, made only in the registry, with keys of their own.
+  sidebarCommits = interact.List(commitKind, interact.OnCursor(showCommit))
+  sidebarCommits.Bind(openCommit, "enter/l", "open", "enter", "l", "right")
   ```
 
-  A place whose subject comes with others, as a diff line comes with its hunk, file, and commit,
-  holds a subject that carries them all, and its kind reaches theirs through typed projections, so
-  the actions of each are available there:
-
-  ```go
-  var Line = kind("line", CommentOnLine, SelectLines).
-  	With(Via(func(l LineSubject) FileSubject { return l.File }, File)).
-  	With(Via(func(l LineSubject) CommitSubject { return l.Commit }, Commit))
-  ```
-
-  `Via` takes a function from the line to a `T` and a kind of `T`, so a projection that returns a
-  file cannot be paired with the commit kind. Keys and menus run actions through these typed
-  values; the registry erases the types only inside itself, to list a subject's actions together.
-- **Bindings.** A key is bound to an action in a scope: everywhere, a pane (sidebar, overview,
-  diff), or a mode (composing, picking). The innermost scope wins. All default bindings live in one
-  keymap table, keyed by action name and scope, and the config file overrides entries in it, so
-  keys are redefined in one place.
-- **Help comes from actions and bindings.** An action carries its help text, a short form for the
-  hint bar and a longer one for help, and a hint priority. Help lists every binding by scope, the
-  current scope first; the hint bar shows the highest-priority bindings that apply to the cursor's
-  subjects and fit. Neither is written by hand, so neither can drift from what the keys do, and a
-  remapped key shows as remapped everywhere.
-- **Built on bubbles' key and help.** A binding is a `key.Binding` from bubbles: its keys, its help
-  key and description from the action, and enabled only where the action applies to the cursor's
-  subjects. Keys are matched with `key.Matches`, remapped with `SetKeys`, and the hint bar is
-  bubbles' `help` short view over the enabled bindings, which already fits them to the width.
-  Bubbles' full help view has no section titles, so the help screen keeps its own layout, with its
-  sections and bindings from the registry.
+  Keys and menus run actions through these typed values; the registry erases the types only
+  inside a target, to list a subject's actions and keys together.
+- **Help comes from the keys.** The hint bar shows the keys that reach something on the cursor's
+  subject and the change, each with the title of what it runs there, so `C` on a line reads
+  "comment on file". Help lists the keys of every kind and place, in sections of the kinds and
+  places they belong to, where the cursor is first; a test fails on a kind or place whose keys no
+  section shows. Neither is written by hand, so neither can drift from what the keys do.
+- **Built on bubbles' key and help.** A binding is a `key.Binding` from bubbles, matched with
+  `key.Matches`, and the hint bar is bubbles' `help` short view, which already fits it to the
+  width. Bubbles' full help view has no section titles, so the help screen keeps its own layout.
 - **Menus group actions by subject.** A menu lists the actions of the subject it was opened on,
-  then those of the subjects it carries, each under a heading naming that subject, as "Line 12",
-  "File main.go", and "Commit b194130". So an action keeps a short title, such as "Mark reviewed",
-  and is never ambiguous: the heading says what it acts on. A menu of one subject has no heading.
-  Where actions are listed flat, as in the palette, an entry is the subject and the title together,
-  as "File main.go: mark reviewed", made from the same parts rather than a second title.
-- **Targets on screen.** A target is a subject in its place, drawn: drawing its value through
+  then those of the subjects it carries, each under a heading naming that subject, as "Line",
+  "File main.go", and "Commit b194130". So an action keeps a short title, such as "mark reviewed",
+  and is never ambiguous: the heading says what it acts on. A menu of one subject has no heading,
+  and an entry shows the key that runs it there. Where actions are listed flat, as in the palette or
+  a filtered menu, an entry is the subject and the title together, as "File main.go: mark
+  reviewed", made from the same parts rather than a second title.
+- **Targets on screen.** A target is a subject in its place, drawn: drawing a mention through
   `look` also marks where it is on screen, so a click lands on its subject and place. Menus use the
-  picker from the base branch popup. Marking uses bubblezone (v2, on the same Charm libraries),
-  which tags regions as they are drawn and finds them in the final frame, so marks survive the
-  composition of panes and popups.
-- **A command palette, later.** `ctrl+p` would open the picker on every action that applies to the
-  cursor's subjects, by title, filtered as you type. It reaches what the keyboard cannot select,
-  such as the commit a thread is on, and needs nothing beyond the registry and the picker, so it
-  can come after the first step.
-- **Scope of the first step.** The registry, subjects, places, bindings, and generated help come
-  first, moving every key over. Targets are marked from the start, since marking is in `look`
-  and costs one wrapper per value. The mouse then acts on them through the same handlers: left
-  clicks move the cursor or open a mention's menu, and right clicks open menus. Dragging, hover, and
-  selection by mouse stay out.
+  picker from the base branch popup. Marking is `look`'s: a marked span is wrapped in zero-width
+  escapes, and the final frame is scanned for them, so marks survive the composition of panes and
+  popups. Bubblezone works the same way, but records what it scans on a background goroutine, so
+  a click right after a frame, or a test, can miss the zone; `look`'s scan is synchronous.
+- **A command palette.** `ctrl+p` opens the picker on every action that applies to the cursor's
+  subjects, by title, filtered as you type. It reaches what the keyboard cannot select,
+  such as the commit a thread is on, and needs nothing beyond the registry and the picker.
+- **Scope of the first step.** The registry, subjects, places, keys, and generated help come
+  first, moving every key over. Mentions are marked from the start, since marking is in `look`
+  and costs one wrapper per value. The mouse then acts on them: left clicks move the cursor or
+  open a mention's menu, and right clicks open menus. Dragging, hover, and selection by mouse stay
+  out.
 
 ## Consequences
 
 - An action is written once and works from every place its subject appears, by key, menu, or
   palette.
-- Keys, help text, and hints are defined in one place, and remapping a key is one config entry.
+- What a key does on a subject is written beside the subject's kind or place, and the order a key
+  passes through what a subject carries is the one rule to know.
 - Adding mouse support for something means drawing it as a subject, not writing a click handler.
-- Each action is defined once, on its kind, and is available wherever its kind is. What differs by
-  place, what its handlers run, is declared where the place is, not checked inside actions.
+- What differs by where a subject is, as opening a sidebar entry, is declared on its place; what
+  differs by state, in an action's check; what a thing is, by its kind.
 - Drawing a value somewhere new without registering that place does not compile, so every target
   on screen has its actions and click defined.
-- Bubblezone's marks are escape sequences inside the rendered text until the final frame is
-  scanned. Cutting and padding must keep them whole, and the golden screens are taken after the
+- Kinds and places are made when gr starts, after their actions, since actions run code that reads
+  them.
+- Zone marks are escape sequences inside the rendered text until the final frame is scanned.
+  Cutting, padding, and restyling must keep them whole, and the golden screens are taken after the
   scan, so they record what the terminal gets.
 - Moving the existing keys over is a refactor of the key handlers, help, and the hint bar. The
   golden screens and key tests guard it, as they did ADR 8's.
