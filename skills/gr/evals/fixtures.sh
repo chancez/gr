@@ -18,6 +18,8 @@
 #   off-branch    address, with the repository checked out on main
 #   mixed         address, with new open threads among addressed and resolved ones
 #   overlap       address two threads on the same lines, where fixing one moves the other
+#   big           address a long review: twelve threads with long comments, some with replies
+#   huge          big, with comments long enough that the thread list overflows a tool's output
 set -euo pipefail
 
 scenario=${1:?scenario}
@@ -247,6 +249,100 @@ mixed)
 	grr comment --commit "$c1" -p stats.py -l 1 -m "Say what each helper returns for an empty list in the module docstring."
 	grr comment --commit "$c1" -p stats.py -l 11 -m "Add a docstring to \`median\`."
 	grr submit -m ""
+	;;
+big | huge)
+	init
+	feature
+	cat >"$repo/more.py" <<'PY'
+"""More statistics helpers."""
+
+
+def variance(xs):
+    m = sum(xs) / len(xs)
+    return sum((x - m) ** 2 for x in xs) / len(xs)
+
+
+def stdev(xs):
+    return variance(xs) ** 0.5
+
+
+def mode(xs):
+    counts = {}
+    for x in xs:
+        counts[x] = counts.get(x, 0) + 1
+    return max(counts, key=counts.get)
+
+
+def span(xs):
+    return max(xs) - min(xs)
+
+
+def clamp(x, lo, hi):
+    return max(lo, min(x, hi))
+
+
+def normalize(xs):
+    lo, hi = min(xs), max(xs)
+    return [(x - lo) / (hi - lo) for x in xs]
+PY
+	commit "Add more helpers"
+	c1= c3=
+	c1=$(sha HEAD~2)
+	c3=$(sha HEAD)
+	# Long comments, as a careful reviewer writes them, so the thread list is long.
+	why="I would rather the helpers in this module all behave the same way at their edges, so that a caller who learns one of them can predict the others, and so that the tests can share fixtures. When we discussed this module last week we agreed that surprising edge behavior is worse than a slightly longer function, and that each helper should say in its docstring what it does with an input it cannot handle."
+	if [ "$scenario" = huge ]; then
+		# Longer still, as a review that argues each point: the list then runs past what a
+		# tool shows of a command's output.
+		why="$why
+
+$why Naming matters for the same reason: a name that reads like something else costs every reader a second look, and the rename is cheaper now than after more callers depend on it.
+
+$why"
+	fi
+	grr comment --commit "$c1" -p stats.py -l 5-7 -m "Rename \`tmp\` to \`total\`.
+
+$why"
+	grr comment --commit "$c1" -p stats.py -l 4 -m "Add a docstring to \`mean\` that says it raises ZeroDivisionError for an empty list.
+
+$why"
+	grr comment --commit "$c1" -p stats.py -l 11 -m "Add a docstring to \`median\` that says it raises IndexError for an empty list.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 4 -m "Add a docstring to \`variance\`: it is the population variance, not the sample variance.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 9 -m "Add a docstring to \`stdev\`: the population standard deviation.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 13 -m "Add a docstring to \`mode\` that says ties go to the value seen first.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 20 -m "Rename \`span\` to \`value_range\`; \`span\` reads like a time span.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 24 -m "Rename \`clamp\`'s parameters \`lo\` and \`hi\` to \`low\` and \`high\`.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 28-30 -m "Rename \`normalize\`'s locals \`lo\` and \`hi\` to \`low\` and \`high\`, as in \`clamp\`.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 1 -m "Expand the module docstring: say these helpers take a non-empty list of numbers.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 14-16 -m "Use \`collections.Counter\` in \`mode\` instead of the dict.
+
+$why"
+	grr comment --commit "$c3" -p more.py -l 5 -m "Use \`statistics\`-style naming: rename the local \`m\` to \`mu\`.
+
+$why"
+	grr submit --request-changes -m "Mostly naming and docstrings, nothing structural. Each thread says what I want.
+
+$why"
+	# Replies on a few threads, so some carry more than one comment.
+	grr reply 6 -m "To be clear: first seen in the list, not the smallest value. Counter.most_common keeps insertion order for ties, so that works."
+	grr reply 11 -m "Keep the function signature as it is; only the body changes."
+	grr reply 12 -m "Only in \`variance\`; \`stdev\` has no such local."
 	;;
 overlap)
 	init

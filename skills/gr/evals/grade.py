@@ -233,9 +233,17 @@ def grade_wasted_calls(results, r):
         return
     cmds = [subcommand(l) for l in r.gr_log]
     after = cmds[cmds.index("threads") + 1:] if "threads" in cmds else []
-    wasted = [l for l, c in zip(r.gr_log[len(cmds) - len(after):], after) if c == "thread"]
+    wasted = [l for l, c in zip(r.gr_log[len(cmds) - len(after):], after)
+              if c == "thread" and "--help" not in l.split()]
     expect(results, "No thread is fetched by ref after the thread list showed it",
            "threads" in cmds and not wasted, f"gr commands: {[c for c in cmds]}; fetched after listing: {wasted}")
+    # Listing again before acting on anything fetches the same threads twice, as an agent does
+    # when the list ran past what its tool showed and it lists again to read it in parts.
+    writes = {"address", "reply", "edit", "resolve", "reopen", "delete", "comment", "submit"}
+    first = next((i for i, c in enumerate(cmds) if c in writes), len(cmds))
+    lists = [l for l, c in zip(r.gr_log[:first], cmds[:first]) if c == "threads" and "--help" not in l.split()]
+    expect(results, "The threads are listed once before acting on them", len(lists) == 1,
+           f"thread lists before the first write: {lists}")
 
 
 def grade_fixes(results, r, refs, fixture, new):
@@ -341,6 +349,33 @@ def grade_overlap(r):
     return res
 
 
+def grade_big(r):
+    res = []
+    refs = [str(i) for i in range(1, 13)]
+    fixture = {ref: (1, "open") for ref in refs}
+    fixture.update({"6": (2, "open"), "11": (2, "open"), "12": (2, "open"), "r1": (1, "open")})
+    new = r.commits_since(r.fixture_head)
+    grade_identity(res, r, fixture, 1)
+    grade_fixes(res, r, refs, fixture, new)
+    p = r.on_feature("""import inspect, stats, more
+checks = {
+    'tmp renamed': 'tmp' not in inspect.getsource(stats.mean),
+    'docstrings': all(f.__doc__ for f in [stats.mean, stats.median, more.variance, more.stdev, more.mode]),
+    'value_range': hasattr(more, 'value_range') and not hasattr(more, 'span'),
+    'clamp low, high': list(inspect.signature(more.clamp).parameters) == ['x', 'low', 'high'],
+    'normalize low, high': 'lo,' not in inspect.getsource(more.normalize),
+    'module docstring': 'empty' in (more.__doc__ or '').lower(),
+    'Counter': 'Counter' in inspect.getsource(more.mode),
+    'mu': 'mu' in inspect.getsource(more.variance),
+}
+print([k for k, ok in checks.items() if not ok])""")
+    expect(res, "Every one of the twelve asks is met", p.stdout.strip() == "[]",
+           f"unmet: {p.stdout.strip()} {p.stderr.strip()[-200:]!r}")
+    grade_committed(res, r, new)
+    grade_wasted_calls(res, r)
+    return res
+
+
 def write_state(r, out):
     os.makedirs(os.path.join(out, "outputs"), exist_ok=True)
     threads = run(["gr", "-C", r.repo, "threads", "-c", "1"], r.repo, r.env, check=False).stdout
@@ -360,6 +395,8 @@ GRADERS = {
     "off-branch": grade_off_branch,
     "mixed": grade_mixed,
     "overlap": grade_overlap,
+    "big": grade_big,
+    "huge": grade_big,
 }
 
 
