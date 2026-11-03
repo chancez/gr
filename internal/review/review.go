@@ -187,35 +187,42 @@ func (s *Service) EnsureChange(ctx context.Context, t Target) (store.Change, sto
 			return store.Change{}, store.Revision{}, err
 		}
 	}
-	var change store.Change
-	var created bool
-	var revision store.Revision
-	err := s.store.Tx(ctx, func(tx *store.Tx) error {
-		var err error
-		if t.Kind == store.KindBranch {
-			change, err = tx.OpenBranchChange(ctx, s.repo.ID, t.Branch)
-		} else {
-			change, err = tx.FrozenChange(ctx, s.repo.ID, t.Kind, base, head)
-		}
-		if err == nil || !errors.Is(err, store.ErrNotFound) {
-			return err
-		}
-		created = true
-		change, err = tx.CreateChange(ctx, store.Change{
-			RepoID: s.repo.ID, Kind: t.Kind, Branch: t.Branch, BaseBranch: t.BaseBranch,
-			Title: s.defaultTitle(ctx, t, base, head),
-		})
-		if err != nil {
-			return err
-		}
-		revision, err = tx.CreateRevision(ctx, change.ID, base, head)
-		return err
-	})
-	if err != nil {
+	change, err := s.findChange(ctx, s.store, t, base, head)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
 		return store.Change{}, store.Revision{}, err
 	}
-	if created {
-		return change, revision, nil
+	if err != nil {
+		// Read the title from git before the write transaction, so other writers do not wait on it.
+		title := s.defaultTitle(ctx, t, base, head)
+		var created bool
+		var revision store.Revision
+		err := s.store.Tx(ctx, func(tx *store.Tx) error {
+			// Another process may have created it meanwhile.
+			var err error
+			change, err = s.findChange(ctx, tx, t, base, head)
+			if err == nil || !errors.Is(err, store.ErrNotFound) {
+				return err
+			}
+			created = true
+			change, err = tx.CreateChange(ctx, store.Change{
+				RepoID:     s.repo.ID,
+				Kind:       t.Kind,
+				Branch:     t.Branch,
+				BaseBranch: t.BaseBranch,
+				Title:      title,
+			})
+			if err != nil {
+				return err
+			}
+			revision, err = tx.CreateRevision(ctx, change.ID, base, head)
+			return err
+		})
+		if err != nil {
+			return store.Change{}, store.Revision{}, err
+		}
+		if created {
+			return change, revision, nil
+		}
 	}
 	synced, revision, err := s.Sync(ctx, change)
 	if err != nil {
@@ -226,6 +233,20 @@ func (s *Service) EnsureChange(ctx context.Context, t Target) (store.Change, sto
 		return s.EnsureChange(ctx, t)
 	}
 	return synced, revision, nil
+}
+
+// changeFinder is a store or a transaction.
+type changeFinder interface {
+	OpenBranchChange(ctx context.Context, repoID, branch string) (store.Change, error)
+	FrozenChange(ctx context.Context, repoID string, kind store.ChangeKind, baseSHA, headSHA string) (store.Change, error)
+}
+
+// findChange finds the open change for a target resolved to base and head.
+func (s *Service) findChange(ctx context.Context, q changeFinder, t Target, base, head string) (store.Change, error) {
+	if t.Kind == store.KindBranch {
+		return q.OpenBranchChange(ctx, s.repo.ID, t.Branch)
+	}
+	return q.FrozenChange(ctx, s.repo.ID, t.Kind, base, head)
 }
 
 func (s *Service) defaultTitle(ctx context.Context, t Target, base, head string) string {
