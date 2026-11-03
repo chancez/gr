@@ -82,7 +82,7 @@ func (a *app) changeCommand() *cobra.Command {
 	show := &cobra.Command{
 		Use:   "show [change]",
 		Short: "Show a change with its revisions and reviews",
-		Long:  "Show a change with its revisions and reviews.\n\n" + changeArgHelp,
+		Long:  "Show a change with its revisions, reviews, and what you marked reviewed.\n\n" + changeArgHelp,
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			svc, change, rev, err := a.findChange(cmd.Context(), cf, firstArg(args), true)
@@ -196,6 +196,7 @@ type changeDetailJSON struct {
 	Revisions []*revisionJSON `json:"revisions"`
 	Reviews   []reviewJSON    `json:"reviews"`
 	Threads   threadCounts    `json:"threads"`
+	Reviewed  reviewedJSON    `json:"reviewed"`
 }
 
 type threadCounts struct {
@@ -218,6 +219,10 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 	if err != nil {
 		return err
 	}
+	marked, err := reviewedStatus(ctx, svc, change, rev)
+	if err != nil {
+		return err
+	}
 	var counts threadCounts
 	for _, t := range threads {
 		switch t.State {
@@ -235,7 +240,11 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 
 	if a.json {
 		l := newLookups(svc)
-		out := changeDetailJSON{changeJSON: toChange(change, &rev), Threads: counts}
+		out := changeDetailJSON{
+			changeJSON: toChange(change, &rev),
+			Threads:    counts,
+			Reviewed:   marked,
+		}
 		for _, r := range revisions {
 			out.Revisions = append(out.Revisions, toRevision(r))
 		}
@@ -258,6 +267,9 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 		fmt.Fprintf(w, ", %d outdated", counts.Outdated)
 	}
 	fmt.Fprintln(w)
+	if marked.any() {
+		a.printReviewed(marked)
+	}
 	if len(reviews) > 0 {
 		fmt.Fprintln(w, "\nReviews:")
 		for _, r := range reviews {

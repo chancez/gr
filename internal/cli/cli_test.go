@@ -318,3 +318,81 @@ func TestStackedBranchNotice(t *testing.T) {
 		t.Errorf("stderr = %q, want %q", stderr.String(), want)
 	}
 }
+
+// Marks set from the CLI show in gr change show, as text and JSON.
+func TestMarkAndUnmark(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Write("a.txt", gittest.Lines("a"), "b.txt", gittest.Lines("b"))
+	root := e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.txt", gittest.Lines("A"), "b.txt", gittest.Lines("B"))
+	both := e.repo.Commit("change both")
+	e.repo.Write("a.txt", gittest.Lines("AA"))
+	again := e.repo.Commit("change a again")
+	agent := "agent"
+
+	e.run(agent, "mark", "--commit", both)
+	e.run(agent, "mark", "--commit", again, "-p", "a.txt", "-p", "/COMMIT_MSG")
+	e.run(agent, "mark", "-p", "b.txt")
+	// Unmarking a file of a marked commit leaves its other files marked.
+	e.run(agent, "unmark", "--commit", both, "-p", "b.txt")
+	var got reviewedJSON
+	if err := json.Unmarshal([]byte(e.run(agent, "mark", "--json", "-p", "a.txt")), &got); err != nil {
+		t.Fatal(err)
+	}
+	want := reviewedJSON{
+		Commits: []commitReviewedJSON{
+			{
+				SHA:     both,
+				Subject: "change both",
+				Files:   []string{"/COMMIT_MSG", "a.txt"},
+			},
+			{
+				SHA:      again,
+				Subject:  "change a again",
+				Reviewed: true,
+			},
+		},
+		Diff:      []string{"a.txt", "b.txt"},
+		DiffFiles: 2,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("mark --json mismatch (-want +got):\n%s", diff)
+	}
+
+	var show changeDetailJSON
+	if err := json.Unmarshal([]byte(e.run(agent, "change", "show", "--json")), &show); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(want, show.Reviewed); diff != "" {
+		t.Errorf("change show --json reviewed mismatch (-want +got):\n%s", diff)
+	}
+
+	e.run(agent, "unmark", "-p", "a.txt")
+	wantText := "Change #1: feature\n" +
+		"open, feature onto main, revision 1 (" + short(root) + ".." + short(again) + ")\n" +
+		"Threads: 0 open, 0 addressed, 0 resolved\n" +
+		"Reviewed by you: 1 of 2 commits, 1 of 2 files of the whole diff\n" +
+		"  commit " + short(both) + " /COMMIT_MSG\n" +
+		"  commit " + short(both) + " a.txt\n" +
+		"  commit " + short(again) + "\n" +
+		"  diff b.txt\n"
+	if got := e.run(agent, "change", "show"); got != wantText {
+		t.Errorf("change show = %q, want %q", got, wantText)
+	}
+	// Marks are the author's own.
+	if got := e.run("Human", "change", "show"); strings.Contains(got, "Reviewed") {
+		t.Errorf("change show for another author = %q, want no marks", got)
+	}
+
+	for args, want := range map[string]string{
+		"mark":                      "pass --commit, -p, or both",
+		"mark -p missing.txt":       "missing.txt is not in the change's diff",
+		"mark --commit " + root:     "is not in revision 1",
+		"unmark --commit HEAD -p x": "x is not in commit " + short(again),
+	} {
+		if err := e.runErr(agent, strings.Fields(args)...); !strings.Contains(err.Error(), want) {
+			t.Errorf("gr %s: %v, want %q", args, err, want)
+		}
+	}
+}

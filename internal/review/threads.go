@@ -103,7 +103,7 @@ func (s *Service) locationFor(ctx context.Context, rev store.Revision, nt NewThr
 		}
 		return loc, nil
 	case store.ScopeCommit:
-		c, err := s.commitInRevision(ctx, rev, nt.Commit)
+		c, err := s.CommitInRevision(ctx, rev, nt.Commit)
 		if err != nil {
 			return store.Location{}, err
 		}
@@ -184,8 +184,8 @@ func (s *Service) locationFor(ctx context.Context, rev store.Revision, nt NewThr
 	return loc, nil
 }
 
-// commitInRevision resolves a commit-ish and checks that it is one of the revision's commits.
-func (s *Service) commitInRevision(ctx context.Context, rev store.Revision, commitish string) (git.Commit, error) {
+// CommitInRevision resolves a commit-ish and checks that it is one of the revision's commits.
+func (s *Service) CommitInRevision(ctx context.Context, rev store.Revision, commitish string) (git.Commit, error) {
 	if commitish == "" {
 		return git.Commit{}, errors.New("a commit thread needs a commit")
 	}
