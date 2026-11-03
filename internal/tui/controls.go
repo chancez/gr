@@ -116,6 +116,7 @@ var (
 	viewedBox       control
 	commitViewedBox control
 	fileFold        control
+	threadFold      control
 	expandFold      control
 	commentHere     control
 	replyButton     control
@@ -137,6 +138,7 @@ func init() {
 	viewedBox = quietCheckbox(actMarkFileReviewed, "Viewed")
 	commitViewedBox = quietCheckbox(actMarkCommitReviewed, "Viewed")
 	fileFold = chevron(actFoldFile)
+	threadFold = chevron(actToggleThread)
 	expandFold = link(actExpandFold, look.GlyphNone, "")
 	commentHere = icon(actCommentOnLine, look.GlyphComment)
 	commentHere.selects = true

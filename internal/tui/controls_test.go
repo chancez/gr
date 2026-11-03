@@ -347,3 +347,25 @@ func TestFileSteps(t *testing.T) {
 		t.Errorf("on the last file, title controls = %q, want %q", got, want)
 	}
 }
+
+// A folded thread, as a resolved one in the overview, opens from its chevron.
+func TestThreadChevronOpensIt(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	at := -1
+	for i, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.State == store.ThreadResolved && r.collapsed {
+			at = i
+		}
+	}
+	if at < 0 {
+		t.Fatal("no folded resolved thread in the overview")
+	}
+	id := e.m.main.rows[at].thread.ID
+	e.click("row"+strconv.Itoa(at)+":", actToggleThread.Title)
+	for _, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.ID == id && r.collapsed {
+			t.Errorf("clicking the chevron left thread %s folded", r.thread.Label())
+		}
+	}
+}

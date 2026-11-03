@@ -107,7 +107,7 @@ func (m *model) rowControls(i int, state *rowState) {
 		return m.controls(where, modeNormal, t, cs...)
 	}
 	switch {
-	case r.kind == rowLine && !hovered, r.kind == rowThread && r.collapsed:
+	case r.kind == rowLine && !hovered:
 		return
 	}
 	side := m.main.side
@@ -126,6 +126,11 @@ func (m *model) rowControls(i int, state *rowState) {
 	case rowCommit:
 		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
 	case rowThread:
+		if r.collapsed {
+			// A folded thread opens from its chevron; its buttons show once it is open.
+			state.lead = controls(t, threadFold.checked(false))
+			return
+		}
 		resolve := resolveButton
 		if r.thread.State == store.ThreadResolved {
 			resolve = reopenButton

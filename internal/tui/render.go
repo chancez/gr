@@ -403,7 +403,11 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 	if len(t.Comments) > 0 {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	spans := []look.Span{look.Muted("  "), look.Chevron(false, false), look.Muted(" " + t.Label() + " ")}
+	chevron := []look.Span{look.Chevron(false, false)}
+	if len(state.lead) > 0 {
+		chevron = state.lead
+	}
+	spans := append(append([]look.Span{look.Muted("  ")}, chevron...), look.Muted(" "+t.Label()+" "))
 	spans = append(spans, look.State(t, d.isDraft(t.ReviewID))...)
 	spans = append(spans, look.Muted("  "))
 	spans = append(spans, where...)
