@@ -40,30 +40,19 @@ The TUI polls `PRAGMA data_version` to reload when another process writes.
 
 ### TUI (`internal/tui`)
 
-- `look` is how things are drawn. Text is spans of semantic elements drawn on surfaces (ADR 8); a
-  surface owns the background. Clickable spans are marked with zero-width APC zone sequences that
-  `look.Scan` strips from the final frame, recording where each landed. Restyling a line must keep
-  marks (`look.KeepMarks`).
-- Symbols are roles (`look.Glyph`), drawn from the theme's glyph set: ASCII, Unicode (the
-  default), or Nerd Font icons where the terminal is known to bundle them (`look/glyphs.go`).
-  Glyphs are written as `\u` escapes, so the source stays ASCII. A bare `look.Theme`, and the
-  test model, draw ASCII.
-- `interact` is how things are acted on (ADR 10). Typed `Action[M,S]`s, `Kind`s (what a subject
-  is), and `Place`s (where it is: a list, or a mention inside something else). Nothing has a name;
-  everything is used by address. A key goes to the cursor's subject in its place, then its kind,
-  then what the kind carries (`Via`), then the pane, the change, and the app. Help, hints, menus,
-  the ctrl+p palette, and clicks are all derived from this registry.
-- `registry.go` declares the TUI's actions, kinds, places, and bindings. Kinds, places, and the
-  controls in `controls.go` are made in `init()`: building them in their declarations makes an
-  initialization cycle, since actions run code that redraws rows.
-- Controls (`controls.go`) draw an action as a clickable button found on the same target its key
-  runs on. Zone ids name where a control is plus its action's address, never its order in a
-  frame, because `pane` caches rendered rows across frames. A control runs only in the mode it was
-  drawn for. Chips around the content; quiet links inside the diff and overview, lit under the
-  cursor or mouse in room kept for the key so nothing moves. A control must never add a line to a
-  row: row heights are measured once in `pane.layout`.
-- The main pane is a list of `row`s (`rows.go`, `overview.go`) rendered by `render.go`. Rows other
-  than the cursor's, the selection's, the active hunk's, and the hovered one are cached.
+- `look` is how things are drawn (ADR 8): semantic elements on surfaces, which own the background,
+  and symbols as roles drawn from a glyph set (ASCII, Unicode, or Nerd Font). Clickable spans
+  carry zero-width zone marks that the final frame is scanned for, so a click maps back to what
+  was drawn there.
+- `interact` is how things are acted on (ADR 10): typed actions on kinds of subject, bound to keys
+  on kinds and the places subjects appear. Help, hints, menus, the palette, and clicks all come
+  from this one registry, declared in `registry.go`. Kinds and places are made in `init()`, as
+  making them in their declarations is an initialization cycle.
+- Controls draw an action as something to click, found on the same target its key runs on, so a
+  click always does what the key does there.
+- The main pane is a list of `row`s whose drawings are cached across frames and whose heights are
+  measured once per layout. So nothing drawn on screen may depend on its order within a frame, and
+  nothing may change a row's height without a new layout.
 
 ## Tests
 
