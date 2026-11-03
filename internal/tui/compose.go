@@ -262,6 +262,12 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 		m.compose.vim = vimbubble.New(&m.compose.area)
 		m.compose.vim.SetEnabled(true)
 		m.compose.vim.SetMode(vimbubble.Insert)
+		// The terminal's own cursor, which can change shape with the mode, as vim's does; the text
+		// area's drawn one is always a block.
+		styles := m.compose.area.Styles()
+		styles.Cursor.Blink = false
+		m.compose.area.SetStyles(styles)
+		m.compose.area.SetVirtualCursor(false)
 	}
 	m.mode = modeCompose
 	// The box opens under what it comments on, as GitHub's, so the lines above stay put.
@@ -271,6 +277,9 @@ func (m *model) openComposer(c composer, initial string) tea.Cmd {
 	m.main.showAttached(top)
 	return m.compose.area.Focus()
 }
+
+// composeIndent is how far the comment box is indented from the main pane's edge.
+const composeIndent = 2
 
 // composeAnchor is the row the comment box opens under, and the first row of what it comments on:
 // a thread's row for a reply or an edit, the last line commented on with the threads already
@@ -337,10 +346,43 @@ func sideOr(s anchor.Side) anchor.Side {
 	return s
 }
 
+// composeCursor is the terminal's cursor in the comment box with vim, where the text area's
+// cursor is on screen: a bar in insert mode and a block otherwise, steady. It is nil without vim,
+// whose text area draws its own, and when the box's text is scrolled out of view.
+func (m *model) composeCursor() *tea.Cursor {
+	if m.mode != modeCompose || m.compose.vim == nil {
+		return nil
+	}
+	c := m.compose.area.Cursor()
+	p := &m.main
+	if c == nil || !p.attaching(p.attach) {
+		return nil
+	}
+	nw, _, _ := m.layoutSizes()
+	left := 0
+	if nw > 0 {
+		left = nw + 1
+	}
+	// The box's top border and title are above its text, inside the indent, border, and padding.
+	end := p.starts[p.attach] + p.rowHeight(p.attach)
+	top := end - len(p.attached(p.width)) + 2
+	y := 1 + top - p.offset + c.Y
+	if y < 1 || y > p.height {
+		return nil
+	}
+	c.X += left + composeIndent + 2
+	c.Y = y
+	c.Shape = tea.CursorBlock
+	if m.compose.vim.Mode() == vimbubble.Insert {
+		c.Shape = tea.CursorBar
+	}
+	return c
+}
+
 // composeLines draws the comment box, width wide, as it hangs under its row.
 func (m *model) composeLines(width int) []string {
 	th := m.r.th
-	const indent = 2
+	const indent = composeIndent
 	boxWidth := max(width-indent, 24)
 	inner := boxWidth - 4
 	title := []look.Span{look.Heading(m.compose.title)}

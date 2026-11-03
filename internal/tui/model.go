@@ -527,6 +527,7 @@ func (m *model) View() tea.View {
 	v.AltScreen = true
 	// Every motion, not only drags, so what the mouse is over can show its controls.
 	v.MouseMode = tea.MouseModeAllMotion
+	v.Cursor = m.composeCursor()
 	v.WindowTitle = "gr"
 	if m.data != nil {
 		v.WindowTitle = fmt.Sprintf("gr #%d %s", m.data.change.Seq, termtext.Line(m.data.change.Title))

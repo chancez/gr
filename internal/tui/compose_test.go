@@ -146,6 +146,9 @@ func TestVimInTheCommentBox(t *testing.T) {
 	if got := e.m.compose.vim.Mode(); got != vimbubble.Insert || e.m.compose.area.Value() != "hello" {
 		t.Fatalf("typing in a new box gave mode %s, text %q", got, e.m.compose.area.Value())
 	}
+	if e.m.compose.area.Styles().Cursor.Blink {
+		t.Error("the cursor blinks in vim mode, want it steady")
+	}
 	if !strings.Contains(e.screen(), "-- INSERT --") {
 		t.Errorf("the box does not say it is in insert mode:\n%s", e.screen())
 	}
@@ -174,5 +177,32 @@ func TestVimInTheCommentBox(t *testing.T) {
 	}
 	if e.m.mode != modeNormal || len(threads) != 1 || threads[0].Comments[0].Body != "jello" {
 		t.Errorf("ctrl+s in insert mode left mode %d, threads %+v; want jello saved", e.m.mode, threads)
+	}
+}
+
+// With vim, the terminal's cursor sits where the text area's is, a bar in insert mode and a block
+// in normal mode, steady in both.
+func TestVimCursor(t *testing.T) {
+	e := newTUIEnv(t)
+	e.m.vim = true
+	e.openNav("say hello")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+	e.press("c")
+	e.typeText("hello")
+	c := e.m.View().Cursor
+	if c == nil {
+		t.Fatal("no cursor in vim's insert mode")
+	}
+	lines := strings.Split(e.screen(), "\n")
+	if got := ansi.Cut(lines[c.Y], c.X-5, c.X); got != "hello" || c.Shape != tea.CursorBar || c.Blink {
+		t.Errorf("insert cursor at %d,%d shape %d blink %v, after %q; want a steady bar after hello", c.X, c.Y, c.Shape, c.Blink, got)
+	}
+	e.press("esc")
+	if c := e.m.View().Cursor; c == nil || c.Shape != tea.CursorBlock || c.Blink {
+		t.Errorf("normal mode cursor = %+v, want a steady block", c)
+	}
+	e.press("esc", "d")
+	if c := e.m.View().Cursor; c != nil {
+		t.Errorf("cursor %+v once the box closed", c)
 	}
 }
