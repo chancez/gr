@@ -245,7 +245,7 @@ func commentHeader(d *changeData, c store.Comment) []look.Span {
 
 // renderExcerpt draws the diff a thread is about, under a line naming where it is.
 func (r *renderer) renderExcerpt(e review.Excerpt, loc store.Location, width int) []string {
-	where := append([]look.Span{look.Default(" ")}, look.Location(loc, look.Strong)...)
+	where := append([]look.Span{look.Default(" ")}, look.MarkSHA(commitMentions.Zone(loc.Commit), look.Location(loc, look.Strong)...)...)
 	if !e.Exact {
 		where = append(where, look.Muted("  (outdated: as it was)"))
 	}
@@ -294,7 +294,7 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
 func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
-	where := look.Location(t.Location)
+	where := look.MarkSHA(commitMentions.Zone(t.Location.Commit), look.Location(t.Location)...)
 	if t.Summary {
 		where = []look.Span{look.Muted("summary")}
 	}
@@ -325,7 +325,7 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, c
 		title = append(look.SummaryTitle(t), look.Default(" "))
 	}
 	title = append(title, look.State(t, d.isDraft(t.ReviewID))...)
-	if loc := look.Location(t.Location); len(loc) > 0 && !t.Summary {
+	if loc := look.MarkSHA(commitMentions.Zone(t.Location.Commit), look.Location(t.Location)...); len(loc) > 0 && !t.Summary {
 		title = append(append(title, look.Muted("  ")), loc...)
 	}
 	// A resolved thread recedes: its title and comment headers are dimmed.

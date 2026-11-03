@@ -14,6 +14,7 @@ package interact
 
 import (
 	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -189,10 +190,12 @@ type Key[M any] struct {
 	Action Bound[M]
 }
 
-// Place is where subjects of kind S are found: a list you move through. A place can have actions and keys of its own, for what its subjects do there, as
+// Place is where subjects of kind S are found: a list you move through, or a mention inside
+// something else. A place can have actions and keys of its own, for what its subjects do there, as
 // a sidebar entry opens in the main pane.
 type Place[M, S any] struct {
 	kind     *Kind[M, S]
+	mention  bool
 	onCursor *Action[M, S]
 	actions  []*Action[M, S]
 	keys     keys[M, S]
@@ -206,6 +209,12 @@ type Option[M, S any] func(*Place[M, S])
 // commits everywhere.
 func OnCursor[M, S any](a *Action[M, S]) Option[M, S] {
 	return func(p *Place[M, S]) { p.onCursor = a }
+}
+
+// Offers adds actions of the place's own to its menus, with no keys, as a mention offers to open
+// what it names.
+func Offers[M, S any](actions ...*Action[M, S]) Option[M, S] {
+	return func(p *Place[M, S]) { p.actions = append(p.actions, actions...) }
 }
 
 // List registers a place you move through, whose entries are subjects of k.
@@ -230,6 +239,46 @@ func (p *Place[M, S]) Bind(a *Action[M, S], help, desc string, keys ...string) {
 // Bindings are the place's own keys, for help.
 func (p *Place[M, S]) Bindings() []key.Binding { return p.keys.bindings() }
 
+// mentions counts the places of mentions, to tell their zones apart.
+var mentions int
+
+// Mention registers a place where subjects of k show up inside something else. It never holds
+// the cursor, so it has no handler but its menu. A mention is drawn marked with its Zone, and
+// resolve finds the subject a zone's key names when it is clicked.
+func Mention[M, S any](k *Kind[M, S], resolve func(m M, key string) (S, bool), opts ...Option[M, S]) *Mentions[M, S] {
+	p := &Place[M, S]{kind: k, mention: true}
+	for _, o := range opts {
+		o(p)
+	}
+	mentions++
+	return &Mentions[M, S]{Place: p, resolve: resolve, prefix: "mention" + strconv.Itoa(mentions) + ":"}
+}
+
+// Mentions is a place of mentions, which marks where each is drawn and finds it again from the mark.
+type Mentions[M, S any] struct {
+	*Place[M, S]
+	resolve func(m M, key string) (S, bool)
+	prefix  string
+}
+
+// Zone is the zone id to mark a mention with, for the subject key names, such as a commit's sha.
+func (p *Mentions[M, S]) Zone(key string) string {
+	return p.prefix + key
+}
+
+// At is the mention a zone id marks, if it is one of this place's and its subject is still there.
+func (p *Mentions[M, S]) At(m M, id string) (Target[M], bool) {
+	key, ok := strings.CutPrefix(id, p.prefix)
+	if !ok {
+		return Target[M]{}, false
+	}
+	s, ok := p.resolve(m, key)
+	if !ok {
+		return Target[M]{}, false
+	}
+	return p.Target(s), true
+}
+
 // Holds reports whether t is one of the place's subjects.
 func (p *Place[M, S]) Holds(t Target[M]) bool { return t.place == p }
 
@@ -243,7 +292,7 @@ func (p *Place[M, S]) Target(s S) Target[M] {
 	}
 	groups[0].Actions = append(own, groups[0].Actions...)
 	groups[0].keys = append(p.keys.on(s), groups[0].keys...)
-	t := Target[M]{place: p, groups: groups}
+	t := Target[M]{place: p, mention: p.mention, groups: groups}
 	if p.onCursor != nil {
 		b := bind(p.onCursor, s)
 		t.onCursor = &b
@@ -254,9 +303,13 @@ func (p *Place[M, S]) Target(s S) Target[M] {
 // Target is a subject in its place, with its actions and keys, the types erased.
 type Target[M any] struct {
 	place    any
+	mention  bool
 	onCursor *Bound[M]
 	groups   []Group[M]
 }
+
+// Mention reports whether the target is a mention, which never holds the cursor.
+func (t Target[M]) Mention() bool { return t.mention }
 
 // OnCursor is what runs when the cursor lands on the target, if anything.
 func (t Target[M]) OnCursor(m M) tea.Cmd {

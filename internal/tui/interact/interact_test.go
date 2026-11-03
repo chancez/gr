@@ -154,6 +154,30 @@ func TestPlaces(t *testing.T) {
 	}
 }
 
+func TestMentions(t *testing.T) {
+	commits, _ := kinds()
+	e := &env{}
+	open := action[commit]("go to", nil)
+	mentions := interact.Mention(commits, func(_ *env, sha string) (commit, bool) {
+		return commit{sha: sha}, sha == "abc"
+	}, interact.Offers(open))
+	// A mention is found again from the zone it is marked with, and only from its own.
+	mention, ok := mentions.At(e, mentions.Zone("abc"))
+	if !ok {
+		t.Fatalf("no mention at zone %q", mentions.Zone("abc"))
+	}
+	if !mention.Mention() || titles(mention.Groups(e))[0].Actions[0] != "go to" {
+		t.Errorf("mention %+v is not one, or does not offer its place's action first", titles(mention.Groups(e)))
+	}
+	if _, ok := mentions.At(e, mentions.Zone("def")); ok {
+		t.Error("a zone of a commit that is not there resolved")
+	}
+	other := interact.Mention(commits, func(_ *env, sha string) (commit, bool) { return commit{sha: sha}, true })
+	if _, ok := mentions.At(e, other.Zone("abc")); ok {
+		t.Error("another place's zone resolved")
+	}
+}
+
 // Binding an action a kind does not list panics, so no key runs what menus never offer by
 // accident; BindQuiet does so on purpose, for a key that only says why it does nothing.
 func TestBindQuiet(t *testing.T) {

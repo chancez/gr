@@ -120,21 +120,24 @@ func matchSpans(plain, pattern string) [][2]int {
 	return spans
 }
 
-// highlightMatches marks the search pattern's matches in a rendered line, keeping its other styles.
+// highlightMatches marks the search pattern's matches in a rendered line, keeping its other styles
+// and its zones.
 func (m *model) highlightMatches(line string) string {
-	spans := matchSpans(ansi.Strip(line), m.search)
-	if len(spans) == 0 {
-		return line
-	}
-	var b strings.Builder
-	at := 0
-	for _, sp := range spans {
-		b.WriteString(ansi.Cut(line, at, sp[0]))
-		b.WriteString(m.r.th.Render(look.SearchMatch, look.Text(ansi.Strip(ansi.Cut(line, sp[0], sp[1])))))
-		at = sp[1]
-	}
-	b.WriteString(ansi.Cut(line, at, ansi.StringWidth(line)))
-	return b.String()
+	return look.KeepMarks(line, func(line string) string {
+		spans := matchSpans(ansi.Strip(line), m.search)
+		if len(spans) == 0 {
+			return line
+		}
+		var b strings.Builder
+		at := 0
+		for _, sp := range spans {
+			b.WriteString(ansi.Cut(line, at, sp[0]))
+			b.WriteString(m.r.th.Render(look.SearchMatch, look.Text(ansi.Strip(ansi.Cut(line, sp[0], sp[1])))))
+			at = sp[1]
+		}
+		b.WriteString(ansi.Cut(line, at, ansi.StringWidth(line)))
+		return b.String()
+	})
 }
 
 // searchLabel shows the active search in the status bar.

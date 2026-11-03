@@ -12,6 +12,7 @@ import (
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui/interact"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 // A right click on a diff line opens its menu: the line's actions, then its file's and its
@@ -112,6 +113,33 @@ func TestAnchoredLayout(t *testing.T) {
 	}
 }
 
+// A sha in a thread's location is a mention: a click on it opens the commit's menu, and opening the
+// commit from it shows that commit.
+func TestClickingAMention(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	e.m.render()
+	var zone []look.Zone
+	for id, zs := range e.m.zones {
+		if _, ok := commitMentions.At(e.m, id); ok {
+			zone = zs
+		}
+	}
+	if len(zone) == 0 {
+		t.Fatalf("no commit mention on the overview:\n%s", e.screen())
+	}
+	_, cmd := e.m.Update(tea.MouseClickMsg{X: zone[0].X, Y: zone[0].Y, Button: tea.MouseLeft})
+	e.drain(cmd)
+	if e.m.mode != modePicker || !strings.HasPrefix(e.m.picker.title, "Commit ") {
+		t.Fatalf("clicking the sha opened mode %d, %+v", e.m.mode, e.m.picker)
+	}
+	e.typeText("open")
+	e.pressRun("enter")
+	if v := e.m.views[e.m.current]; v.kind != viewCommit {
+		t.Errorf("opening the mentioned commit shows view kind %d", v.kind)
+	}
+}
+
 // A right click on a sidebar entry opens its menu without selecting it; only "open" moves there.
 func TestRightClickInTheSidebarLeavesTheSelection(t *testing.T) {
 	e := goldenEnv(t)
@@ -192,6 +220,65 @@ func shownItems(items []pickerItem) []pickerItem {
 		out[i] = it
 	}
 	return out
+}
+
+// Marking a mentioned commit reviewed stays where it was, even with auto-advance.
+func TestMarkingAMentionStaysPut(t *testing.T) {
+	e := goldenEnv(t)
+	e.m.autoAdvance = true
+	e.openNav("Overview")
+	e.m.render()
+	var zone []look.Zone
+	for id, zs := range e.m.zones {
+		if _, ok := commitMentions.At(e.m, id); ok {
+			zone = zs
+		}
+	}
+	if len(zone) == 0 {
+		t.Fatalf("no commit mention on the overview:\n%s", e.screen())
+	}
+	current := e.m.current
+	_, cmd := e.m.Update(tea.MouseClickMsg{X: zone[0].X, Y: zone[0].Y, Button: tea.MouseRight})
+	e.drain(cmd)
+	e.typeText("mark reviewed")
+	e.pressRun("enter")
+	if e.m.current != current {
+		t.Errorf("marking a mentioned commit moved from view %d to %d", current, e.m.current)
+	}
+	if !strings.Contains(e.m.status, "reviewed") {
+		t.Errorf("status %q, want the commit marked", e.m.status)
+	}
+}
+
+// A search matching part of a mentioned sha leaves the whole sha clickable.
+func TestSearchKeepsMentions(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	e.m.render()
+	var want map[string][]look.Zone
+	sha := ""
+	for id, zs := range e.m.zones {
+		if t, ok := commitMentions.At(e.m, id); ok {
+			want = map[string][]look.Zone{id: zs}
+			sha = t.Groups(e.m)[0].Label
+		}
+	}
+	if want == nil {
+		t.Fatalf("no commit mention on the overview:\n%s", e.screen())
+	}
+	e.press("/")
+	e.typeText(strings.TrimPrefix(sha, "Commit ")[:4])
+	e.press("enter")
+	e.m.render()
+	got := map[string][]look.Zone{}
+	for id, zs := range e.m.zones {
+		if _, ok := want[id]; ok {
+			got[id] = zs
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("zones after searching %q = %+v, want %+v", sha, got, want)
+	}
 }
 
 // New data closes a menu, whose actions are bound to rows that are built again.

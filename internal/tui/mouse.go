@@ -45,6 +45,11 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.mode != modeNormal || (msg.Button != tea.MouseLeft && !right) {
 		return m, nil
 	}
+	// A mention, such as a sha in a thread's location, never takes the cursor: any click on it
+	// opens its menu.
+	if t, ok := m.mentionAt(msg.X, msg.Y); ok {
+		return m, m.openMenu(t, msg.X, msg.Y)
+	}
 	nw, _, bh := m.layoutSizes()
 	if msg.Y >= bh {
 		return m, nil

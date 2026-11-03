@@ -102,6 +102,8 @@ type model struct {
 	searchInput textinput.Model
 	// picker is the popup open in modePicker.
 	picker *picker
+	// zones are where the last frame drew marked spans, such as mentions, by id.
+	zones map[string][]look.Zone
 	// theme is the built-in palette, and isDark whether the terminal's background is dark.
 	theme  string
 	isDark bool
@@ -476,7 +478,14 @@ func (m *model) View() tea.View {
 	return v
 }
 
+// render draws the frame, and records where its marked spans landed for the mouse.
 func (m *model) render() string {
+	out, zones := look.Scan(m.frame())
+	m.zones = zones
+	return out
+}
+
+func (m *model) frame() string {
 	if m.width == 0 {
 		return ""
 	}

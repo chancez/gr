@@ -146,6 +146,15 @@ var (
 	actOpenInterdiff = openView[interdiffSubject]()
 	actShowCommit    = showView[commitSubject]()
 	actOpenCommit    = openView[commitSubject]()
+	actGoToCommit    = &interact.Action[*model, commitSubject]{
+		Title:   "open",
+		Applies: func(m *model, s commitSubject) bool { return s.at != m.current },
+		Run: func(m *model, s commitSubject) tea.Cmd {
+			m.setView(s.at)
+			m.setFocus(focusMain)
+			return nil
+		},
+	}
 	actFilterThreads = &interact.Action[*model, overviewSubject]{
 		Title: "filter",
 		Run: func(m *model, _ overviewSubject) tea.Cmd {
@@ -818,6 +827,14 @@ func init() {
 	reviewBars.Bind(actToggleReview, "enter", "expand/collapse the summary", "enter")
 }
 
+// commitMentions is a commit named where something else is, as the sha in a thread's location.
+// Drawing marks with it, and actions draw, so it is made in init to break the cycle.
+var commitMentions *interact.Mentions[*model, commitSubject]
+
+func init() {
+	commitMentions = interact.Mention(commitKind, (*model).commitNamed, interact.Offers(actGoToCommit))
+}
+
 // Targets: the subjects on screen, each in its place.
 
 // viewTarget is view i, in place p: the sidebar's entry, or the view itself in the main pane.
@@ -946,8 +963,12 @@ func (m *model) cursorChain() []interact.Target[*model] {
 	return m.chain(t, ok, m.focus != focusMain)
 }
 
-// chainOf is what a key would reach from t, for a menu opened on it.
+// chainOf is what a key would reach from t, for a menu opened on it: none for a mention, which no
+// key reaches.
 func (m *model) chainOf(t interact.Target[*model]) []interact.Target[*model] {
+	if t.Mention() {
+		return nil
+	}
 	sidebar := false
 	for _, p := range []interface {
 		Holds(interact.Target[*model]) bool
@@ -985,4 +1006,26 @@ func (m *model) discardDraft() tea.Cmd {
 		return opMsg{status: "draft review discarded", err: svc.Discard(ctx, change)}
 	})
 	return nil
+}
+
+// commitNamed is the commit named by sha, for a mention of it.
+func (m *model) commitNamed(sha string) (commitSubject, bool) {
+	for i, v := range m.views {
+		if v.kind == viewCommit && v.commit.SHA == sha {
+			return commitSubject{m.inView(i)}, true
+		}
+	}
+	return commitSubject{}, false
+}
+
+// mentionAt is the mention drawn at x, y in the last frame, if any.
+func (m *model) mentionAt(x, y int) (interact.Target[*model], bool) {
+	for id, zones := range m.zones {
+		for _, z := range zones {
+			if z.Contains(x, y) {
+				return commitMentions.At(m, id)
+			}
+		}
+	}
+	return interact.Target[*model]{}, false
 }
