@@ -88,27 +88,24 @@ func (m *model) toggleFileReviewed(v view, f int) tea.Cmd {
 		return nil
 	}
 	reviewed := !m.fileReviewed(v, f)
-	var cmds []func() error
-	svc, ctx, change := m.svc, m.ctx, m.data.change
-	if !reviewed && v.kind == viewCommit && m.data.marks[review.CommitMark(v.commit.SHA)] {
-		// Unmarking one file of a reviewed commit: keep the other files marked.
-		delete(m.data.marks, review.CommitMark(v.commit.SHA))
+	commit := ""
+	if v.kind == viewCommit {
+		commit = v.commit.SHA
+	}
+	if !reviewed && commit != "" && m.data.marks[review.CommitMark(commit)] {
+		// Unmarking one file of a reviewed commit keeps the other files marked.
+		delete(m.data.marks, review.CommitMark(commit))
 		for i := range v.files {
 			if i != f {
-				other := review.CommitFileMark(v.commit.SHA, v.files[i])
-				m.data.marks[other] = true
-				cmds = append(cmds, func() error { return svc.SetReviewed(ctx, change, other, true) })
+				m.data.marks[review.CommitFileMark(commit, v.files[i])] = true
 			}
 		}
-		sha := v.commit.SHA
-		cmds = append(cmds, func() error { return svc.SetReviewed(ctx, change, review.CommitMark(sha), false) })
 	}
 	if reviewed {
 		m.data.marks[mark] = true
 	} else {
 		delete(m.data.marks, mark)
 	}
-	cmds = append(cmds, func() error { return svc.SetReviewed(ctx, change, mark, reviewed) })
 	delete(m.expanded, v.key()+"\x00"+v.files[f].Path())
 	m.rebuildMain()
 	m.buildNav()
@@ -117,13 +114,10 @@ func (m *model) toggleFileReviewed(v view, f int) tea.Cmd {
 	if reviewed && m.autoAdvance {
 		note = m.advance(func() { m.nextUnreviewedFile(f) })
 	}
-	label := v.files[f].Path()
+	svc, ctx, change, files, file := m.svc, m.ctx, m.data.change, v.files, v.files[f]
 	return func() tea.Msg {
-		var errs []error
-		for _, c := range cmds {
-			errs = append(errs, c())
-		}
-		return opMsg{status: reviewedStatus(label, reviewed) + note, err: errors.Join(errs...)}
+		err := svc.SetFileReviewed(ctx, change, commit, files, file, reviewed)
+		return opMsg{status: reviewedStatus(file.Path(), reviewed) + note, err: err}
 	}
 }
 

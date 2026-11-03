@@ -575,6 +575,44 @@ func TestMarks(t *testing.T) {
 	}
 }
 
+// Unmarking one file of a reviewed commit leaves its other files reviewed.
+func TestSetFileReviewedSplitsACommitMark(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.go", "a\n", "b.go", "b\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.go", "A\n", "b.go", "B\n")
+	commit := e.repo.Commit("change both")
+	h := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(h, "")
+	c, err := h.Git().ReadCommit(ctx, commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := h.CommitFiles(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetCommitReviewed(ctx, change, commit, files, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.SetFileReviewed(ctx, change, commit, files, files[1], false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := h.Marks(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := review.Marks{
+		review.CommitFileMark(commit, files[0]): true,
+		review.CommitFileMark(commit, files[2]): true,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("marks mismatch (-want +got):\n%s", diff)
+	}
+}
+
 func TestSummaryRef(t *testing.T) {
 	e := newEnv(t)
 	e.repo.Commit("root")

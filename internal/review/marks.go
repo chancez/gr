@@ -3,6 +3,7 @@ package review
 import (
 	"cmp"
 	"context"
+	"slices"
 
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/store"
@@ -79,5 +80,37 @@ func (s *Service) SetCommitReviewed(ctx context.Context, change store.Change, co
 			}
 		}
 		return nil
+	})
+}
+
+// SetFileReviewed marks or unmarks file f reviewed: f of commit, with files the commit's files, or
+// of the whole diff when commit is empty. Unmarking one file of a reviewed commit marks its other
+// files, so they stay reviewed.
+func (s *Service) SetFileReviewed(ctx context.Context, change store.Change, commit string, files []git.FileDiff, f git.FileDiff, reviewed bool) error {
+	if commit == "" {
+		return s.SetReviewed(ctx, change, DiffFileMark(f), reviewed)
+	}
+	return s.store.Tx(ctx, func(tx *store.Tx) error {
+		if reviewed {
+			return tx.AddMark(ctx, change.ID, s.author, CommitFileMark(commit, f))
+		}
+		list, err := tx.ListMarks(ctx, change.ID, s.author)
+		if err != nil {
+			return err
+		}
+		if slices.Contains(list, CommitMark(commit)) {
+			if err := tx.DeleteMark(ctx, change.ID, s.author, CommitMark(commit)); err != nil {
+				return err
+			}
+			for _, other := range files {
+				if other.Path() == f.Path() {
+					continue
+				}
+				if err := tx.AddMark(ctx, change.ID, s.author, CommitFileMark(commit, other)); err != nil {
+					return err
+				}
+			}
+		}
+		return tx.DeleteMark(ctx, change.ID, s.author, CommitFileMark(commit, f))
 	})
 }
