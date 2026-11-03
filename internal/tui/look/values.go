@@ -147,6 +147,9 @@ func State(t review.ThreadView, draft bool) []Span {
 	if t.Outdated {
 		out = append(out, sp(elMuted, ", "), sp(elOutdated, "outdated"))
 	}
+	if len(t.Was) > 0 {
+		out = append(out, sp(elMuted, ", "), sp(elOutdated, "lines changed"))
+	}
 	if draft {
 		out = append(out, sp(elMuted, ", "), sp(elDraft, "draft"))
 	}

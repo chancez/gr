@@ -41,6 +41,8 @@ type threadMove struct {
 	from     store.Location
 	to       store.Location
 	outdated bool
+	// was is the lines the thread was on before a rewrite changed them.
+	was []string
 }
 
 // plan works out where each thread moves. It runs git but writes nothing, so it runs before the write
@@ -48,7 +50,7 @@ type threadMove struct {
 func (r *reanchorer) plan(ctx context.Context, threads []store.Thread) (map[string]threadMove, error) {
 	moves := make(map[string]threadMove, len(threads))
 	for _, t := range threads {
-		loc, ok, err := r.locate(ctx, t.Location)
+		loc, ok, carried, err := r.locate(ctx, t.Location)
 		if err != nil {
 			return nil, err
 		}
@@ -57,10 +59,16 @@ func (r *reanchorer) plan(ctx context.Context, threads []store.Thread) (map[stri
 			// revision.
 			loc = t.Location
 		}
+		was := t.Was
+		if carried && was == nil {
+			// The lines it was made on, however many rewrites change them after.
+			was = t.Location.Lines
+		}
 		moves[t.ID] = threadMove{
 			from:     t.Location,
 			to:       loc,
 			outdated: !ok,
+			was:      was,
 		}
 	}
 	return moves, nil
@@ -87,7 +95,7 @@ func apply(ctx context.Context, tx *store.Tx, changeID string, rev store.Revisio
 		} else {
 			m.to.RevisionID = rev.ID
 		}
-		if err := tx.MoveThread(ctx, t.ID, m.to, m.outdated); err != nil {
+		if err := tx.MoveThread(ctx, t.ID, m.to, m.outdated, m.was); err != nil {
 			return err
 		}
 	}
@@ -119,52 +127,147 @@ func (r *reanchorer) wholeDiff(ctx context.Context) ([]git.FileDiff, error) {
 	return files, nil
 }
 
-// locate finds where a location belongs in the new revision. The location found has no revision;
-// apply sets it.
-func (r *reanchorer) locate(ctx context.Context, loc store.Location) (store.Location, bool, error) {
+// locate finds where a location belongs in the new revision, and whether it was carried there
+// through the diff of a rewrite, as its lines changed. The location found has no revision; apply
+// sets it.
+func (r *reanchorer) locate(ctx context.Context, loc store.Location) (store.Location, bool, bool, error) {
 	switch loc.Scope {
 	case store.ScopeChange:
 		loc.RevisionID = ""
-		return loc, true, nil
+		return loc, true, false, nil
 	case store.ScopeCommit:
 		for _, c := range r.commits {
 			if c.SHA == loc.Commit {
 				loc.RevisionID = ""
-				return loc, true, nil
+				return loc, true, false, nil
 			}
+		}
+		rw, err := r.rewrites.of(ctx, loc.Commit)
+		if err != nil {
+			return store.Location{}, false, false, err
 		}
 		if loc.Path == "" || loc.Path == CommitMsgPath {
-			return r.locateMessage(ctx, loc)
+			if rw.ok {
+				return r.moveMessage(loc, rw.commit)
+			}
+			moved, ok, err := r.locateMessage(ctx, loc)
+			return moved, ok, false, err
 		}
-		for _, c := range r.commits {
-			files, err := r.files(ctx, c)
-			if err != nil {
-				return store.Location{}, false, err
-			}
-			oldRev := ""
-			if len(c.Parents) > 0 {
-				oldRev = c.Parents[0]
-			}
-			moved, ok, err := r.match(ctx, loc, files, oldRev, c.SHA)
+		// The commit that rewrote it first, then any commit with the same lines.
+		candidates := r.commits
+		if rw.ok {
+			candidates = append([]git.Commit{rw.commit}, r.commits...)
+		}
+		for _, c := range candidates {
+			moved, ok, err := r.matchCommit(ctx, loc, c)
 			if err != nil || ok {
-				moved.Scope, moved.Commit, moved.RevisionID = store.ScopeCommit, c.SHA, ""
-				return moved, ok, err
+				return moved, ok, false, err
+			}
+		}
+		if rw.ok && loc.StartLine > 0 {
+			moved, ok, err := r.carry(ctx, loc, rw.commit)
+			if err != nil || ok {
+				return moved, ok, ok, err
 			}
 		}
 		fallthrough
 	case store.ScopeDiff:
 		if loc.Path == "" || loc.Path == CommitMsgPath {
-			return store.Location{}, false, nil
+			return store.Location{}, false, false, nil
 		}
 		files, err := r.wholeDiff(ctx)
 		if err != nil {
-			return store.Location{}, false, err
+			return store.Location{}, false, false, err
 		}
 		moved, ok, err := r.match(ctx, loc, files, r.base, r.head)
 		moved.Scope, moved.Commit, moved.RevisionID = store.ScopeDiff, "", ""
-		return moved, ok, err
+		return moved, ok, false, err
 	}
-	return store.Location{}, false, nil
+	return store.Location{}, false, false, nil
+}
+
+// matchCommit finds a file or line location in commit c by its content.
+func (r *reanchorer) matchCommit(ctx context.Context, loc store.Location, c git.Commit) (store.Location, bool, error) {
+	files, err := r.files(ctx, c)
+	if err != nil {
+		return store.Location{}, false, err
+	}
+	moved, ok, err := r.match(ctx, loc, files, firstParent(c), c.SHA)
+	moved.Scope, moved.Commit, moved.RevisionID = store.ScopeCommit, c.SHA, ""
+	return moved, ok, err
+}
+
+func firstParent(c git.Commit) string {
+	if len(c.Parents) > 0 {
+		return c.Parents[0]
+	}
+	return ""
+}
+
+// carry moves a location on lines of a commit that next rewrote, and changed, to where those lines
+// are in next: mapped through the diff between the two commits' files, on the location's side,
+// while that is still part of next's diff.
+func (r *reanchorer) carry(ctx context.Context, loc store.Location, next git.Commit) (store.Location, bool, error) {
+	prev, err := r.s.git.ReadCommit(ctx, loc.Commit)
+	if err != nil {
+		return store.Location{}, false, err
+	}
+	from, to := prev.SHA, next.SHA
+	if loc.Side == anchor.SideOld {
+		from, to = firstParent(prev), firstParent(next)
+	}
+	if from == "" || to == "" {
+		return store.Location{}, false, nil
+	}
+	files, err := r.files(ctx, next)
+	if err != nil {
+		return store.Location{}, false, err
+	}
+	f, ok := findFile(files, loc.Side, loc.Path)
+	if !ok {
+		return store.Location{}, false, nil
+	}
+	start, end, err := r.s.translateRange(ctx, from, to, loc.Path, loc.StartLine, loc.EndLine)
+	if err != nil {
+		return store.Location{}, false, err
+	}
+	if start < 1 || !anchor.InDiff(f, loc.Side, start, end) {
+		return store.Location{}, false, nil
+	}
+	content, err := r.s.FileLines(ctx, to, loc.Path)
+	if err != nil {
+		return store.Location{}, false, err
+	}
+	a, err := anchor.Capture(loc.Path, loc.Side, content, start, end)
+	if err != nil {
+		return store.Location{}, false, nil
+	}
+	blob, err := r.s.blobID(ctx, loc.Side, firstParent(next), next.SHA, loc.Path)
+	return store.Location{Scope: store.ScopeCommit, Commit: next.SHA, BlobSHA: blob, Anchor: a}, true, err
+}
+
+// moveMessage moves a thread on a whole commit or its message to next, which rewrote its commit:
+// to the same lines of the message, or to where they are now, as carried when they changed.
+func (r *reanchorer) moveMessage(loc store.Location, next git.Commit) (store.Location, bool, bool, error) {
+	moved := loc
+	moved.Commit, moved.RevisionID = next.SHA, ""
+	if loc.StartLine == 0 {
+		return moved, true, false, nil
+	}
+	content := anchor.SplitLines([]byte(next.Message))
+	if start, ok := loc.Find(content); ok {
+		moved.Anchor = loc.Moved(content, start)
+		return moved, true, false, nil
+	}
+	// Reworded: the same line numbers, as far as the message still reaches.
+	end := min(loc.EndLine, len(content))
+	start := min(loc.StartLine, end)
+	a, err := anchor.Capture(loc.Path, loc.Side, content, start, end)
+	if err != nil {
+		return store.Location{}, false, false, nil
+	}
+	moved.Anchor = a
+	return moved, true, true, nil
 }
 
 // match finds a file or line location in a diff from oldRev to newRev.

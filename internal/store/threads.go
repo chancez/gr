@@ -8,9 +8,13 @@ import (
 	"strings"
 )
 
-const threadColumns = `id, change_id, seq, revision_id, review_id, state, state_by_name, state_by_email, state_at, outdated,
-	scope, anchor_revision_id, commit_sha, path, blob_sha, side, start_line, end_line, lines, before_lines, after_lines,
-	created_at, updated_at, summary`
+// threadInsertColumns are the columns a new thread is made with. The ones after, as was_lines, only
+// re-anchoring sets, and leaving them out keeps the earlier migrations' backfills working.
+const threadInsertColumns = `id, change_id, seq, revision_id, review_id, state, state_by_name, state_by_email, state_at,
+	outdated, scope, anchor_revision_id, commit_sha, path, blob_sha, side, start_line, end_line, lines, before_lines,
+	after_lines, created_at, updated_at, summary`
+
+const threadColumns = threadInsertColumns + `, was_lines`
 
 // jsonLines stores a []string as a JSON array.
 type jsonLines struct{ s *[]string }
@@ -46,7 +50,7 @@ func scanThread(row interface{ Scan(...any) error }) (Thread, error) {
 		&t.StateBy.Email, scanTime(&t.StateAt), &t.Outdated,
 		&l.Scope, &l.RevisionID, &l.Commit, &l.Path, &l.BlobSHA, &l.Side, &l.StartLine, &l.EndLine,
 		jsonLines{&l.Lines}, jsonLines{&l.Before}, jsonLines{&l.After},
-		scanTime(&t.CreatedAt), scanTime(&t.UpdatedAt), &t.Summary)
+		scanTime(&t.CreatedAt), scanTime(&t.UpdatedAt), &t.Summary, jsonLines{&t.Was})
 	return t, err
 }
 
@@ -88,7 +92,7 @@ func (q queries) CreateThread(ctx context.Context, t Thread) (Thread, error) {
 	args := append([]any{t.ID, t.ChangeID, t.Seq, t.RevisionID, t.ReviewID, t.State, t.StateBy.Name,
 		t.StateBy.Email, formatNullTime(t.StateAt), t.Outdated}, loc...)
 	args = append(args, formatTime(now), formatTime(now), t.Summary)
-	_, err = q.q.ExecContext(ctx, `INSERT INTO threads (`+threadColumns+`) VALUES (`+placeholders(len(args))+`)`, args...)
+	_, err = q.q.ExecContext(ctx, `INSERT INTO threads (`+threadInsertColumns+`) VALUES (`+placeholders(len(args))+`)`, args...)
 	if err != nil {
 		return Thread{}, fmt.Errorf("create thread: %w", err)
 	}
@@ -195,17 +199,22 @@ func (q queries) ListThreads(ctx context.Context, f ThreadFilter) ([]Thread, err
 	return threads, rows.Err()
 }
 
-// MoveThread updates a thread's location and outdated flag after re-anchoring.
-func (q queries) MoveThread(ctx context.Context, id string, l Location, outdated bool) error {
+// MoveThread updates a thread's location, outdated flag, and the lines it was on before a rewrite
+// changed them, after re-anchoring.
+func (q queries) MoveThread(ctx context.Context, id string, l Location, outdated bool, was []string) error {
 	loc, err := locationArgs(l)
 	if err != nil {
 		return err
 	}
-	args := append(loc, outdated, formatTime(q.now()), id)
+	wasLines, err := encodeLines(was)
+	if err != nil {
+		return err
+	}
+	args := append(loc, outdated, wasLines, formatTime(q.now()), id)
 	return q.execOne(ctx, "thread "+id,
 		`UPDATE threads SET scope = ?, anchor_revision_id = ?, commit_sha = ?, path = ?, blob_sha = ?, side = ?,
-		start_line = ?, end_line = ?, lines = ?, before_lines = ?, after_lines = ?, outdated = ?, updated_at = ?
-		WHERE id = ?`, args...)
+		start_line = ?, end_line = ?, lines = ?, before_lines = ?, after_lines = ?, outdated = ?, was_lines = ?,
+		updated_at = ? WHERE id = ?`, args...)
 }
 
 // SetThreadState records a thread's new state and who set it.

@@ -50,6 +50,50 @@ func MapLine(f *git.FileDiff, line int) int {
 	return line + shift
 }
 
+// mapLineEnd is MapLine for the last line of a range: a line the diff changed maps to the end of
+// what replaced it, so a range keeps all of its replacement.
+func mapLineEnd(f *git.FileDiff, line int) int {
+	start := MapLine(f, line)
+	if f == nil {
+		return start
+	}
+	for _, h := range f.Hunks {
+		for i, l := range h.Lines {
+			if l.OldLine != line || l.Kind != git.LineDeleted {
+				continue
+			}
+			end := 0
+			for _, next := range h.Lines[i+1:] {
+				if next.Kind == git.LineContext {
+					break
+				}
+				if next.Kind == git.LineAdded {
+					end = next.NewLine
+				}
+			}
+			return max(end, start)
+		}
+	}
+	return start
+}
+
+// translateRange maps lines start to end of path at rev from to what is in their place at rev to,
+// with all of what replaced them.
+func (s *Service) translateRange(ctx context.Context, from, to, path string, start, end int) (int, int, error) {
+	files, err := s.diffs.Diff(ctx, from, to, path)
+	if err != nil {
+		return 0, 0, err
+	}
+	var f *git.FileDiff
+	for i := range files {
+		if files[i].OldPath == path {
+			f = &files[i]
+		}
+	}
+	first := MapLine(f, start)
+	return first, max(mapLineEnd(f, end), first), nil
+}
+
 // TranslateLines maps lines start to end of path at rev from to the same place at rev to.
 func (s *Service) TranslateLines(ctx context.Context, from, to, path string, start, end int) (int, int, error) {
 	if from == to {

@@ -201,3 +201,52 @@ func TestMarksFollowRewrites(t *testing.T) {
 		t.Errorf("marks after the rewrite (-want +got):\n%s", diff)
 	}
 }
+
+// A thread whose lines a fixup squashed into its commit changed follows the commit to where those
+// lines are now, keeping the lines it was made on; one whose file the fixup took out of the commit
+// is outdated.
+func TestThreadsFollowFixups(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.txt", "a\n")
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("b.txt", gittest.Lines("b1", "b2", "b3"), "c.txt", "c\n")
+	e.repo.Commit("add b and c")
+	h := e.service(human)
+	change, _ := e.ensure(h, "")
+	ctx := t.Context()
+	sha := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	onB, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeCommit, Commit: sha, Path: "b.txt", StartLine: 2, Body: "fix b2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	onC, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeCommit, Commit: sha, Path: "c.txt", StartLine: 1, Body: "drop c"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	e.repo.Write("b.txt", gittest.Lines("b1", "new line", "b2, fixed", "b3"))
+	e.repo.Git("rm", "-q", "c.txt")
+	e.repo.Git("commit", "-q", "--amend", "-a", "--no-edit")
+	if _, _, err := h.Sync(ctx, change); err != nil {
+		t.Fatal(err)
+	}
+	fixed := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	threads, err := h.Threads(ctx, change, review.ThreadFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]any{}
+	for _, v := range threads {
+		if v.ID == onB.ID || v.ID == onC.ID {
+			got[v.Comments[0].Body] = []any{v.Location.Commit, v.Location.StartLine, v.Location.Lines, v.Outdated, v.Was}
+		}
+	}
+	want := map[string]any{
+		"fix b2": []any{fixed, 2, []string{"new line", "b2, fixed"}, false, []string{"b2"}},
+		"drop c": []any{sha, 1, []string{"c"}, true, []string(nil)},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("threads after the fixup (-want +got):\n%s", diff)
+	}
+}

@@ -139,6 +139,10 @@ UPDATE comments SET created_at = (SELECT submitted_at FROM reviews WHERE reviews
 -- A summary is one per review, so it is numbered by its review rather than taking a thread number.
 UPDATE threads SET seq = -(SELECT seq FROM reviews WHERE reviews.id = threads.review_id) WHERE summary = 1;
 `,
+	`
+-- A thread whose lines a rewrite changed moves to where they are now, keeping the lines it was on.
+ALTER TABLE threads ADD COLUMN was_lines TEXT NOT NULL DEFAULT '[]';
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.

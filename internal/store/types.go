@@ -156,7 +156,10 @@ type Thread struct {
 	StateAt  time.Time
 	Outdated bool
 	// Summary marks the thread holding its review's summary.
-	Summary   bool
+	Summary bool
+	// Was is the lines the thread was on when a rewrite changed them, and it moved to where they are
+	// now. It is empty for a thread on the lines it was made on.
+	Was       []string
 	Location  Location
 	CreatedAt time.Time
 	UpdatedAt time.Time

@@ -432,6 +432,14 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 	// A resolved thread recedes: its title and comment headers are dimmed.
 	done := t.State == store.ThreadResolved
 	lines := []string{ansi.Truncate(r.th.Render(look.Plain, look.DimIf(done, title...)...), inner, "")}
+	// A thread a rewrite moved shows the lines it was made on, to read beside what replaced them.
+	for i, l := range t.Was {
+		label := "was: "
+		if i > 0 {
+			label = "     "
+		}
+		lines = append(lines, r.th.DrawCut(look.Plain, inner, look.Muted(label+termtext.Line(expandTabs(l)))))
+	}
 	var starts []int
 	for _, c := range t.Comments {
 		// The box's top border is the first output line.

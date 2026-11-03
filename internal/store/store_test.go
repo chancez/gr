@@ -303,7 +303,7 @@ func TestThreadStateAndMove(t *testing.T) {
 		Scope: store.ScopeDiff, RevisionID: second.ID,
 		Anchor: anchor.Anchor{Path: "b.go", Side: anchor.SideOld, StartLine: 1, EndLine: 1, Lines: []string{"q"}},
 	}
-	if err := s.MoveThread(ctx, thread.ID, moved, true); err != nil {
+	if err := s.MoveThread(ctx, thread.ID, moved, true, nil); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetThreadState(ctx, thread.ID, store.ThreadAddressed, agent); err != nil {

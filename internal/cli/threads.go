@@ -133,6 +133,13 @@ func (a *app) printThreads(ctx context.Context, svc *review.Service, threads []r
 		} else if ok {
 			printExcerpt(a.stdout, e)
 		}
+		for i, l := range t.Was {
+			label := "  was: "
+			if i > 0 {
+				label = "       "
+			}
+			fmt.Fprintln(a.stdout, label+l)
+		}
 		for _, c := range t.Comments {
 			fmt.Fprintf(a.stdout, "  %s:\n%s\n", c.Author, indent(c.Body, "    "))
 		}
@@ -178,6 +185,9 @@ func threadHeader(t review.ThreadView, draft bool, reviewSeq int) string {
 	}
 	if t.Outdated {
 		b.WriteString(", outdated")
+	}
+	if len(t.Was) > 0 {
+		b.WriteString(", lines changed")
 	}
 	if draft {
 		b.WriteString(", draft")

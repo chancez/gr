@@ -98,7 +98,10 @@ type threadJSON struct {
 	State    string      `json:"state"`
 	StateBy  *authorJSON `json:"state_by,omitzero"`
 	Outdated bool        `json:"outdated"`
-	Draft    bool        `json:"draft"`
+	// Was is the lines the thread was on before a rewrite of its commit changed them, as a squashed
+	// fixup does; the location is where those lines are now.
+	Was   []string `json:"was,omitempty"`
+	Draft bool     `json:"draft"`
 	// Review is the number of the review the thread was started in.
 	Review int `json:"review"`
 	// Summary is set on the thread holding a review's summary.
@@ -251,7 +254,7 @@ func (l *lookups) thread(ctx context.Context, v review.ThreadView) (threadJSON, 
 	loc := v.Location
 	out := threadJSON{
 		ID: v.ID, Ref: v.Ref(), Seq: max(v.Seq, 0), Change: changeSeq, State: string(v.State), Outdated: v.Outdated, Draft: draft,
-		Review: started.Seq, Summary: v.Summary,
+		Review: started.Seq, Summary: v.Summary, Was: v.Was,
 		Location: locationJSON{
 			Scope: string(loc.Scope), Revision: revSeq, Commit: loc.Commit, Path: loc.Path, Side: string(loc.Side),
 			StartLine: loc.StartLine, EndLine: loc.EndLine, Lines: loc.Lines,

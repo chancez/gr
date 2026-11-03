@@ -2130,3 +2130,25 @@ func TestAdvancingToACommitShowsItsMessage(t *testing.T) {
 		t.Errorf("advanced to %q, cursor on %+v, offset %d; want the next commit at its top, on its first file", v.commit.Subject(), r, e.m.main.offset)
 	}
 }
+
+// A thread a fixup moved says its lines changed, and shows the line it was made on.
+func TestCarriedThreadShowsWhatItWasOn(t *testing.T) {
+	e := newTUIEnv(t)
+	sha := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	if _, err := e.svc.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeCommit, Commit: sha, Path: "main.go", StartLine: 4, Body: "greet the world"}); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hello, world\")", "}"))
+	e.repo.Git("commit", "-q", "--amend", "-a", "--no-edit")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+	screen := e.screen()
+	for _, want := range []string{"lines changed", `was:     println("hello")`, "greet the world"} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("the commit does not show %q:\n%s", want, screen)
+		}
+	}
+}

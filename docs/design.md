@@ -87,8 +87,8 @@ An anchor records:
 - the blob sha of the file on that side
 - the anchored lines, plus a few lines of context on each side
 
-Content plus context is what makes re-anchoring possible without tracking commit identity across
-rewrites.
+Content plus context is what makes re-anchoring possible after any rewrite. Commits are also
+followed across rewrites by their author and author date (ADR 11).
 
 ## Re-anchoring
 
@@ -96,18 +96,24 @@ When a new revision is recorded, each unresolved thread anchored to the previous
 processed in order:
 
 1. If the anchor commit is still in the range, keep it.
-2. Otherwise, find the first commit in the new range whose diff for that path contains the anchored
-   lines with matching context. Re-anchor there.
-3. Otherwise, if the change diff contains them, re-anchor to the change diff.
-4. Otherwise, mark the thread outdated. It keeps its original anchor for display.
+2. Otherwise, find the commit that rewrote it, by author and author date, and then any commit in
+   the new range, whose diff for that path contains the anchored lines with matching context.
+   Re-anchor there.
+3. Otherwise, if the commit that rewrote it changed those lines, as a squashed fixup does, move the
+   thread to where they are now in that commit, mapped through the diff between the two, and keep
+   the lines it was on to show beside them.
+4. Otherwise, if the change diff contains them, re-anchor to the change diff.
+5. Otherwise, mark the thread outdated. It keeps its original anchor for display.
 
-Threads on `/COMMIT_MSG` re-anchor to the commit with the same subject line, or become outdated.
+Threads on `/COMMIT_MSG` move to the commit that rewrote theirs, or else to the commit with the
+same subject line, or become outdated. Reviewed marks on a rewritten commit move to the commit
+that rewrote it when its diff is the same, and otherwise only for the files whose diff is.
 
 Git runs before the write transaction, so other writers do not wait on it. The transaction checks
 that the latest revision and the threads are as they were when git ran, and starts over if not.
 
-Expect most threads to become outdated after a heavy rebase. That is acceptable: outdated threads
-are listed for re-review, as on GitHub.
+Threads become outdated when what they are on is gone: a dropped commit or file, or a commit whose
+author date a rewrite reset. Outdated threads are listed for re-review, as on GitHub.
 
 ## Comments
 

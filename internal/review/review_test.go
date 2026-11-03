@@ -323,17 +323,21 @@ func TestReanchorAfterRebase(t *testing.T) {
 		Path      string
 		StartLine int
 		Outdated  bool
+		Was       []string
 	}
 	var summaries []summary
 	for _, v := range got {
-		summaries = append(summaries, summary{v.Comments[0].Body, v.Location.Scope, v.Location.Commit, v.Location.Path, v.Location.StartLine, v.Outdated})
+		summaries = append(summaries, summary{v.Comments[0].Body, v.Location.Scope, v.Location.Commit, v.Location.Path, v.Location.StartLine,
+			v.Outdated, v.Was})
 	}
+	// The amend rewrote the line the second commit's thread is on: it follows its commit to the
+	// line that replaced it, keeping the one it was made on.
 	want := []summary{
-		{"moves", store.ScopeCommit, newFirst, "a.go", 12, false},
-		{"rewritten away", store.ScopeCommit, second, "b.go", 2, true},
-		{"subject", store.ScopeCommit, newSecond, review.CommitMsgPath, 1, false},
-		{"whole commit", store.ScopeCommit, newSecond, "", 0, false},
-		{"diff", store.ScopeDiff, "", "a.go", 12, false},
+		{"moves", store.ScopeCommit, newFirst, "a.go", 12, false, nil},
+		{"rewritten away", store.ScopeCommit, newSecond, "b.go", 2, false, []string{"feature b2"}},
+		{"subject", store.ScopeCommit, newSecond, review.CommitMsgPath, 1, false, nil},
+		{"whole commit", store.ScopeCommit, newSecond, "", 0, false, nil},
+		{"diff", store.ScopeDiff, "", "a.go", 12, false, nil},
 	}
 	if diff := cmp.Diff(want, summaries); diff != "" {
 		t.Errorf("threads after rebase mismatch (-want +got):\n%s", diff)
