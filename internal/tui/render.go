@@ -125,7 +125,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	case rowText:
 		return rw.text(width)
 	case rowCommit:
-		return r.renderCommit(v.commit, width, state)
+		return r.renderCommit(v, width, state)
 	case rowFile:
 		f := v.files[rw.file]
 		surf := look.HeadingBar
@@ -229,12 +229,35 @@ func (r *renderer) renderSplit(f git.FileDiff, left, right *git.Line, width int,
 	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
 
-func (r *renderer) renderCommit(c git.Commit, width int, state rowState) []string {
-	surf := look.Plain
-	if state.cursor {
-		surf = cursorSurface(state)
+// renderCommit draws a commit's header as GitHub does: its whole message in a box, the subject
+// first and strong, then a footer of who made it and when, its size, and its sha. The box's border
+// is the cursor's.
+func (r *renderer) renderCommit(v view, width int, state rowState) []string {
+	c := v.commit
+	inner := max(width-4, 10)
+	wrap := func(text string, el func(string) look.Span) []string {
+		var out []string
+		for _, l := range strings.Split(ansi.Wordwrap(termtext.Line(text), inner, ""), "\n") {
+			out = append(out, r.th.Draw(look.Plain, inner, el(l)))
+		}
+		return out
 	}
-	return []string{r.th.Draw(surf, width, look.CommitHeader(c)...)}
+	subject, body, _ := strings.Cut(c.Message, "\n")
+	lines := wrap(subject, look.Heading)
+	if body = strings.Trim(body, "\n"); body != "" {
+		lines = append(lines, "")
+		for _, para := range strings.Split(body, "\n") {
+			lines = append(lines, wrap(para, look.Text)...)
+		}
+	}
+	by := look.CommitBy(c)
+	which := append(filesSize(v.files), look.Muted("  commit "), look.SHA(c.SHA).Short())
+	if gap := inner - ansi.StringWidth(look.TextOf(by...)) - ansi.StringWidth(look.TextOf(which...)); gap > 0 {
+		lines = append(lines, "", r.th.Draw(look.Plain, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...))
+	} else {
+		lines = append(lines, "", r.th.Draw(look.Plain, inner, by...), r.th.Draw(look.Plain, inner, which...))
+	}
+	return strings.Split(r.th.Box(width, state.cursor).Render(strings.Join(lines, "\n")), "\n")
 }
 
 // commentHeader is a comment's author and time, and whether it is a draft.

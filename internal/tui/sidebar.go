@@ -354,7 +354,20 @@ func (m *model) mainHeader(width int) string {
 	v := m.views[m.current]
 	label := " " + m.viewLabel(v) + " "
 	var size []look.Span
-	if v.kind != viewOverview && len(v.files) > 0 {
+	switch {
+	case v.kind == viewCommit:
+		// The commit's header names it, with its size: the title says only where it is.
+		at, of := 0, 0
+		for i, w := range m.views {
+			if w.kind == viewCommit {
+				of++
+				if i <= m.current {
+					at++
+				}
+			}
+		}
+		label = fmt.Sprintf(" Commit %d of %d ", at, of)
+	case v.kind != viewOverview && len(v.files) > 0:
 		size = filesSize(v.files)
 	}
 	title := ""

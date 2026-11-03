@@ -51,7 +51,8 @@ func (m *model) collapsed(v view, f int) bool {
 	if toggled {
 		return !expanded
 	}
-	return m.fileReviewed(v, f)
+	// The commit's header shows its message, so the message's own file opens only to be commented on.
+	return v.files[f].Path() == review.CommitMsgPath || m.fileReviewed(v, f)
 }
 
 func (m *model) toggleCollapsed(v view, f int) {

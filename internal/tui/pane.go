@@ -61,7 +61,7 @@ func (p *pane) layout(render func(i int, state rowState) []string) {
 	for i, r := range p.rows {
 		p.starts[i] = line
 		switch r.kind {
-		case rowLine, rowFile, rowHunk, rowCommit, rowGap:
+		case rowLine, rowFile, rowHunk, rowGap:
 			line++
 		default:
 			out := render(i, rowState{})

@@ -213,6 +213,9 @@ func TestRangeSelection(t *testing.T) {
 func TestCommentOnCommitMessageAndThreadActions(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")
+	// The message's file starts folded, as the commit's header shows the message.
+	e.cursorTo(func(r row) bool { return r.kind == rowFile && r.file == 0 && r.collapsed })
+	e.press("enter")
 	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 0 })
 	e.press("c")
 	e.typeText("subject nit")
@@ -369,7 +372,7 @@ func TestPaneHeaders(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")
 	lines := strings.Split(e.screen(), "\n")
-	if !strings.Contains(lines[0], "Change #1") || !strings.Contains(lines[0], "say hello") {
+	if !strings.Contains(lines[0], "Change #1") || !strings.Contains(lines[0], "Commit 1 of 1") {
 		t.Errorf("first line lacks the sidebar and main headers: %q", lines[0])
 	}
 	if !strings.Contains(e.screen(), " Files") {
@@ -1921,5 +1924,34 @@ func TestStepUnresolved(t *testing.T) {
 	e.press("I")
 	if v := e.m.views[e.m.current]; v.commit.Subject() != "say hello" || at() != a.ID {
 		t.Errorf("I back: view %q, cursor on %q, want the first commit's thread", v.commit.Subject(), at())
+	}
+}
+
+// A commit's header shows its whole message, reviewed or not, and a thread on the message shows
+// while the message's own file is folded.
+func TestCommitHeaderShowsTheMessage(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	sha := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	v, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeCommit, Commit: sha,
+		Path: review.CommitMsgPath, StartLine: 1, Body: "capitalize"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+	e.press("l", "M")
+	screen := e.screen()
+	for _, want := range []string{"say hello", "Longer explanation.", "Test committed", "+1 -1  commit " + shortSHA(sha)} {
+		if !strings.Contains(screen, want) {
+			t.Errorf("header lacks %q once reviewed:\n%s", want, screen)
+		}
+	}
+	shown := false
+	for _, r := range e.m.main.rows {
+		shown = shown || r.kind == rowThread && r.thread.ID == v.ID
+	}
+	if !shown {
+		t.Errorf("the message's thread is hidden with its folded file")
 	}
 }

@@ -198,6 +198,15 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 			reviewed: opts.reviewed != nil && opts.reviewed(fi),
 		})
 		if collapsed {
+			// The message's threads still show while its file is folded, as the header shows it.
+			if f.Path() == review.CommitMsgPath {
+				threadRows(fi, byFile[f.Path()])
+				for _, t := range lineThreads {
+					if locs[t].Path == f.Path() {
+						threadRows(fi, []*review.ThreadView{t})
+					}
+				}
+			}
 			continue
 		}
 		placed := map[*review.ThreadView]bool{}

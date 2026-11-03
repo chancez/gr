@@ -41,12 +41,9 @@ func Time(t time.Time) Span {
 	return sp(elMuted, t.Local().Format("2006-01-02 15:04"))
 }
 
-// CommitHeader is a commit's sha, author, email, and time.
-func CommitHeader(c git.Commit) []Span {
-	return []Span{
-		sp(elSHA, "commit "+c.SHA).With(Strong), sp(elDefault, "  "),
-		Author(store.Author{Name: c.AuthorName}), sp(elMuted, " <"+c.AuthorEmail+">  "), Time(c.AuthorTime),
-	}
+// CommitBy is who made a commit and when, as GitHub's commit footer has it.
+func CommitBy(c git.Commit) []Span {
+	return []Span{Author(store.Author{Name: c.AuthorName}), sp(elMuted, " committed "), Time(c.AuthorTime)}
 }
 
 // FileLabel is a file's path, or its old and new paths when renamed.
