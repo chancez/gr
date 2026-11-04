@@ -50,6 +50,8 @@ The TUI polls `PRAGMA data_version` to reload when another process writes.
   making them in their declarations is an initialization cycle.
 - Controls draw an action as something to click, found on the same target its key runs on, so a
   click always does what the key does there.
+- Each tab is a model of its own, for one change; the app above them draws the tab bar and routes
+  every message to its tab, marking the results of a tab's commands with its id.
 - The main pane is a list of `row`s whose drawings are cached across frames and whose heights are
   measured once per layout. So nothing drawn on screen may depend on its order within a frame, and
   nothing may change a row's height without a new layout.

@@ -11,6 +11,12 @@ import (
 // pickChange opens a picker of the open changes, then the branches with no change yet, to switch
 // to without leaving gr. A branch picked gets a change onto the default branch.
 func (m *model) pickChange() tea.Cmd {
+	return m.changePicker("Switch to a change", (*model).switchChange)
+}
+
+// changePicker opens a picker of the open changes, then the branches with no change yet, titled
+// title, and runs open on the one picked. A branch picked gets a change onto the default branch.
+func (m *model) changePicker(title string, open func(m *model, c store.Change) tea.Cmd) tea.Cmd {
 	changes, err := m.svc.ListChanges(m.ctx, store.ChangeOpen)
 	if err != nil {
 		m.setError(err)
@@ -27,7 +33,7 @@ func (m *model) pickChange() tea.Cmd {
 			reviewed[c.Branch] = true
 		}
 		items = append(items, pickerItem{value: changeLabel(c), note: note, run: func(m *model) tea.Cmd {
-			return m.switchChange(c)
+			return open(m, c)
 		}})
 	}
 	branches, err := m.svc.Git().Branches(m.ctx)
@@ -46,10 +52,10 @@ func (m *model) pickChange() tea.Cmd {
 			first = false
 		}
 		items = append(items, pickerItem{value: b, note: "new change", run: func(m *model) tea.Cmd {
-			return m.reviewBranch(b)
+			return m.reviewBranch(b, open)
 		}})
 	}
-	return m.openPicker(newPicker("Switch to a change", items, runItem(m)))
+	return m.openPicker(newPicker(title, items, runItem(m)))
 }
 
 // changeLabel names a change in the picker: its number, and its branch and base or its title.
@@ -60,8 +66,8 @@ func changeLabel(c store.Change) string {
 	return fmt.Sprintf("#%d %s", c.Seq, c.Title)
 }
 
-// reviewBranch finds or makes the change for branch b, onto the default branch, and switches to it.
-func (m *model) reviewBranch(b string) tea.Cmd {
+// reviewBranch finds or makes the change for branch b, onto the default branch, and opens it.
+func (m *model) reviewBranch(b string, open func(m *model, c store.Change) tea.Cmd) tea.Cmd {
 	t, err := m.svc.ParseTarget(m.ctx, b, "")
 	if err != nil {
 		m.setError(err)
@@ -72,7 +78,7 @@ func (m *model) reviewBranch(b string) tea.Cmd {
 		m.setError(err)
 		return nil
 	}
-	return m.switchChange(c)
+	return open(m, c)
 }
 
 // switchChange shows change c in place of the one shown: everything about the old change is

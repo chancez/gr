@@ -51,16 +51,32 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 	if opts.Theme != "" && !slices.Contains(Themes, opts.Theme) {
 		return fmt.Errorf("unknown theme %q, want one of %s", opts.Theme, strings.Join(Themes, ", "))
 	}
-	m, err := newModel(ctx, svc, change)
+	if opts.Glyphs != "" {
+		if _, ok := look.ParseGlyphs(opts.Glyphs); !ok {
+			return fmt.Errorf("unknown glyphs %q, want ascii, unicode, or nerd", opts.Glyphs)
+		}
+	}
+	m, err := newTab(ctx, svc, change, opts)
 	if err != nil {
 		return err
 	}
+	if opts.Notice != "" {
+		m.setStatus("%s", opts.Notice)
+	}
+	a := newApp(ctx, opts, m)
+	defer a.quit()
+	_, err = tea.NewProgram(a, tea.WithContext(ctx)).Run()
+	return err
+}
+
+// newTab opens change c of svc's repository with gr's settings, in a model of its own.
+func newTab(ctx context.Context, svc *review.Service, change store.Change, opts Options) (*model, error) {
+	m, err := newModel(ctx, svc, change)
+	if err != nil {
+		return nil, err
+	}
 	m.theme = opts.Theme
-	if opts.Glyphs != "" {
-		g, ok := look.ParseGlyphs(opts.Glyphs)
-		if !ok {
-			return fmt.Errorf("unknown glyphs %q, want ascii, unicode, or nerd", opts.Glyphs)
-		}
+	if g, ok := look.ParseGlyphs(opts.Glyphs); ok {
 		m.glyphs, m.glyphsSet = g, true
 	} else {
 		m.glyphs = look.GlyphsFromEnv()
@@ -73,13 +89,15 @@ func Run(ctx context.Context, svc *review.Service, change store.Change, opts Opt
 	if p, ok := m.readPlace(change); ok {
 		m.savedPlace = &p
 	}
-	if opts.Notice != "" {
-		m.setStatus("%s", opts.Notice)
+	return m, nil
+}
+
+// changeSeq is the number of the change the model shows, once loaded.
+func (m *model) changeSeq() int {
+	if m.data == nil {
+		return 0
 	}
-	defer m.close()
-	_, err = tea.NewProgram(m, tea.WithContext(ctx)).Run()
-	m.savePlace()
-	return err
+	return m.data.change.Seq
 }
 
 type focus int

@@ -460,6 +460,15 @@ func appAction(title string, run func(m *model) tea.Cmd) *interact.Action[*model
 	return &interact.Action[*model, appSubject]{Title: title, Run: cmd[appSubject](run)}
 }
 
+// actGoTab goes to tabs 1 to 9, as alt and a digit do.
+var actGoTab = func() (out [9]*interact.Action[*model, appSubject]) {
+	for i := range out {
+		n := i
+		out[i] = appAction("tab "+strconv.Itoa(n+1), func(*model) tea.Cmd { return tabCmd(goTabMsg{n: n}) })
+	}
+	return out
+}()
+
 // loadedApp is a command that needs the change loaded.
 func loadedApp(title string, run func(m *model) tea.Cmd) *interact.Action[*model, appSubject] {
 	a := appAction(title, run)
@@ -470,6 +479,10 @@ func loadedApp(title string, run func(m *model) tea.Cmd) *interact.Action[*model
 // Commands on gr itself.
 var (
 	actQuit        = appAction("quit", func(*model) tea.Cmd { return tea.Quit })
+	actNewTab      = appAction("new tab", func(m *model) tea.Cmd { return m.changePicker("Open in a new tab", (*model).openTab) })
+	actCloseTab    = appAction("close tab", func(*model) tea.Cmd { return tabCmd(closeTabMsg{}) })
+	actNextTab     = appAction("next tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: 1}) })
+	actPrevTab     = appAction("previous tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: -1}) })
 	actShowHelp    = appAction("help", func(m *model) tea.Cmd { m.mode = modeHelp; return nil })
 	actCancel      = appAction("clear the search or selection", func(m *model) tea.Cmd { m.clearTransient(); return nil })
 	actNextPane    = appAction("next pane", func(m *model) tea.Cmd { m.cycleFocus(1); return nil })
@@ -622,10 +635,11 @@ func init() {
 		actNextThreadInDiff, actPrevThreadInDiff, actNextUnresolved, actPrevUnresolved, actSelectLines, actFoldPrefix)...)
 	overviewPaneKind = interact.NewKind(func(paneSubject) string { return "Overview" }, append(readerMovesOf.actions(),
 		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actNextUnresolved, actPrevUnresolved, actFoldPrefix)...)
-	appKind = interact.NewKind(func(appSubject) string { return "gr" },
+	appKind = interact.NewKind(func(appSubject) string { return "gr" }, append([]*interact.Action[*model, appSubject]{
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
 		actAutoAdvance, actSearch, actPickBase, actCompare, actSwitch, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
-		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette)
+		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette,
+		actNewTab, actCloseTab, actNextTab, actPrevTab}, actGoTab[:]...)...)
 
 	composeBoxKind = interact.NewKind(func(composeSubject) string { return "Comment" },
 		actComposeSave, actComposeEditor, actComposeClose)
@@ -750,10 +764,21 @@ func init() {
 		{actSwitch, "w", "switch to another change or branch", []string{"w"}},
 		{actReload, "R", "reload", []string{"R", "ctrl+r"}},
 		{actPalette, "ctrl+p", "actions here", []string{"ctrl+p"}},
+		{actNewTab, "ctrl+t", "open a change in a new tab", []string{"ctrl+t"}},
+		{actCloseTab, "ctrl+w", "close the tab", []string{"ctrl+w"}},
+		{actNextTab, "ctrl+pgdn/up", "next/prev tab", []string{"ctrl+pgdown"}},
+		{actPrevTab, "", "", []string{"ctrl+pgup"}},
 		{actShowHelp, "?", "help", []string{"?"}},
 		{actQuit, "q", "quit", []string{"q", "ctrl+c"}},
 	} {
 		appKind.Bind(b.action, b.help, b.desc, b.keys...)
+	}
+	for i, a := range actGoTab {
+		help, desc := "", ""
+		if i == 0 {
+			help, desc = "alt+1..9", "go to a tab"
+		}
+		appKind.Bind(a, help, desc, "alt+"+strconv.Itoa(i+1))
 	}
 
 	composeBoxKind.Bind(actComposeSave, "ctrl+s", "save", "ctrl+s")

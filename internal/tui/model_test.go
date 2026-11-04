@@ -99,6 +99,13 @@ func keyMsg(s string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "tab":
 		return tea.KeyPressMsg{Code: tea.KeyTab}
+	case "ctrl+pgup":
+		return tea.KeyPressMsg{Code: tea.KeyPgUp, Mod: tea.ModCtrl}
+	case "ctrl+pgdown":
+		return tea.KeyPressMsg{Code: tea.KeyPgDown, Mod: tea.ModCtrl}
+	}
+	if rest, ok := strings.CutPrefix(s, "alt+"); ok {
+		return tea.KeyPressMsg{Code: rune(rest[0]), Mod: tea.ModAlt}
 	}
 	if rest, ok := strings.CutPrefix(s, "ctrl+"); ok {
 		return tea.KeyPressMsg{Code: rune(rest[0]), Mod: tea.ModCtrl}
