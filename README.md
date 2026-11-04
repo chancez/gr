@@ -50,7 +50,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |
 | `B` | pick another base branch for the change, as for a stacked branch: type to filter, click or enter to pick |
-| `w`, `ctrl+t` | switch to another change, or open one in a new tab |
+| `w`, `ctrl+t` | switch to another change of this repository, or open any repository's in a new tab |
 | `ctrl+w`, `ctrl+pgdn` `ctrl+pgup`, `alt+1`..`9` | close the tab, next or previous tab, go to a tab |
 
 Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. Quitting remembers where you were in a change, the view,

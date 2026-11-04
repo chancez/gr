@@ -25,6 +25,10 @@ type picker struct {
 	top   int
 	// pick acts on the chosen item.
 	pick func(pickerItem) tea.Cmd
+	// typed, set on a prompt, acts on what was typed instead, as a path, and suggest offers what to
+	// complete it to, in place of the items, as the directories that match a path typed so far.
+	typed   func(m *model, text string) tea.Cmd
+	suggest func(text string) []pickerItem
 	// bound marks a menu of actions bound to subjects, which new data makes stale.
 	bound bool
 	// anchored places the popup at a point, as a menu opens where it was clicked, rather than near
@@ -69,6 +73,14 @@ func newPicker(title string, items []pickerItem, pick func(pickerItem) tea.Cmd) 
 	return p
 }
 
+// newPrompt is a picker of nothing, which asks for text, as a path, and acts on what was typed.
+func newPrompt(title, placeholder string, typed func(m *model, text string) tea.Cmd) *picker {
+	p := newPicker(title, nil, nil)
+	p.filter.Placeholder = placeholder
+	p.typed = typed
+	return p
+}
+
 // fuzzyScore scores how well value matches pattern, lower being better, or reports no match. A
 // substring scores by where it starts; otherwise the pattern's letters must appear in order, and
 // the match scores by how spread out they are. Case is ignored unless the pattern has an
@@ -101,6 +113,16 @@ func fuzzyScore(value, pattern string) (int, bool) {
 
 func (p *picker) refilter() {
 	pattern := p.filter.Value()
+	if p.suggest != nil {
+		// A prompt's entries are what it suggests for what is typed, all shown, the first chosen.
+		p.items = p.suggest(pattern)
+		p.shown = p.shown[:0]
+		for i := range p.items {
+			p.shown = append(p.shown, i)
+		}
+		p.pos, p.top = 0, 0
+		return
+	}
 	if pattern == "" {
 		p.shown = p.shown[:0]
 		for i := range p.items {
@@ -221,7 +243,10 @@ func (p *picker) render(th *look.Theme) []string {
 		if it.heading {
 			// A heading is a divider naming the entries under it, as the overview's are.
 			label := "-- " + it.value + " "
-			lines = append(lines, th.Draw(look.Plain, inner, look.Muted(label+strings.Repeat("-", max(inner-len(label), 0)))))
+			if it.note != "" {
+				label += " " + it.note + " "
+			}
+			lines = append(lines, th.DrawCut(look.Plain, inner, look.Muted(label+strings.Repeat("-", max(inner-ansi.StringWidth(label), 0)))))
 			continue
 		}
 		surf := look.Plain
@@ -287,12 +312,32 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.closePicker()
 		return m, nil
 	case "enter":
+		if p.typed != nil {
+			// The suggestion chosen, or else what was typed.
+			text := strings.TrimSpace(p.filter.Value())
+			if it, ok := p.chosen(); ok {
+				text = it.value
+			}
+			m.closePicker()
+			if text != "" {
+				return m, p.typed(m, text)
+			}
+			return m, nil
+		}
 		it, ok := p.chosen()
 		m.closePicker()
 		if !ok {
 			return m, nil
 		}
 		return m, p.pick(it)
+	case "tab":
+		if it, ok := p.chosen(); ok && p.suggest != nil {
+			// Complete to the suggestion chosen, and suggest what is under it.
+			p.filter.SetValue(it.value)
+			p.filter.CursorEnd()
+			p.refilter()
+			return m, nil
+		}
 	case "up", "ctrl+p":
 		p.move(-1)
 		return m, nil

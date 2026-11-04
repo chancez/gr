@@ -484,6 +484,35 @@ func (s *Service) ListChanges(ctx context.Context, states ...store.ChangeState) 
 	return s.store.ListChanges(ctx, s.repo.ID, states...)
 }
 
+// RepoChanges is a repository and its open changes.
+type RepoChanges struct {
+	Repo    store.Repo
+	Changes []store.Change
+}
+
+// OtherRepos lists the other repositories gr has reviewed that have open changes, the most
+// recently used first, with those changes.
+func (s *Service) OtherRepos(ctx context.Context) ([]RepoChanges, error) {
+	repos, err := s.store.ListRepos(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []RepoChanges
+	for _, r := range repos {
+		if r.ID == s.repo.ID {
+			continue
+		}
+		changes, err := s.store.ListChanges(ctx, r.ID, store.ChangeOpen)
+		if err != nil {
+			return nil, err
+		}
+		if len(changes) > 0 {
+			out = append(out, RepoChanges{Repo: r, Changes: changes})
+		}
+	}
+	return out, nil
+}
+
 // SetChangeState abandons or reopens a change.
 func (s *Service) SetChangeState(ctx context.Context, change store.Change, state store.ChangeState) error {
 	return s.store.SetChangeState(ctx, change.ID, state)

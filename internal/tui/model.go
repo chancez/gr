@@ -44,6 +44,9 @@ type Options struct {
 	AutoAdvance bool
 	// Vim edits comments with vim's modes.
 	Vim bool
+	// OpenRepo opens a service for the repository at dir, for its changes to open in tabs. Nil
+	// keeps tabs to the first change's repository.
+	OpenRepo func(ctx context.Context, dir string) (*review.Service, error)
 }
 
 // Run opens the TUI on a change.
@@ -86,18 +89,19 @@ func newTab(ctx context.Context, svc *review.Service, change store.Change, opts 
 		m.main.scrolloff = *opts.Scrolloff
 	}
 	m.navWidth, m.autoAdvance, m.vim = opts.SidebarWidth, opts.AutoAdvance, opts.Vim
+	m.openRepo, m.opened = opts.OpenRepo, change
 	if p, ok := m.readPlace(change); ok {
 		m.savedPlace = &p
 	}
 	return m, nil
 }
 
-// changeSeq is the number of the change the model shows, once loaded.
-func (m *model) changeSeq() int {
+// shownChange is the change the model shows: as loaded, or as it was opened until then.
+func (m *model) shownChange() store.Change {
 	if m.data == nil {
-		return 0
+		return m.opened
 	}
-	return m.data.change.Seq
+	return m.data.change
 }
 
 type focus int
@@ -147,6 +151,12 @@ type model struct {
 	picker *picker
 	// vim edits comments with vim's modes.
 	vim bool
+	// repoNames are the names of repositories by directory, as git gives them.
+	repoNames map[string]string
+	// opened is the change the model was opened on, which names its tab until its data loads.
+	opened store.Change
+	// openRepo opens another repository, for its changes to open in tabs.
+	openRepo func(ctx context.Context, dir string) (*review.Service, error)
 	// savedPlace is where you were in the change, to open once it loads, and pendingPlace where to
 	// go once its view's diff does.
 	savedPlace   *place

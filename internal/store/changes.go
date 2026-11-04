@@ -43,6 +43,24 @@ func (q queries) repoByRoot(ctx context.Context, rootSHA string) (Repo, error) {
 	return r, err
 }
 
+// ListRepos lists the repositories gr has reviewed, the most recently used first.
+func (q queries) ListRepos(ctx context.Context) ([]Repo, error) {
+	rows, err := q.q.QueryContext(ctx, `SELECT id, root_sha, last_path, created_at, updated_at FROM repos ORDER BY updated_at DESC, id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var repos []Repo
+	for rows.Next() {
+		var r Repo
+		if err := rows.Scan(&r.ID, &r.RootSHA, &r.LastPath, scanTime(&r.CreatedAt), scanTime(&r.UpdatedAt)); err != nil {
+			return nil, err
+		}
+		repos = append(repos, r)
+	}
+	return repos, rows.Err()
+}
+
 // RepoByRoot looks up a repo by its root commit.
 func (q queries) RepoByRoot(ctx context.Context, rootSHA string) (Repo, error) {
 	r, err := q.repoByRoot(ctx, rootSHA)

@@ -479,7 +479,7 @@ func loadedApp(title string, run func(m *model) tea.Cmd) *interact.Action[*model
 // Commands on gr itself.
 var (
 	actQuit        = appAction("quit", func(*model) tea.Cmd { return tea.Quit })
-	actNewTab      = appAction("new tab", func(m *model) tea.Cmd { return m.changePicker("Open in a new tab", (*model).openTab) })
+	actNewTab      = appAction("new tab", func(m *model) tea.Cmd { return m.pickTab() })
 	actCloseTab    = appAction("close tab", func(*model) tea.Cmd { return tabCmd(closeTabMsg{}) })
 	actNextTab     = appAction("next tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: 1}) })
 	actPrevTab     = appAction("previous tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: -1}) })

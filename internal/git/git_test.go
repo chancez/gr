@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"errors"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -426,5 +427,19 @@ func TestPatchIDs(t *testing.T) {
 	}
 	if len(ids) != 3 || ids[before] == "" || ids[before] != ids[rebased] || ids[amended] == ids[before] {
 		t.Errorf("patch ids = %v; want the rebased commit's the same as before, and the amended one's not", ids)
+	}
+}
+
+// A repository is named for its main worktree, so a linked worktree takes the repository's name.
+func TestRepoName(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "a\n")
+	r.Commit("root")
+	wt := filepath.Join(t.TempDir(), "elsewhere")
+	r.Git("worktree", "add", "-q", "-b", "side", wt)
+	for _, dir := range []string{r.Dir, wt} {
+		if got, err := git.RepoName(t.Context(), dir); err != nil || got != filepath.Base(r.Dir) {
+			t.Errorf("RepoName(%s) = %q, %v; want %q", dir, got, err, filepath.Base(r.Dir))
+		}
 	}
 }

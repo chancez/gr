@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -135,6 +136,20 @@ func (r *Repo) RootCommit(ctx context.Context) (string, error) {
 		return "", ErrNoCommits
 	}
 	return best, nil
+}
+
+// RepoName is the name of the repository at dir: its main worktree's directory, so a linked
+// worktree is named for the repository rather than for itself.
+func RepoName(ctx context.Context, dir string) (string, error) {
+	out, err := run(ctx, dir, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	common := strings.TrimSpace(string(out))
+	if filepath.Base(common) == ".git" {
+		common = filepath.Dir(common)
+	}
+	return strings.TrimSuffix(filepath.Base(common), ".git"), nil
 }
 
 // ResolveCommit resolves rev to a full commit sha.

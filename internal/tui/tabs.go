@@ -3,7 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -68,11 +67,6 @@ type goTabMsg struct {
 
 // tabCmd hands msg to the app.
 func tabCmd(msg tea.Msg) tea.Cmd { return func() tea.Msg { return msg } }
-
-// openTab opens change c in a new tab, as the tab action does.
-func (m *model) openTab(c store.Change) tea.Cmd {
-	return tabCmd(newTabMsg{svc: m.svc, change: c})
-}
 
 func newApp(ctx context.Context, opts Options, first *model) *app {
 	a := &app{ctx: ctx, opts: opts}
@@ -288,17 +282,14 @@ func (a *app) View() tea.View {
 
 // tabLabel names a tab: its change, and its repository where the tabs are of more than one.
 func (a *app) label(m *model, repos bool) string {
-	name := fmt.Sprintf("#%d", m.changeSeq())
-	if m.data != nil {
-		c := m.data.change
-		title := c.Title
-		if c.Kind == store.KindBranch {
-			title = c.Branch
-		}
-		name += " " + termtext.Line(title)
+	c := m.shownChange()
+	title := c.Title
+	if c.Kind == store.KindBranch {
+		title = c.Branch
 	}
+	name := fmt.Sprintf("#%d %s", c.Seq, termtext.Line(title))
 	if repos {
-		name = filepath.Base(m.svc.Repo().LastPath) + " " + name
+		name = m.repoName(m.svc.Repo().LastPath) + " " + name
 	}
 	return name
 }

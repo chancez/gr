@@ -98,6 +98,15 @@ commands only find one, and take a change number such as 4 directly.`,
 			return err
 		}
 		opts.Notice = a.notice
+		// Another repository's changes open in tabs through a service of their own, on the same
+		// database and as the same author.
+		opts.OpenRepo = func(ctx context.Context, dir string) (*review.Service, error) {
+			g, err := git.Open(ctx, dir)
+			if err != nil {
+				return nil, err
+			}
+			return review.Open(ctx, a.store, g, svc.Author())
+		}
 		return tui.Run(cmd.Context(), svc, change, opts)
 	}
 	root.SetIn(a.stdin)

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -26,11 +27,11 @@ func TestSwitchChange(t *testing.T) {
 	for _, it := range e.m.picker.items {
 		got = append(got, entry{it.value, it.note, it.heading})
 	}
+	// Under the repository's name and path.
 	want := []entry{
-		{"Changes", "", true},
+		{filepath.Base(e.repo.Dir), e.svc.Repo().LastPath, true},
 		{"#1 feature onto main", "current", false},
-		{"Branches", "", true},
-		{"other", "new change", false},
+		{"other", "branch, new change", false},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("picker = %+v, want %+v", got, want)
