@@ -2,6 +2,8 @@
 
 Local, GitHub-style code review for git. Review in the TUI. Agents and editors use the CLI.
 
+![Reviewing a branch, an agent addressing the thread from the CLI, and resolving it](docs/demo.gif)
+
 Reviews live in one SQLite database (`$XDG_DATA_HOME/gr/gr.db`), keyed by each repo's root commit,
 so every clone and worktree of a repo sees the same reviews.
 
