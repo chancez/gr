@@ -110,8 +110,8 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphDraft:     "*",
 	},
 	GlyphsUnicode: {
-		GlyphOpen:           "\u25be", // small down triangle
-		GlyphFolded:         "\u25b8", // small right triangle
+		GlyphOpen:           "\u25bc", // black down-pointing triangle
+		GlyphFolded:         "\u25b6", // black right-pointing triangle
 		GlyphChecked:        "\u2611", // ballot box with check
 		GlyphUnchecked:      "\u2610", // ballot box
 		GlyphComment:        "+",
@@ -139,8 +139,10 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphNo:             "\u2717",
 	},
 	GlyphsNerd: {
-		GlyphOpen:      "\uf078", // chevron-down
-		GlyphFolded:    "\uf054", // chevron-right
+		// The triangles, not Font Awesome's chevrons, which are drawn wider than their cell and
+		// thin, so they spill over what they head and are hard to see.
+		GlyphOpen:      "\u25bc",
+		GlyphFolded:    "\u25b6",
 		GlyphChecked:   "\uf046", // check-square-o
 		GlyphUnchecked: "\uf096", // square-o
 		// The + that comments stays a +: the icon is drawn wider than its cell, and the line's
