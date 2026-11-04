@@ -483,6 +483,8 @@ var (
 	actCloseTab    = appAction("close tab", func(*model) tea.Cmd { return tabCmd(closeTabMsg{}) })
 	actNextTab     = appAction("next tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: 1}) })
 	actPrevTab     = appAction("previous tab", func(*model) tea.Cmd { return tabCmd(stepTabMsg{dir: -1}) })
+	actTabRight    = appAction("move tab right", func(*model) tea.Cmd { return tabCmd(moveTabMsg{dir: 1}) })
+	actTabLeft     = appAction("move tab left", func(*model) tea.Cmd { return tabCmd(moveTabMsg{dir: -1}) })
 	actShowHelp    = appAction("help", func(m *model) tea.Cmd { m.mode = modeHelp; return nil })
 	actCancel      = appAction("clear the search or selection", func(m *model) tea.Cmd { m.clearTransient(); return nil })
 	actNextPane    = appAction("next pane", func(m *model) tea.Cmd { m.cycleFocus(1); return nil })
@@ -639,7 +641,7 @@ func init() {
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
 		actAutoAdvance, actSearch, actPickBase, actCompare, actSwitch, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
 		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette,
-		actNewTab, actCloseTab, actNextTab, actPrevTab}, actGoTab[:]...)...)
+		actNewTab, actCloseTab, actNextTab, actPrevTab, actTabRight, actTabLeft}, actGoTab[:]...)...)
 
 	composeBoxKind = interact.NewKind(func(composeSubject) string { return "Comment" },
 		actComposeSave, actComposeEditor, actComposeClose)
@@ -768,6 +770,8 @@ func init() {
 		{actCloseTab, "ctrl+w", "close the tab", []string{"ctrl+w"}},
 		{actNextTab, "ctrl+pgdn/up", "next/prev tab", []string{"ctrl+pgdown"}},
 		{actPrevTab, "", "", []string{"ctrl+pgup"}},
+		{actTabRight, "ctrl+shift+pgdn/up", "move the tab right/left", []string{"ctrl+shift+pgdown"}},
+		{actTabLeft, "", "", []string{"ctrl+shift+pgup"}},
 		{actShowHelp, "?", "help", []string{"?"}},
 		{actQuit, "q", "quit", []string{"q", "ctrl+c"}},
 	} {

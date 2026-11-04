@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -33,15 +34,24 @@ type app struct {
 	// background and terminal are what the terminal said of itself, told again to new tabs.
 	background *tea.BackgroundColorMsg
 	terminal   *tea.TerminalVersionMsg
-	// bar is where each tab's label was drawn on the tab bar, for a click on it.
-	bar []tabLabel
+	// bar is where each tab's label was drawn on the tab bar, and newTab its new tab button, for
+	// a click on them.
+	bar    []tabLabel
+	newTab tabLabel
+	// drag is the tab being dragged along the tab bar, or -1.
+	drag int
 }
 
-// tabLabel is where a tab's label is on the tab bar.
+// tabLabel is where a tab's label is on the tab bar, from x, w wide, and its close button, from
+// closeX to its end.
 type tabLabel struct {
-	x int
-	w int
+	x      int
+	w      int
+	closeX int
 }
+
+// on reports whether column x is in the label.
+func (l tabLabel) on(x int) bool { return x >= l.x && x < l.x+l.w }
 
 // tabMsg is a message for the tab with id: the result of a command it started.
 type tabMsg struct {
@@ -65,11 +75,15 @@ type goTabMsg struct {
 	n int
 }
 
+type moveTabMsg struct {
+	dir int
+}
+
 // tabCmd hands msg to the app.
 func tabCmd(msg tea.Msg) tea.Cmd { return func() tea.Msg { return msg } }
 
 func newApp(ctx context.Context, opts Options, first *model) *app {
-	a := &app{ctx: ctx, opts: opts}
+	a := &app{ctx: ctx, opts: opts, drag: -1}
 	a.add(first)
 	return a
 }
@@ -166,6 +180,9 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.show(inner.n)
 			}
 			return a, nil
+		case moveTabMsg:
+			a.move(a.active, a.active+inner.dir)
+			return a, nil
 		}
 		return a, a.send(i, msg.msg)
 	case tea.WindowSizeMsg:
@@ -179,15 +196,28 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.all(msg)
 	case tea.MouseClickMsg:
 		if msg.Y == 0 {
-			a.clickBar(msg)
-			return a, nil
+			return a, a.clickBar(msg)
 		}
 		msg.Y--
 		return a, a.send(a.active, msg)
 	case tea.MouseReleaseMsg:
+		if a.drag >= 0 {
+			a.drag = -1
+			return a, nil
+		}
 		msg.Y--
 		return a, a.send(a.active, msg)
 	case tea.MouseMotionMsg:
+		if a.drag >= 0 {
+			// The tab dragged goes where the mouse is along the bar.
+			for i, l := range a.bar {
+				if l.on(msg.X) && i != a.drag {
+					a.move(a.drag, i)
+					a.drag = i
+				}
+			}
+			return a, nil
+		}
 		msg.Y--
 		return a, a.send(a.active, msg)
 	case tea.MouseWheelMsg:
@@ -231,6 +261,18 @@ func (a *app) open(msg newTabMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// move moves tab i to place j, the shown tab with it.
+func (a *app) move(i, j int) {
+	if i < 0 || i >= len(a.tabs) || j < 0 || j >= len(a.tabs) || i == j {
+		return
+	}
+	shown := a.ids[a.active]
+	t, id := a.tabs[i], a.ids[i]
+	a.tabs = slices.Insert(slices.Delete(a.tabs, i, i+1), j, t)
+	a.ids = slices.Insert(slices.Delete(a.ids, i, i+1), j, id)
+	a.active = a.tab(shown)
+}
+
 // close closes tab i, saving where it was. Closing the last quits, keeping it for Bubble Tea's last
 // frame, as quitting saves where it was.
 func (a *app) close(i int) tea.Cmd {
@@ -256,16 +298,26 @@ func (a *app) quit() {
 	}
 }
 
-// clickBar shows the tab whose label a click on the tab bar lands on.
-func (a *app) clickBar(msg tea.MouseClickMsg) {
+// clickBar runs what a click on the tab bar lands on: a tab's close button closes it, its label
+// shows it and starts dragging it, and the new tab button opens the picker of changes to open.
+func (a *app) clickBar(msg tea.MouseClickMsg) tea.Cmd {
 	if msg.Button != tea.MouseLeft {
-		return
+		return nil
+	}
+	if a.newTab.on(msg.X) {
+		return wrap(a.ids[a.active], a.tabs[a.active].pickTab())
 	}
 	for i, l := range a.bar {
-		if msg.X >= l.x && msg.X < l.x+l.w {
+		switch {
+		case !l.on(msg.X):
+		case msg.X >= l.closeX:
+			return a.close(i)
+		default:
 			a.show(i)
+			a.drag = i
 		}
 	}
+	return nil
 }
 
 func (a *app) View() tea.View {
@@ -311,18 +363,27 @@ func (a *app) tabBar() string {
 		if i == a.active {
 			surf = look.PaneFocused
 		}
+		// Its label, then its close button, which a label cut short keeps.
 		label := " " + a.label(t, repos) + " "
-		w := min(ansi.StringWidth(label), share, max(a.width-x, 0))
-		if w <= 0 {
+		closeBtn := th.Render(surf, look.Symbol(look.GlyphClose), look.Default(" "))
+		cw := ansi.StringWidth(closeBtn)
+		w := min(ansi.StringWidth(label)+cw, share, max(a.width-x, 0))
+		if w <= cw {
 			break
 		}
-		b.WriteString(th.DrawCut(surf, w, look.Text(label)))
-		a.bar = append(a.bar, tabLabel{x: x, w: w})
+		b.WriteString(th.DrawCut(surf, w-cw, look.Text(label)) + closeBtn)
+		a.bar = append(a.bar, tabLabel{x: x, w: w, closeX: x + w - cw})
 		x += w
 		if x < a.width {
 			b.WriteString(" ")
 			x++
 		}
+	}
+	// The new tab button follows the tabs, as a browser's does.
+	a.newTab = tabLabel{x: -1}
+	if newBtn := th.Render(look.PaneUnfocused, look.Default(" "), look.Symbol(look.GlyphNew), look.Default(" ")); x+ansi.StringWidth(newBtn) <= a.width {
+		b.WriteString(newBtn)
+		a.newTab = tabLabel{x: x, w: ansi.StringWidth(newBtn), closeX: x + ansi.StringWidth(newBtn)}
 	}
 	return look.Fit(b.String(), a.width)
 }

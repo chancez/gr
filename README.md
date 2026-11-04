@@ -52,6 +52,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `B` | pick another base branch for the change, as for a stacked branch: type to filter, click or enter to pick |
 | `w`, `ctrl+t` | switch to another change of this repository, or open any repository's in a new tab |
 | `ctrl+w`, `ctrl+pgdn` `ctrl+pgup`, `alt+1`..`9` | close the tab, next or previous tab, go to a tab |
+| `ctrl+shift+pgdn` `ctrl+shift+pgup` | move the tab right or left; drag a tab's label to move it, and click its `x` to close it |
 
 Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. Quitting remembers where you were in a change, the view,
 the line, folds, and split, and opening it again goes back there.

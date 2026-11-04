@@ -92,6 +92,9 @@ const (
 	GlyphVerdictComment
 	GlyphYes
 	GlyphNo
+	// GlyphClose closes what it is on, as a tab; GlyphNew opens another.
+	GlyphClose
+	GlyphNew
 	numGlyphs
 )
 
@@ -108,6 +111,8 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphMoreBelow: "v",
 		GlyphReviewed:  "x",
 		GlyphDraft:     "*",
+		GlyphClose:     "x",
+		GlyphNew:       "+",
 	},
 	GlyphsUnicode: {
 		GlyphOpen:           "\u25bc", // black down-pointing triangle
@@ -137,6 +142,8 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphRequestChanges: "\u2717",
 		GlyphYes:            "\u2713",
 		GlyphNo:             "\u2717",
+		GlyphClose:          "\u00d7", // multiplication sign
+		GlyphNew:            "+",
 	},
 	GlyphsNerd: {
 		// The triangles, not Font Awesome's chevrons, which are drawn wider than their cell and
@@ -172,6 +179,8 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphVerdictComment: "\uf075", // comment
 		GlyphYes:            "\uf00c",
 		GlyphNo:             "\uf00d",
+		GlyphClose:          "\u00d7",
+		GlyphNew:            "+",
 	},
 }
 

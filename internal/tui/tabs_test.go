@@ -56,7 +56,7 @@ func (e *tabsEnv) press(k string) {
 			return
 		}
 		switch msg.msg.(type) {
-		case newTabMsg, closeTabMsg, stepTabMsg, goTabMsg:
+		case newTabMsg, closeTabMsg, stepTabMsg, goTabMsg, moveTabMsg:
 			_, cmd = e.a.Update(msg)
 		default:
 			return
@@ -84,7 +84,7 @@ func TestTabs(t *testing.T) {
 	tab := e.a.tabs[e.a.active]
 	tab.syncLoads, tab.glyphsSet = true, true
 	(&tuiEnv{t: t, m: tab}).drain(tab.loadCmd())
-	if got, want := e.bar(), " #1 feature   #2 other"; e.a.active != 1 || got != want {
+	if got, want := e.bar(), " #1 feature x   #2 other x   +"; e.a.active != 1 || got != want {
 		t.Errorf("after opening a tab: tab %d shown, bar %q, want the new one and %q", e.a.active, got, want)
 	}
 
@@ -108,7 +108,7 @@ func TestTabs(t *testing.T) {
 	}
 
 	e.press("ctrl+w")
-	if len(e.a.tabs) != 1 || e.a.active != 0 || e.bar() != " #1 feature" {
+	if len(e.a.tabs) != 1 || e.a.active != 0 || e.bar() != " #1 feature x   +" {
 		t.Errorf("ctrl+w left %d tabs, showing %d, bar %q", len(e.a.tabs), e.a.active, e.bar())
 	}
 	_, cmd := e.a.Update(keyMsg("ctrl+w"))
@@ -174,6 +174,64 @@ func TestTabsOfOtherRepos(t *testing.T) {
 	}
 	if bar := e.bar(); !strings.Contains(bar, filepath.Base(e.repo.Dir)+" #1") || !strings.Contains(bar, filepath.Base(other.Dir)+" #1") {
 		t.Errorf("tab bar %q does not name the repositories", bar)
+	}
+}
+
+// The tab bar's buttons and keys: + opens the picker of changes, a tab's close button closes it,
+// dragging a tab's label moves it, and ctrl+shift+pgup and pgdown move the tab shown.
+func TestTabBarControls(t *testing.T) {
+	e := newTabsEnv(t)
+	e.repo.Git("branch", "other")
+	target, err := e.svc.ParseTarget(t.Context(), "other", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := e.svc.EnsureChange(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.a.Update(tabMsg{id: e.a.ids[0], msg: newTabMsg{svc: e.svc, change: other}})
+	e.a.tabBar()
+	order := func() []string {
+		var out []string
+		for _, t := range e.a.tabs {
+			out = append(out, t.shownChange().Branch)
+		}
+		return out
+	}
+
+	e.press("ctrl+shift+pgup")
+	if got, want := order(), []string{"other", "feature"}; !reflect.DeepEqual(got, want) || e.a.active != 0 {
+		t.Errorf("ctrl+shift+pgup: tabs %q, showing %d; want %q, showing the moved tab", got, e.a.active, want)
+	}
+	e.press("ctrl+shift+pgdown")
+	if got, want := order(), []string{"feature", "other"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("ctrl+shift+pgdown: tabs %q, want %q", got, want)
+	}
+
+	// Drag the second tab onto the first.
+	e.a.tabBar()
+	from, to := e.a.bar[1], e.a.bar[0]
+	e.a.Update(tea.MouseClickMsg{X: from.x + 1, Y: 0, Button: tea.MouseLeft})
+	e.a.Update(tea.MouseMotionMsg{X: to.x + 1, Y: 0, Button: tea.MouseLeft})
+	e.a.Update(tea.MouseReleaseMsg{X: to.x + 1, Y: 0, Button: tea.MouseLeft})
+	if got, want := order(), []string{"other", "feature"}; !reflect.DeepEqual(got, want) || e.a.active != 0 || e.a.drag != -1 {
+		t.Errorf("after dragging: tabs %q, showing %d, drag %d; want %q, showing the dragged tab", got, e.a.active, e.a.drag, want)
+	}
+
+	// + opens the picker of changes in the tab shown.
+	e.a.tabBar()
+	e.a.Update(tea.MouseClickMsg{X: e.a.newTab.x + 1, Y: 0, Button: tea.MouseLeft})
+	if m := e.a.tabs[e.a.active]; m.mode != modePicker || m.picker.title != "Open in a new tab" {
+		t.Errorf("+ left mode %d, picker %q", m.mode, m.picker.title)
+	}
+	e.a.tabs[e.a.active].closePicker()
+
+	// A tab's close button closes it.
+	e.a.tabBar()
+	e.a.Update(tea.MouseClickMsg{X: e.a.bar[0].closeX, Y: 0, Button: tea.MouseLeft})
+	if got, want := order(), []string{"feature"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("after the first tab's close button: tabs %q, want %q", got, want)
 	}
 }
 

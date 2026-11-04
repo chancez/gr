@@ -381,6 +381,9 @@ func Chevron(open, lit bool) Span {
 	return glyph(elMuted, g, false)
 }
 
+// Symbol is a glyph as text, as the tab bar's close and new.
+func Symbol(g Glyph) Span { return glyph(elText, g, false) }
+
 // More marks entries of a list scrolled out of view, n of them, above or below.
 func More(above bool, n int) []Span {
 	g := GlyphMoreBelow
