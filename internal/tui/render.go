@@ -190,12 +190,19 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if rw.collapsed {
 			return []string{r.renderCollapsedThread(d, *rw.thread, width, state)}
 		}
-		lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split))
-		shift := 0
 		if rw.excerpt != nil {
-			excerpt := r.renderExcerpt(*rw.excerpt, *rw.thread, width)
-			lines, shift = append(excerpt, lines...), len(excerpt)
+			// In the overview, a thread is headed by its line, as when folded, then the code it is on,
+			// then its comments, which its header names.
+			head := append([]string{r.threadHeader(d, *rw.thread, width, state, true)}, r.renderExcerpt(*rw.excerpt, *rw.thread, width)...)
+			lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split), false)
+			r.segments = []int{0}
+			for _, s := range starts[1:] {
+				r.segments = append(r.segments, s+len(head))
+			}
+			return append(head, lines...)
 		}
+		lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split), true)
+		shift := 0
 		r.segments = []int{0}
 		for _, s := range starts[1:] {
 			r.segments = append(r.segments, s+shift)
@@ -433,14 +440,10 @@ func excerptFile(e review.Excerpt) git.FileDiff {
 	return f
 }
 
-// renderExcerpt draws the diff a thread is about, under a line naming where it is.
+// renderExcerpt draws the diff a thread is about, which the thread's header names.
 func (r *renderer) renderExcerpt(e review.Excerpt, t review.ThreadView, width int) []string {
 	loc := t.Location
-	where := append([]look.Span{look.Default(" ")}, look.MarkSHA(commitMentions.Zone(loc.Commit), look.Location(loc, look.Strong)...)...)
-	if !e.Exact {
-		where = append(where, look.Muted("  (outdated: as it was)"))
-	}
-	out := []string{r.th.Draw(look.HeadingBar, width, where...)}
+	var out []string
 	f := excerptFile(e)
 	for _, l := range e.Lines {
 		// The thread's own lines carry its bar, among the context around them.
@@ -492,15 +495,21 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 
 // renderCollapsedThread draws a folded thread on one line, as GitHub shows resolved threads.
 func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, width int, state rowState) string {
+	return r.threadHeader(d, t, width, state, false)
+}
+
+// threadHeader is a thread's line in the overview, the same folded or open: its chevron, number,
+// state, where it is, and how many comments it has, and while folded the first of them.
+func (r *renderer) threadHeader(d *changeData, t review.ThreadView, width int, state rowState, open bool) string {
 	where := look.MarkSHA(commitMentions.Zone(t.Location.Commit), look.Location(t.Location)...)
 	if t.Summary {
 		where = []look.Span{look.Muted("summary")}
 	}
 	first := ""
-	if len(t.Comments) > 0 {
+	if len(t.Comments) > 0 && !open {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	chevron := []look.Span{look.Chevron(false, false)}
+	chevron := []look.Span{look.Chevron(open, false)}
 	if len(state.lead) > 0 {
 		chevron = state.lead
 	}
@@ -517,7 +526,7 @@ func (r *renderer) renderCollapsedThread(d *changeData, t review.ThreadView, wid
 }
 
 // renderThread draws a thread as a bordered box, and returns the line each comment starts on.
-func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState, indent int) ([]string, []int) {
+func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState, indent int, titled bool) ([]string, []int) {
 	boxWidth := boxWidthIn(width, indent)
 	inner := boxWidth - 4
 	title := []look.Span{look.Ref(t), look.Default(" ")}
@@ -537,7 +546,10 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 	title = append(append(slices.Clip(chevron), look.Default(" ")), title...)
 	// A resolved thread recedes: its title and comment headers are dimmed.
 	done := t.State == store.ThreadResolved
-	lines := []string{ansi.Truncate(r.th.Render(look.Plain, look.DimIf(done, title...)...), inner, "")}
+	var lines []string
+	if titled {
+		lines = append(lines, ansi.Truncate(r.th.Render(look.Plain, look.DimIf(done, title...)...), inner, ""))
+	}
 	// A thread a rewrite moved shows the lines it was made on, to read beside what replaced them.
 	for i, l := range t.Was {
 		label := "was: "
@@ -547,10 +559,14 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 		lines = append(lines, r.th.DrawCut(look.Plain, inner, look.Muted(label+termtext.Line(expandTabs(l)))))
 	}
 	var starts []int
-	for _, c := range t.Comments {
+	for i, c := range t.Comments {
 		// The box's top border is the first output line.
 		starts = append(starts, len(lines)+1)
-		lines = append(lines, "", r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
+		if titled || i > 0 || len(t.Was) > 0 {
+			// Apart from the title, or the comment before.
+			lines = append(lines, "")
+		}
+		lines = append(lines, r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
 	// Room between the last comment and the controls in the bottom border.
