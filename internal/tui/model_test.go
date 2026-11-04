@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -829,6 +830,20 @@ func TestKeyHintsFit(t *testing.T) {
 	e.m.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
 	if bar := ansi.Strip(e.m.renderStatus()); !strings.Contains(bar, "? help | q quit") {
 		t.Errorf("width 140: hints = %q", bar)
+	}
+}
+
+func TestKeyHintsOnce(t *testing.T) {
+	// On an overview without threads the cursor is on the change, whose keys include submit.
+	e := newTUIEnv(t)
+	e.m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	var got []string
+	for _, k := range e.m.shortHelp() {
+		got = append(got, k.Help().Key+" "+k.Help().Desc)
+	}
+	want := []string{"F filter", "c comment", "S submit", "? help", "q quit"}
+	if !slices.Equal(got, want) {
+		t.Errorf("hints = %q, want %q", got, want)
 	}
 }
 

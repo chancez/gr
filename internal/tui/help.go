@@ -14,6 +14,9 @@ import (
 // submit, help, and quit, which are always shown.
 func (m *model) shortHelp() []interact.Key[*model] {
 	var out []interact.Key[*model]
+	// What is always worth knowing comes last, where renderHints keeps it, and only there.
+	always := []any{actSubmit, actShowHelp, actQuit}
+	isAlways := func(k interact.Key[*model]) bool { return slices.ContainsFunc(always, k.Action.Is) }
 	chain := m.cursorChain()
 	if t, ok := m.cursorTarget(); ok {
 		// The cursor's subject first, then the change it is part of.
@@ -25,7 +28,7 @@ func (m *model) shortHelp() []interact.Key[*model] {
 		titles := map[string]bool{}
 		// Bindings without a description are second keys of the one before, already hinted.
 		for _, k := range interact.Keys(m, near...) {
-			if k.Help().Desc == "" || slices.ContainsFunc(hinted, k.Action.Same) {
+			if k.Help().Desc == "" || slices.ContainsFunc(hinted, k.Action.Same) || isAlways(k) {
 				continue
 			}
 			hinted = append(hinted, k.Action)
@@ -41,8 +44,7 @@ func (m *model) shortHelp() []interact.Key[*model] {
 			out = append(out, k)
 		}
 	}
-	// What is always worth knowing comes last, where renderHints keeps it.
-	for _, a := range []any{actSubmit, actShowHelp, actQuit} {
+	for _, a := range always {
 		for _, k := range interact.Keys(m, chain...) {
 			if k.Action.Is(a) {
 				out = append(out, k)
