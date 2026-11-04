@@ -5,6 +5,7 @@ import (
 	"encoding/json/v2"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -445,5 +446,24 @@ func TestAgentsNeedAnAuthor(t *testing.T) {
 	}
 	if err := run("--author", "Claude", "comment", "-m", "as Claude"); err != nil {
 		t.Errorf("comment under an agent with an author: %v", err)
+	}
+}
+
+func TestVersion(t *testing.T) {
+	e := newCLIEnv(t)
+	if got := e.run("Human", "--version"); got != "gr version dev\n" {
+		t.Errorf("gr --version = %q", got)
+	}
+
+	tagged := &debug.BuildInfo{Main: debug.Module{Version: "v0.2.0"}}
+	devel := &debug.BuildInfo{Main: debug.Module{Version: "(devel)"}}
+	got := []string{
+		versionOf("v0.3.0", tagged, true),
+		versionOf("", tagged, true),
+		versionOf("", devel, true),
+		versionOf("", nil, false),
+	}
+	if diff := cmp.Diff([]string{"v0.3.0", "v0.2.0", "dev", "dev"}, got); diff != "" {
+		t.Errorf("versions (-want +got):\n%s", diff)
 	}
 }

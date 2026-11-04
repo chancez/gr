@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"runtime/debug"
 	"strconv"
 	"strings"
 
@@ -65,6 +66,7 @@ func Execute(ctx context.Context) int {
 func (a *app) rootCommand() *cobra.Command {
 	// Names, paths, and comments can hold control characters, which a terminal would act on.
 	a.stdout, a.stderr = termtext.NewWriter(a.stdout), termtext.NewWriter(a.stderr)
+	info, ok := debug.ReadBuildInfo()
 	root := &cobra.Command{
 		Short: "Local code review for git",
 		Use:   "gr [target]",
@@ -83,6 +85,7 @@ Commands that act on a change take --change to pick one by number or id prefix. 
 use the change for the current branch. Reviewing and commenting create it if needed; the gr change
 commands only find one, and take a change number such as 4 directly.`,
 		Args:          cobra.MaximumNArgs(1),
+		Version:       versionOf(version, info, ok),
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
