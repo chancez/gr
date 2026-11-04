@@ -68,3 +68,41 @@ run = "go test -race ./..."
 [tasks.check]
 description = "Format, vet, and test"
 depends = ["fmt", "vet", "test"]
+
+[tasks."demo:vhs"]
+description = "Build the VHS that renders the demo, with keystroke captions"
+# Upstream VHS has no keystroke captions yet: this is its main with charmbracelet/vhs#719 merged.
+# The fork keeps upstream's module path, so it is built from a clone rather than go installed.
+run = """
+set -eu
+rev=df657051dbb812369383b841dd5f3d1273b38b4a
+src=bin/tools/src/vhs
+if [ -x bin/tools/vhs ] && [ "$(cat bin/tools/vhs.rev 2>/dev/null)" = "$rev" ]; then
+  exit 0
+fi
+if [ ! -d "$src" ]; then
+  git clone -q https://github.com/chancez/vhs.git "$src"
+fi
+git -C "$src" fetch -q origin caption-overlay
+git -C "$src" -c advice.detachedHead=false checkout -q "$rev"
+(cd "$src" && go build -o ../../vhs .)
+echo "$rev" >bin/tools/vhs.rev
+"""
+
+[tasks.demo]
+description = "Render the README's demo to docs/demo.gif"
+depends = ["build", "demo:vhs"]
+# Needs ttyd, and ffmpeg built with libass for the captions: brew install ttyd ffmpeg-full.
+run = """
+set -eu
+for bin in /opt/homebrew/opt/ffmpeg-full/bin /usr/local/opt/ffmpeg-full/bin; do
+  if [ -d "$bin" ]; then
+    PATH="$bin:$PATH"
+  fi
+done
+GR_DEMO="$(mktemp -d)"
+export GR_DEMO
+trap 'rm -rf "$GR_DEMO"' EXIT
+sh demo/fixture.sh "$GR_DEMO"
+bin/tools/vhs demo/demo.tape
+"""
