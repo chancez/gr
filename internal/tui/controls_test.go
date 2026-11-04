@@ -187,12 +187,12 @@ func TestRowControls(t *testing.T) {
 	}
 
 	e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
-	if got, want := e.shownControls("row"), []string{"fold", "mark reviewed", "expand"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls("row"), []string{"mark reviewed", "fold", "mark reviewed"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row controls with the cursor on a line = %q, want %q: the + shows on hover", got, want)
 	}
 	e.hoverRow(e.m.main.cursor - 1)
 	e.hoverRow(e.m.main.cursor)
-	if got, want := e.shownControls("row"), []string{"fold", "mark reviewed", "comment", "expand"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls("row"), []string{"mark reviewed", "fold", "mark reviewed", "comment"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("row controls with the mouse over a line = %q, want %q", got, want)
 	}
 	e.click("row", "comment")
@@ -387,5 +387,29 @@ func TestThreadChevronOpensIt(t *testing.T) {
 		if r.kind == rowThread && r.thread.ID == id && r.collapsed {
 			t.Errorf("clicking the chevron left thread %s folded", r.thread.Label())
 		}
+	}
+}
+
+// A click on another thread's chevron leaves the cursor where it is, on the same screen line, as
+// enter on the thread itself does.
+func TestChevronKeepsTheScreenStill(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	e.pressRun("l")
+	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.Seq == 1 })
+	at, y := e.m.main.cursor, e.m.main.cursorY()
+	folded := -1
+	for i, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.Seq == 3 {
+			folded = i
+		}
+	}
+	e.click("row"+strconv.Itoa(folded)+":", actToggleThread.Title)
+	if e.m.main.cursor != at || e.m.main.cursorY() != y {
+		t.Errorf("after another thread's chevron, the cursor is on row %d at line %d; want row %d at line %d",
+			e.m.main.cursor, e.m.main.cursorY(), at, y)
+	}
+	if r := e.m.main.rows[folded]; r.collapsed {
+		t.Error("the clicked thread is still folded")
 	}
 }

@@ -68,7 +68,9 @@ func (m *model) foldRow(i int, op foldOp) {
 			collapsed = !collapsed
 		}
 		m.threadFolds[r.thread.ID] = collapsed
-		m.rebuildKeeping(r)
+		// The cursor's row stays where it is on screen, so a click on another thread's chevron
+		// moves nothing above it.
+		m.rebuildKeeping(p.rows[p.cursor])
 		return
 	}
 	if r.gap != nil {
@@ -87,7 +89,7 @@ func (m *model) foldRow(i int, op foldOp) {
 		} else {
 			delete(m.openGaps, k)
 		}
-		m.rebuildKeeping(r)
+		m.rebuildKeeping(p.rows[p.cursor])
 		return
 	}
 	if r.file < 0 {
