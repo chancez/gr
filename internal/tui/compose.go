@@ -288,10 +288,10 @@ func (m *model) composeIndent() int {
 	v, r := m.views[m.current], p.rows[p.attach]
 	switch {
 	case r.kind == rowThread:
-		return threadIndent(v, r, m.split)
+		return threadIndent(v, r, m.split, p.width)
 	case m.compose.kind == composeThread && m.compose.thread.StartLine > 0:
 		// The thread it starts, on the lines it hangs under.
-		return codeIndent(v, r, m.split)
+		return codeIndent(v, r, m.split, sideOr(m.compose.thread.Side), p.width)
 	}
 	return 2
 }

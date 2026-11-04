@@ -195,14 +195,14 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 			// In the overview, a thread is headed by its line, as when folded, then the code it is on,
 			// then its comments, which its header names.
 			head := append([]string{r.threadHeader(d, *rw.thread, width, state, true)}, r.renderExcerpt(*rw.excerpt, *rw.thread, width)...)
-			lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split), false)
+			lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split, width), false)
 			r.segments = []int{0}
 			for _, s := range starts[1:] {
 				r.segments = append(r.segments, s+len(head))
 			}
 			return append(head, lines...)
 		}
-		lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split), true)
+		lines, starts := r.renderThread(d, *rw.thread, width, state, threadIndent(v, rw, state.split, width), true)
 		shift := 0
 		r.segments = []int{0}
 		for _, s := range starts[1:] {
@@ -409,25 +409,34 @@ func threadName(t review.ThreadView) []look.Span {
 	return []look.Span{look.Ref(t)}
 }
 
-// threadIndent is how far a thread's box is indented: to where the code starts, past the line
-// numbers, for a thread on lines, so the box hangs off the lines its numbers are tinted on, and a
-// little for one on a file, a commit, or the change.
-func threadIndent(v view, rw row, split bool) int {
-	if t := rw.thread; t == nil || t.Location.StartLine == 0 {
+// threadIndent is how far a thread's box is indented in a pane width wide: to where the code
+// starts, past the line numbers, for a thread on lines, so the box hangs off the lines its numbers
+// are tinted on, on its side in split mode, and a little for one on a file, a commit, or the
+// change.
+func threadIndent(v view, rw row, split bool, width int) int {
+	t := rw.thread
+	if t == nil || t.Location.StartLine == 0 {
 		return 2
 	}
-	return codeIndent(v, rw, split)
+	return codeIndent(v, rw, split, t.Location.Side, width)
 }
 
-// codeIndent is the column the code of row rw's file, or of its excerpt, starts at.
-func codeIndent(v view, rw row, split bool) int {
+// codeIndent is the column the code of row rw's file, or of its excerpt, starts at, on side in
+// split mode, in a pane width wide.
+func codeIndent(v view, rw row, split bool, side anchor.Side, width int) int {
 	switch {
 	case rw.excerpt != nil:
 		// The excerpt's margin, both its numbers, its sign, and the space after.
 		return 1 + 2*(excerptGutterWidth(*rw.excerpt)+1) + 2
 	case rw.file >= 0 && rw.file < len(v.files) && split:
-		// The hunk marker, one side's number, its sign, and the space after.
-		return 1 + gutterWidth(v.files[rw.file]) + 1 + 2
+		// The hunk marker, one side's number, its sign, and the space after, past the old side and
+		// the divider for the new.
+		left := 1 + gutterWidth(v.files[rw.file]) + 1 + 2
+		if side == anchor.SideOld {
+			return left
+		}
+		// renderSplit halves the pane less the hunk marker.
+		return 1 + (width-2)/2 + 1 + left - 1
 	case rw.file >= 0 && rw.file < len(v.files):
 		return 1 + 2*(gutterWidth(v.files[rw.file])+1) + 2
 	}
@@ -595,17 +604,21 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 		lines = append(lines, r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
 		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
 	}
-	// Room between the last comment and the controls in the bottom border.
-	lines = append(lines, "")
-	out := strings.Split(r.th.Box(boxWidth, state.cursor).Render(strings.Join(lines, "\n")), "\n")
 	// The thread's controls sit in its bottom border, under its comments, where they take no line;
-	// the last one's room for its key runs into the border's line.
-	if n := len(out); len(state.controls) > 0 && n > 0 {
-		controls := r.th.Render(look.Plain, look.OnBorder(state.cursor, state.controls...)...)
-		if dashes := boxWidth - 5 - ansi.StringWidth(controls); dashes > 0 {
-			out[n-1] = r.th.Render(look.Plain, look.Border("+- ", state.cursor)) + controls +
-				r.th.Render(look.Plain, look.Border(strings.Repeat("-", dashes+1)+"+", state.cursor))
-		}
+	// the last one's room for its key runs into the border's line. A box too narrow for them, as on
+	// one side of a split diff, has them on a line of their own above the border instead.
+	controls := r.th.Render(look.Plain, look.OnBorder(state.cursor, state.controls...)...)
+	dashes := boxWidth - 5 - ansi.StringWidth(controls)
+	if len(state.controls) > 0 && dashes <= 0 {
+		lines = append(lines, "", ansi.Truncate(r.th.Render(look.Plain, state.controls...), inner, ""))
+	} else {
+		// Room between the last comment and the controls in the bottom border.
+		lines = append(lines, "")
+	}
+	out := strings.Split(r.th.Box(boxWidth, state.cursor).Render(strings.Join(lines, "\n")), "\n")
+	if n := len(out); len(state.controls) > 0 && dashes > 0 && n > 0 {
+		out[n-1] = r.th.Render(look.Plain, look.Border("+- ", state.cursor)) + controls +
+			r.th.Render(look.Plain, look.Border(strings.Repeat("-", dashes+1)+"+", state.cursor))
 	}
 	for i := range out {
 		out[i] = strings.Repeat(" ", indent) + out[i]

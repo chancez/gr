@@ -2,6 +2,7 @@ package tui
 
 import (
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/guygrigsby/vimbubble/v2"
 
+	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/review"
 )
 
@@ -221,7 +223,7 @@ func TestBoxWidths(t *testing.T) {
 		want := tc.want
 		if want == 0 {
 			// The pane's width, less the box's indent and a column of margin.
-			want = mw - codeIndent(e.m.views[e.m.current], row{file: 1}, false) - 1
+			want = mw - codeIndent(e.m.views[e.m.current], row{file: 1}, false, anchor.SideNew, mw) - 1
 		}
 		var got int
 		for _, l := range strings.Split(e.screen(), "\n") {
@@ -233,6 +235,54 @@ func TestBoxWidths(t *testing.T) {
 		}
 		if got != want {
 			t.Errorf("%d columns wide: thread box %d wide, want %d", tc.width, got, want)
+		}
+	}
+}
+
+// In a split diff, a thread on the new side, and the comment box that starts one, hang off the new
+// side's code rather than the old side's.
+func TestSplitBoxesOnTheNewSide(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("say hello")
+	e.pressRun("l")
+	e.press("s")
+	e.cursorTo(func(r row) bool {
+		return r.kind == rowLine && r.right != nil && strings.Contains(r.right.Text, `println("hello")`)
+	})
+	e.m.main.side = anchor.SideNew
+	lines := strings.Split(e.screen(), "\n")
+	code, box := -1, -1
+	for i, l := range lines {
+		if j := strings.Index(l, `println("hello")`); j >= 0 && code < 0 {
+			// Where the new side's code starts: its indent, before println.
+			code = strings.LastIndex(l[:j], "+") + 2
+			for box = i + 1; box < len(lines) && !strings.Contains(lines[box], "+----"); box++ {
+			}
+		}
+	}
+	if code < 0 || box >= len(lines) {
+		t.Fatalf("no new-side line and thread box:\n%s", e.screen())
+	}
+	if got := strings.Index(lines[box], "+----"); got != code {
+		t.Errorf("the thread's box starts at column %d, want the new side's code at %d:\n%s", got, code, e.screen())
+	}
+	// Too narrow for its buttons in its border, the box has them inside, and they work there.
+	for i, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.Seq == 1 {
+			e.click("row"+strconv.Itoa(i)+":", "reply")
+		}
+	}
+	if e.m.mode != modeCompose || e.m.compose.kind != composeReply {
+		t.Fatalf("Reply in a split diff's box left mode %d", e.m.mode)
+	}
+	e.press("esc")
+	e.press("c")
+	for i, l := range strings.Split(e.screen(), "\n") {
+		if strings.Contains(l, "Comment on main.go:4") {
+			above := strings.Split(e.screen(), "\n")[i-1]
+			if got := strings.Index(above, "+----"); got != code {
+				t.Errorf("the comment box starts at column %d, want %d:\n%s", got, code, e.screen())
+			}
 		}
 	}
 }
