@@ -529,6 +529,12 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 	if loc := look.MarkSHA(commitMentions.Zone(t.Location.Commit), look.Location(t.Location)...); len(loc) > 0 && !t.Summary {
 		title = append(append(title, look.Muted("  ")), loc...)
 	}
+	// The chevron that folds the thread heads its title, as it heads the thread once folded.
+	chevron := []look.Span{look.Chevron(true, false)}
+	if len(state.lead) > 0 {
+		chevron = state.lead
+	}
+	title = append(append(slices.Clip(chevron), look.Default(" ")), title...)
 	// A resolved thread recedes: its title and comment headers are dimmed.
 	done := t.State == store.ThreadResolved
 	lines := []string{ansi.Truncate(r.th.Render(look.Plain, look.DimIf(done, title...)...), inner, "")}

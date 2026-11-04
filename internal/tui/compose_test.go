@@ -225,7 +225,8 @@ func TestBoxWidths(t *testing.T) {
 		}
 		var got int
 		for _, l := range strings.Split(e.screen(), "\n") {
-			if i := strings.Index(l, "| #1 "); i >= 0 {
+			if i := strings.Index(l, " #1 "); i >= 0 && strings.Contains(l[:i], "| ") {
+				i = strings.LastIndex(l[:i], "| ")
 				box := l[i:]
 				got = strings.LastIndex(box, "|") + 1
 			}

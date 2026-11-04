@@ -143,9 +143,9 @@ func (m *model) rowControls(i int, state *rowState) {
 	case rowCommit:
 		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
 	case rowThread:
+		// A thread folds and unfolds from its chevron; its buttons show only while it is open.
+		state.lead = controls(t, threadFold.checked(!r.collapsed))
 		if r.collapsed {
-			// A folded thread opens from its chevron; its buttons show once it is open.
-			state.lead = controls(t, threadFold.checked(false))
 			return
 		}
 		resolve := resolveButton

@@ -225,6 +225,26 @@ func TestCommentOnTheMessageFromItsMargin(t *testing.T) {
 	}
 }
 
+// An open thread folds from the chevron heading its box, and unfolds from the one heading its line.
+func TestOpenThreadFoldsFromItsChevron(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	e.pressRun("l")
+	onThread := func(r row) bool { return r.kind == rowThread && r.thread.Seq == 1 }
+	e.cursorTo(onThread)
+	at := "row" + strconv.Itoa(e.m.main.cursor) + ":"
+	e.click(at, "expand")
+	e.cursorTo(onThread)
+	if r := e.m.main.rows[e.m.main.cursor]; !r.collapsed {
+		t.Fatalf("after its chevron, thread #1 is open:\n%s", e.screen())
+	}
+	e.click("row"+strconv.Itoa(e.m.main.cursor)+":", "expand")
+	e.cursorTo(onThread)
+	if r := e.m.main.rows[e.m.main.cursor]; r.collapsed {
+		t.Errorf("after its chevron again, thread #1 is folded:\n%s", e.screen())
+	}
+}
+
 // A thread's buttons, a review's Delete, a commit's Viewed box, Prev and Next, and the overview's
 // filter run what their keys do.
 func TestThreadAndTitleControls(t *testing.T) {
@@ -233,7 +253,7 @@ func TestThreadAndTitleControls(t *testing.T) {
 	e.pressRun("l")
 	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.Seq == 2 })
 	at := "row" + strconv.Itoa(e.m.main.cursor) + ":"
-	if got, want := e.shownControls(at), []string{"reply", "resolve", "edit", "delete"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls(at), []string{"expand", "reply", "resolve", "edit", "delete"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("an addressed thread's controls = %q, want %q", got, want)
 	}
 	e.click(at, "resolve")
