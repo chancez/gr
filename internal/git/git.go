@@ -75,7 +75,9 @@ func run(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte,
 	err := cmd.Run()
 	slog.Debug("git", "args", args, "duration", time.Since(start), "bytes", stdout.Len(), "err", err)
 	if err != nil {
-		return nil, &Error{Args: args, Stderr: stderr.String(), Err: err}
+		// What git wrote is kept, for a command whose exit code is an answer, as merge-tree's 1 for
+		// a merge with conflicts.
+		return stdout.Bytes(), &Error{Args: args, Stderr: stderr.String(), Err: err}
 	}
 	return stdout.Bytes(), nil
 }

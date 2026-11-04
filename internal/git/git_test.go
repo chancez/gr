@@ -443,3 +443,43 @@ func TestRepoName(t *testing.T) {
 		}
 	}
 }
+
+func TestMergeTree(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "base\n", "b.txt", "base\n")
+	base := r.Commit("base")
+	r.Write("a.txt", "ours\n")
+	ours := r.Commit("ours")
+	r.Git("checkout", "-q", "-b", "theirs", base)
+	r.Write("b.txt", "theirs\n")
+	clean := r.Commit("theirs, apart from ours")
+	r.Write("a.txt", "theirs\n")
+	conflicting := r.Commit("theirs, on ours' line")
+	repo := open(t, r.Dir)
+
+	type merged struct {
+		Clean bool
+		A     string
+		B     string
+	}
+	merge := func(theirs string) merged {
+		t.Helper()
+		tree, ok, err := repo.MergeTree(t.Context(), base, ours, theirs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return merged{Clean: ok, A: r.Git("show", tree+":a.txt"), B: r.Git("show", tree+":b.txt")}
+	}
+
+	if diff := cmp.Diff(merged{Clean: true, A: "ours", B: "theirs"}, merge(clean)); diff != "" {
+		t.Errorf("clean merge (-want +got):\n%s", diff)
+	}
+	// A conflict is a merge too: its tree has the markers, as the interdiff shows them.
+	want := merged{
+		A: "<<<<<<< " + ours + "\nours\n=======\ntheirs\n>>>>>>> " + conflicting,
+		B: "theirs",
+	}
+	if diff := cmp.Diff(want, merge(conflicting)); diff != "" {
+		t.Errorf("conflicting merge (-want +got):\n%s", diff)
+	}
+}
