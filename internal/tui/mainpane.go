@@ -144,7 +144,7 @@ func (m *model) rowControls(i int, state *rowState) {
 		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
 	case rowThread:
 		// A thread folds and unfolds from its chevron; its buttons show only while it is open.
-		state.lead = controls(t, threadFold.checked(!r.collapsed))
+		state.lead = controls(t, threadFold.checked(!r.collapsed).heading(append([]look.Span{look.Default(" ")}, threadName(*r.thread)...)...))
 		if r.collapsed {
 			return
 		}
@@ -160,7 +160,7 @@ func (m *model) rowControls(i int, state *rowState) {
 	case rowReview:
 		state.controls = controls(t, deleteReview)
 	case rowFile:
-		state.lead = controls(t, fileFold.checked(!r.collapsed))
+		state.lead = controls(t, fileFold.checked(!r.collapsed).heading(look.File(m.views[m.current].files[r.file])))
 		state.controls = controls(t, viewedBox.checked(r.reviewed))
 		if len(state.controls) == 0 && r.reviewed {
 			// Where it cannot be marked, as in the interdiff, the file still says it is reviewed.

@@ -19,6 +19,9 @@ type control struct {
 	on bool
 	// lit shows a quiet control as the mouse or cursor reaches it.
 	lit bool
+	// after is drawn after a chevron, as part of it, so a click on what it heads, as a file's name,
+	// folds too: a chevron alone is one cell to hit.
+	after []look.Span
 	// off draws the control greyed, for no click to run, where there is nothing for it to do.
 	off bool
 	// selects makes a press on the control start a line selection, and the release run it on what
@@ -75,6 +78,12 @@ func (c control) disabledIf(off bool) control {
 	return c
 }
 
+// heading is c, a chevron, drawn with spans after it that a click on folds too.
+func (c control) heading(spans ...look.Span) control {
+	c.after = spans
+	return c
+}
+
 // lighted is c, lit when on.
 func (c control) lighted(on bool) control {
 	c.lit = on
@@ -105,7 +114,7 @@ func (c control) spans(key string) []look.Span {
 	case lookQuietCheckbox:
 		return look.QuietCheckbox(c.label, key, c.on, c.lit)
 	case lookChevron:
-		return []look.Span{look.Chevron(c.on, c.lit)}
+		return append([]look.Span{look.Chevron(c.on, c.lit)}, c.after...)
 	}
 	return look.Button(c.icon, c.label, key)
 }

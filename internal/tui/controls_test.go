@@ -413,3 +413,63 @@ func TestChevronKeepsTheScreenStill(t *testing.T) {
 		t.Error("the clicked thread is still folded")
 	}
 }
+
+// A chevron folds from what it heads too, a file's name or a thread's number, not only from its one
+// cell.
+func TestChevronsHeadTheirLabels(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("All changes")
+	e.pressRun("l")
+	header := -1
+	for i, r := range e.m.main.rows {
+		if r.kind == rowFile && r.file == 1 {
+			header = i
+		}
+	}
+	end := func(where, title string) look.Zone {
+		t.Helper()
+		for _, c := range e.onScreen(where) {
+			if c.title == title {
+				// A control's spans are marked one by one: it covers them all.
+				z := c.zone
+				for _, p := range e.m.zones[c.id] {
+					if p.Y == z.Y {
+						z.W = max(z.W, p.X+p.W-z.X)
+					}
+				}
+				return z
+			}
+		}
+		t.Fatalf("no %q control at %s:\n%s", title, where, e.screen())
+		return look.Zone{}
+	}
+	z := end("row"+strconv.Itoa(header)+":", actFoldFile.Title)
+	if z.W < len(" A util.go") {
+		t.Errorf("the file's chevron covers %d cells, want its name too", z.W)
+	}
+	before := e.m.main.rows[header].collapsed
+	e.m.Update(tea.MouseClickMsg{X: z.X + z.W - 1, Y: z.Y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: z.X + z.W - 1, Y: z.Y, Button: tea.MouseLeft})
+	for _, r := range e.m.main.rows {
+		if r.kind == rowFile && r.file == 1 && r.collapsed == before {
+			t.Error("a click on the file's name did not fold it")
+		}
+	}
+
+	e.press("h")
+	e.openNav("Overview")
+	thread := -1
+	for i, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.Seq == 3 {
+			thread = i
+		}
+	}
+	z = end("row"+strconv.Itoa(thread)+":", actToggleThread.Title)
+	e.m.Update(tea.MouseClickMsg{X: z.X + z.W - 1, Y: z.Y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: z.X + z.W - 1, Y: z.Y, Button: tea.MouseLeft})
+	for _, r := range e.m.main.rows {
+		if r.kind == rowThread && r.thread.Seq == 3 && r.collapsed {
+			t.Error("a click on the thread's number did not open it")
+		}
+	}
+}

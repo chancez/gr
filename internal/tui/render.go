@@ -150,9 +150,10 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
+		// The chevron, when there is one, heads the file's name and folds from either.
 		spans := []look.Span{look.File(f)}
 		if len(state.lead) > 0 {
-			spans = append(state.lead, spans...)
+			spans = state.lead
 		}
 		if size, ok := diffSize(f); ok {
 			spans = append(append(spans, look.Default("  ")), size...)
@@ -399,6 +400,15 @@ func boxWidthIn(width, indent int) int {
 	return max(min(width-indent-1, maxBoxWidth), 24)
 }
 
+// threadName is what a thread is called: its number, or a summary its review's.
+func threadName(t review.ThreadView) []look.Span {
+	if t.Summary {
+		// A summary belongs to its review, so it is titled as the review's rather than numbered.
+		return look.SummaryTitle(t)
+	}
+	return []look.Span{look.Ref(t)}
+}
+
 // threadIndent is how far a thread's box is indented: to where the code starts, past the line
 // numbers, for a thread on lines, so the box hangs off the lines its numbers are tinted on, and a
 // little for one on a file, a commit, or the change.
@@ -509,11 +519,12 @@ func (r *renderer) threadHeader(d *changeData, t review.ThreadView, width int, s
 	if len(t.Comments) > 0 && !open {
 		first = t.Comments[0].Author.Name + ": " + strings.Join(strings.Fields(t.Comments[0].Body), " ")
 	}
-	chevron := []look.Span{look.Chevron(open, false)}
+	// The chevron heads the thread's number, and folds from either.
+	head := append([]look.Span{look.Chevron(open, false), look.Default(" ")}, threadName(t)...)
 	if len(state.lead) > 0 {
-		chevron = state.lead
+		head = state.lead
 	}
-	spans := append(append([]look.Span{look.Muted("  ")}, chevron...), look.Muted(" "+t.Label()+" "))
+	spans := append(append([]look.Span{look.Muted("  ")}, head...), look.Muted(" "))
 	spans = append(spans, look.State(t, d.isDraft(t.ReviewID))...)
 	spans = append(spans, look.Muted("  "))
 	spans = append(spans, where...)
@@ -529,21 +540,19 @@ func (r *renderer) threadHeader(d *changeData, t review.ThreadView, width int, s
 func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, state rowState, indent int, titled bool) ([]string, []int) {
 	boxWidth := boxWidthIn(width, indent)
 	inner := boxWidth - 4
-	title := []look.Span{look.Ref(t), look.Default(" ")}
-	if t.Summary {
-		// A summary belongs to its review, so it is titled as the review's rather than numbered.
-		title = append(look.SummaryTitle(t), look.Default(" "))
-	}
+	name := threadName(t)
+	title := append(slices.Clip(name), look.Default(" "))
 	title = append(title, look.State(t, d.isDraft(t.ReviewID))...)
 	if loc := look.MarkSHA(commitMentions.Zone(t.Location.Commit), look.Location(t.Location)...); len(loc) > 0 && !t.Summary {
 		title = append(append(title, look.Muted("  ")), loc...)
 	}
-	// The chevron that folds the thread heads its title, as it heads the thread once folded.
-	chevron := []look.Span{look.Chevron(true, false)}
+	// The chevron that folds the thread heads its title, and its number, as it heads the thread
+	// once folded.
 	if len(state.lead) > 0 {
-		chevron = state.lead
+		title = append(slices.Clip(state.lead), title[len(name):]...)
+	} else {
+		title = append([]look.Span{look.Chevron(true, false), look.Default(" ")}, title...)
 	}
-	title = append(append(slices.Clip(chevron), look.Default(" ")), title...)
 	// A resolved thread recedes: its title and comment headers are dimmed.
 	done := t.State == store.ThreadResolved
 	var lines []string
