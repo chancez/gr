@@ -73,7 +73,7 @@ func TestCommentBoxOpensInline(t *testing.T) {
 	e.pressRun("l")
 	e.cursorTo(func(r row) bool { return addedLine(r) && strings.Contains(r.line.Text, "println") })
 	before := strings.Split(e.screen(), "\n")
-	y := e.m.main.starts[e.m.main.cursor] - e.m.main.offset + 1
+	y := e.m.main.starts[e.m.main.cursor] - e.m.main.offset + e.m.mainTop()
 	e.press("c")
 	e.typeText("Greet someone else.")
 	after := strings.Split(e.screen(), "\n")

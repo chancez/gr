@@ -75,7 +75,7 @@ func (e *tuiEnv) click(where, title string) {
 func (e *tuiEnv) hoverRow(i int) {
 	e.t.Helper()
 	nw, _, _ := e.m.layoutSizes()
-	_, cmd := e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: e.m.main.starts[i] - e.m.main.offset + 1})
+	_, cmd := e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: e.m.main.starts[i] - e.m.main.offset + e.m.mainTop()})
 	e.drain(cmd)
 }
 
@@ -287,7 +287,7 @@ func TestDragTheCommentPlus(t *testing.T) {
 	if plus.W == 0 {
 		t.Fatalf("no + on the line under the mouse:\n%s", e.screen())
 	}
-	y := func(i int) int { return e.m.main.starts[i] - e.m.main.offset + 1 }
+	y := func(i int) int { return e.m.main.starts[i] - e.m.main.offset + e.m.mainTop() }
 	e.m.Update(tea.MouseClickMsg{X: plus.X, Y: plus.Y, Button: tea.MouseLeft})
 	e.m.Update(tea.MouseMotionMsg{X: plus.X, Y: y(start + 2), Button: tea.MouseLeft})
 	// Below the last line, the selection stays where it was.

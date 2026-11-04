@@ -438,10 +438,26 @@ const composeHeight = 6
 // mainHeight is the main pane's row area, below its header line.
 func mainHeight(bodyHeight int) int { return max(bodyHeight-1, 1) }
 
+// pinned are the lines pinned under the main pane's title bar, which stay put while it scrolls: the
+// overview's change details.
+func (m *model) pinned() [][]look.Span {
+	if m.data == nil || m.current >= len(m.views) || m.views[m.current].kind != viewOverview {
+		return nil
+	}
+	return overviewDetails(m.data)
+}
+
+// mainTop is the screen line the main pane's rows start on, under its title bar and what is
+// pinned there.
+func (m *model) mainTop() int { return 1 + len(m.pinned()) }
+
+// rowsHeight is the main pane's height for rows, less what is pinned.
+func (m *model) rowsHeight(bodyHeight int) int { return max(mainHeight(bodyHeight)-len(m.pinned()), 1) }
+
 // relayout recomputes row heights after a size change.
 func (m *model) relayout(resized bool) {
 	_, mw, bh := m.layoutSizes()
-	m.main.height = mainHeight(bh)
+	m.main.height = m.rowsHeight(bh)
 	if resized || m.main.width != mw {
 		m.main.width = mw
 		if m.data != nil {
@@ -575,7 +591,12 @@ func (m *model) frame() string {
 			body[i] = m.highlightMatches(body[i])
 		}
 	}
-	mainLines := append([]string{m.mainHeader(mw)}, body...)
+	mainLines := []string{m.mainHeader(mw)}
+	for _, l := range m.pinned() {
+		// Past the margin the overview's reader marks its item in, as its rows are.
+		mainLines = append(mainLines, m.r.th.Draw(look.Plain, mw, append([]look.Span{look.Default(" ")}, l...)...))
+	}
+	mainLines = append(mainLines, body...)
 	navLines := m.renderSidebar(nw, bh)
 	sep := m.r.th.Render(look.Plain, look.Border("|", m.dragging))
 	screen := make([]string, bh)

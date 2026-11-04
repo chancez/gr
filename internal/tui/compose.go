@@ -381,8 +381,8 @@ func (m *model) composeCursor() *tea.Cursor {
 	// The box's top border and title are above its text, inside the indent, border, and padding.
 	end := p.starts[p.attach] + p.rowHeight(p.attach)
 	top := end - len(p.attached(p.width)) + 2
-	y := 1 + top - p.offset + c.Y
-	if y < 1 || y > p.height {
+	y := m.mainTop() + top - p.offset + c.Y
+	if y < m.mainTop() || y >= m.mainTop()+p.height {
 		return nil
 	}
 	c.X += left + m.composeIndent() + 2

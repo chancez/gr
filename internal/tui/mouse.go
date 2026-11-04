@@ -118,8 +118,8 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		l.pos = i
 		return m, m.landed(true)
 	}
-	i := m.main.rowAt(msg.Y - 1)
-	if h, ok := m.stickyFile(); ok && msg.Y == 1 {
+	i := m.main.rowAt(msg.Y - m.mainTop())
+	if h, ok := m.stickyFile(); ok && msg.Y == m.mainTop() {
 		// The pinned header is its file's, whatever row it covers.
 		i = h
 	}
@@ -143,7 +143,7 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	m.setFocus(focusMain)
 	m.main.cursor = i
 	if m.main.reader {
-		m.main.selectAt(m.main.offset + msg.Y - 1)
+		m.main.selectAt(m.main.offset + msg.Y - m.mainTop())
 	}
 	if m.split && m.main.rows[i].kind == rowLine {
 		m.main.side = m.sideAt(msg.X)
@@ -170,7 +170,7 @@ type selecting struct {
 // selectFrom starts a line selection at the line at x, y, the press on a control that selects, as
 // the + that comments on a line.
 func (m *model) selectFrom(x, y int, run interact.Bound[*model]) {
-	i := m.main.rowAt(y - 1)
+	i := m.main.rowAt(y - m.mainTop())
 	if i < 0 {
 		return
 	}
@@ -186,7 +186,7 @@ func (m *model) selectFrom(x, y int, run interact.Bound[*model]) {
 // selectTo moves the dragged selection's end to the line at y, within the file it started in.
 func (m *model) selectTo(y int) {
 	p := &m.main
-	i := p.rowAt(y - 1)
+	i := p.rowAt(y - m.mainTop())
 	if i < 0 || p.rows[i].kind != rowLine || p.rows[i].file != p.rows[p.anchor].file {
 		return
 	}
@@ -237,11 +237,11 @@ func (m *model) hoverAt(x, y int) {
 	p := &m.main
 	nw, _, bh := m.layoutSizes()
 	p.hovering = false
-	if m.data == nil || x <= nw || y < 1 || y >= bh {
+	if m.data == nil || x <= nw || y < m.mainTop() || y >= bh {
 		return
 	}
-	i := p.rowAt(y - 1)
-	if h, ok := m.stickyFile(); ok && y == 1 {
+	i := p.rowAt(y - m.mainTop())
+	if h, ok := m.stickyFile(); ok && y == m.mainTop() {
 		i = h
 	}
 	if i < 0 {

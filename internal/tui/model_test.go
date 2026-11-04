@@ -2226,3 +2226,28 @@ func TestThreadRanges(t *testing.T) {
 		t.Errorf("lines 2 to 6 tinted = %v, want %v", got, want)
 	}
 }
+
+// The overview opens at its newest end when there is nowhere saved to open, and its change details
+// stay pinned under the title bar however far it scrolls.
+func TestOverviewOpensAtItsNewestEnd(t *testing.T) {
+	e := goldenEnv(t)
+	m, err := newModel(t.Context(), e.svc, e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.close)
+	m.syncLoads, m.glyphsSet = true, true
+	again := &tuiEnv{t: t, repo: e.repo, svc: e.svc, m: m, chg: e.chg, store: e.store}
+	again.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	again.drain(m.loadCmd())
+	if v := m.views[m.current]; v.kind != viewOverview || m.main.item != len(m.main.items)-1 {
+		t.Errorf("opened on view %d at item %d of %d, want the overview's last", v.kind, m.main.item, len(m.main.items))
+	}
+	for _, keys := range [][]string{nil, {"g"}, {"G"}} {
+		again.press(keys...)
+		lines := strings.Split(again.screen(), "\n")
+		if !strings.Contains(lines[1], "#1 feature") || !strings.Contains(lines[3], "Threads: ") {
+			t.Errorf("after %q the details are not pinned:\n%s", keys, again.screen())
+		}
+	}
+}

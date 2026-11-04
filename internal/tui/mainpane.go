@@ -41,7 +41,7 @@ func (m *model) rebuildMain() {
 	}
 	m.main.anchor = -1
 	_, mw, bh := m.layoutSizes()
-	m.main.width, m.main.height = mw, mainHeight(bh)
+	m.main.width, m.main.height = mw, m.rowsHeight(bh)
 	// The rows' controls go with the rows' drawings.
 	m.drawnControls = nil
 	if m.mode == modeCompose {

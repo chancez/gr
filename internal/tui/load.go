@@ -137,6 +137,7 @@ func (m *model) refreshCmd() tea.Cmd {
 
 // applyData swaps in freshly loaded data, keeping the view and cursor where they were.
 func (m *model) applyData(d *changeData) {
+	first := m.data == nil
 	prevView := ""
 	prevRow := ""
 	if m.data != nil && m.current < len(m.views) {
@@ -171,8 +172,12 @@ func (m *model) applyData(d *changeData) {
 		}
 	}
 	m.buildNav()
-	if p := m.savedPlace; p != nil {
+	switch p := m.savedPlace; {
+	case p != nil:
 		m.savedPlace = nil
 		m.goTo(*p)
+	case first && m.views[m.current].kind == viewOverview:
+		// With nowhere saved, the conversation opens at its newest end, as a chat does.
+		m.main.readerSelect(len(m.main.items) - 1)
 	}
 }

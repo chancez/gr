@@ -50,6 +50,36 @@ func (d *changeData) excerpt(t review.ThreadView) (review.Excerpt, bool) {
 	return review.ExcerptFor(files, t.Location)
 }
 
+// overviewDetails is the change's details and thread counts, pinned at the top of the overview
+// under the title bar so they stay put while it scrolls, then a blank line.
+func overviewDetails(d *changeData) [][]look.Span {
+	c, rev := d.change, d.revision
+	target := string(c.Kind)
+	if c.Kind == store.KindBranch {
+		target = c.Branch + " onto " + c.BaseBranch
+	}
+	counts := map[store.ThreadState]int{}
+	for _, t := range d.threads {
+		counts[t.State]++
+	}
+	return [][]look.Span{
+		{look.Heading(fmt.Sprintf("#%d %s", c.Seq, c.Title))},
+		append([]look.Span{
+			look.Muted(fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
+			look.SHA(rev.BaseSHA).Short(), look.Muted(".."), look.SHA(rev.HeadSHA).Short(),
+			look.Muted(fmt.Sprintf("), %d commits, %d files, ", len(d.commits), len(d.diffFiles))),
+		}, filesSize(d.diffFiles)...),
+		{
+			look.Default("Threads: "),
+			look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),
+			look.StateCount(store.ThreadAddressed, counts[store.ThreadAddressed]), look.Default(", "),
+			look.StateCount(store.ThreadResolved, counts[store.ThreadResolved]),
+			look.Muted("   o opens a thread in the whole diff, O in its commit"),
+		},
+		{},
+	}
+}
+
 // buildOverview lays out the conversation: the change, then each submitted review in order with
 // its summary and the threads started in it, then the viewer's pending review. Line threads show
 // the diff they are about.
@@ -68,33 +98,8 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	blank := []look.Span{}
 
-	c, rev := d.change, d.revision
-	target := string(c.Kind)
-	if c.Kind == store.KindBranch {
-		target = c.Branch + " onto " + c.BaseBranch
-	}
-	counts := map[store.ThreadState]int{}
-	for _, t := range d.threads {
-		counts[t.State]++
-	}
-	rows := []row{
-		plain(
-			[]look.Span{look.Heading(fmt.Sprintf("#%d %s", c.Seq, c.Title))},
-			append([]look.Span{
-				look.Muted(fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
-				look.SHA(rev.BaseSHA).Short(), look.Muted(".."), look.SHA(rev.HeadSHA).Short(),
-				look.Muted(fmt.Sprintf("), %d commits, %d files, ", len(d.commits), len(d.diffFiles))),
-			}, filesSize(d.diffFiles)...),
-			[]look.Span{
-				look.Default("Threads: "),
-				look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),
-				look.StateCount(store.ThreadAddressed, counts[store.ThreadAddressed]), look.Default(", "),
-				look.StateCount(store.ThreadResolved, counts[store.ThreadResolved]),
-				look.Muted("   o opens a thread in the whole diff, O in its commit"),
-			},
-			blank,
-		),
-	}
+	rev := d.revision
+	var rows []row
 
 	byReview := map[string][]int{}
 	for i, t := range d.threads {
