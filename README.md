@@ -115,6 +115,27 @@ vim = true             # vim's modes in the comment box: esc to normal mode, esc
 
 ## For agents
 
+Two skills teach an agent gr: `gr` addresses a review's threads, and `gr-review` reviews a change.
+
+### Install the skills
+
+With the [skills](https://github.com/vercel-labs/skills) CLI, for every project:
+
+```
+npx skills add chancez/gr -g -a claude-code -a codex
+```
+
+Or by hand, into `~/.claude/skills` for Claude Code or `~/.agents/skills` for Codex:
+
+```
+dir=~/.claude/skills    # or ~/.agents/skills
+mkdir -p "$dir"
+curl -fsSL https://github.com/chancez/gr/archive/refs/heads/main.tar.gz |
+  tar -xz -C "$dir" --strip-components=2 gr-main/skills/gr gr-main/skills/gr-review
+```
+
+### Use gr from an agent
+
 Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name. Under an agent, as
 Claude Code, gr refuses to write as your git identity without it.
 
