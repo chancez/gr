@@ -106,3 +106,28 @@ trap 'rm -rf "$GR_DEMO"' EXIT
 sh demo/fixture.sh "$GR_DEMO"
 bin/tools/vhs demo/demo.tape
 """
+
+[tasks.dist]
+description = "Build release archives for macOS and Linux into dist/"
+# gr has no cgo, so one machine builds every target. VERSION is what gr --version prints; it
+# defaults to git describe. The archives' names leave it out, so releases/latest/download finds them.
+run = """
+set -eu
+version="${VERSION:-$(git describe --tags --always --dirty)}"
+rm -rf dist
+mkdir -p dist
+for target in darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+  os="${target%/*}"
+  arch="${target#*/}"
+  name="gr_${os}_${arch}"
+  mkdir -p "dist/$name"
+  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" go build -trimpath \
+    -ldflags "-s -w -X github.com/chancez/gr/internal/cli.version=$version" \
+    -o "dist/$name/gr" ./cmd/gr
+  cp README.md "dist/$name/"
+  # gr at the archive's root, where mise's github backend and a manual install both find it.
+  tar -C "dist/$name" -czf "dist/$name.tar.gz" gr README.md
+  rm -rf "dist/$name"
+done
+(cd dist && shasum -a 256 ./*.tar.gz | sed 's# \\./# #' >checksums.txt)
+"""

@@ -16,10 +16,14 @@ mise run build        # bin/gr
 mise run install      # build, then install to ~/.local/bin/gr
 mise run check        # go fmt, go vet, go test
 mise run test-race
+mise run dist         # release archives for macOS and Linux in dist/
 mise run demo         # render docs/demo.gif from demo/demo.tape; needs ttyd and ffmpeg-full
 go test ./internal/tui -run TestControls          # one test
 go test ./internal/tui -run TestGoldenScreens -update   # rewrite golden screens
 ```
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`: check, `mise run dist`, and a GitHub
+release with the archives and their checksums.
 
 `gofmt -l` exits 0 even when it lists files, so check its output, not its status.
 

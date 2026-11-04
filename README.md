@@ -9,6 +9,35 @@ so every clone and worktree of a repo sees the same reviews.
 
 ## Install
 
+### Via mise
+
+```
+mise use -g github:chancez/gr
+```
+
+### With go install
+
+```
+go install github.com/chancez/gr/cmd/gr@latest
+```
+
+It needs Go 1.27 or newer, which `go` fetches itself unless `GOTOOLCHAIN=local`.
+
+### Manually
+
+Download the archive for your OS and architecture from the
+[releases](https://github.com/chancez/gr/releases), check it against `checksums.txt`, and put the
+`gr` in it on your PATH. Or, for the latest release into `~/.local/bin`:
+
+```
+os=$(uname -s | tr '[:upper:]' '[:lower:]')
+arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+curl -fsSL "https://github.com/chancez/gr/releases/latest/download/gr_${os}_${arch}.tar.gz" |
+  tar -xz -C ~/.local/bin gr
+```
+
+### From source
+
 ```
 mise install
 mise run install    # -> ~/.local/bin/gr
