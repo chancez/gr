@@ -158,6 +158,10 @@ func (m *model) rowControls(i int, state *rowState) {
 		}
 		state.controls = controls(t, append(cs, editButton, deleteButton)...)
 	case rowReview:
+		if r.thread != nil && len(r.bar) > 0 {
+			// The summary folds from a chevron heading the review's name.
+			state.lead = controls(t, reviewFold.checked(!r.collapsed).heading(append([]look.Span{look.Default(" ")}, r.bar[0]...)...))
+		}
 		state.controls = controls(t, deleteReview)
 	case rowFile:
 		state.lead = controls(t, fileFold.checked(!r.collapsed).heading(look.File(m.views[m.current].files[r.file])))

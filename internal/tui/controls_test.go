@@ -473,3 +473,37 @@ func TestChevronsHeadTheirLabels(t *testing.T) {
 		}
 	}
 }
+
+// A review's summary folds from the chevron heading the review's name, or the name itself.
+func TestReviewChevron(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	at := -1
+	for i, r := range e.m.main.rows {
+		if r.kind == rowReview && r.thread != nil {
+			at = i
+		}
+	}
+	if at < 0 {
+		t.Fatal("no review with a summary in the overview")
+	}
+	before := e.m.main.rows[at].collapsed
+	var name look.Zone
+	for _, c := range e.onScreen("row" + strconv.Itoa(at) + ":") {
+		if c.title == actToggleReview.Title {
+			for _, p := range e.m.zones[c.id] {
+				name = p
+			}
+		}
+	}
+	if name.W == 0 {
+		t.Fatalf("no chevron on the review:\n%s", e.screen())
+	}
+	e.m.Update(tea.MouseClickMsg{X: name.X + name.W - 1, Y: name.Y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: name.X + name.W - 1, Y: name.Y, Button: tea.MouseLeft})
+	for _, r := range e.m.main.rows {
+		if r.kind == rowReview && r.thread != nil && r.collapsed == before {
+			t.Errorf("a click on the review's name left its summary folded %v", before)
+		}
+	}
+}

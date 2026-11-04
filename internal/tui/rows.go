@@ -94,6 +94,9 @@ type row struct {
 	excerpt *review.Excerpt
 	// review is set on a rowReview. Its summary thread, if any, is thread.
 	review *store.Review
+	// bar is a rowReview's header bar, in parts drawn apart, and done dims it as finished.
+	bar  [][]look.Span
+	done bool
 	// coverOld and coverNew are the threads on lines that include this line row's, on each side.
 	coverOld []cover
 	coverNew []cover

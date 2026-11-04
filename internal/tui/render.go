@@ -471,12 +471,29 @@ func (r *renderer) renderExcerpt(e review.Excerpt, t review.ThreadView, width in
 // renderReview draws a review's header bar and, unless collapsed, its summary and the replies to it
 // beneath, unboxed, so a summary reads as part of its review rather than as one more thread.
 func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState) []string {
-	lines := rw.text(width)
-	if len(lines) > 0 && len(state.controls) > 0 {
-		// The review's controls follow its bar's text.
-		text := ansi.StringWidth(strings.TrimRight(ansi.Strip(lines[0]), " "))
-		lines[0] = look.Fit(ansi.Truncate(lines[0], text, "")+"  "+r.th.Render(look.Plain, state.controls...), width)
+	// The bar's parts apart, its first headed by the chevron that folds the summary, when there is
+	// one, and its controls after them.
+	parts := rw.bar
+	if len(parts) > 0 {
+		// A bar with no summary to fold keeps the chevron's room, so the reviews' names line up.
+		head := append([]look.Span{look.Default("  ")}, parts[0]...)
+		if len(state.lead) > 0 {
+			head = state.lead
+		}
+		parts = append([][]look.Span{head}, parts[1:]...)
 	}
+	spans := []look.Span{look.Default(" ")}
+	for i, p := range parts {
+		if i > 0 {
+			spans = append(spans, look.Default("  "))
+		}
+		spans = append(spans, p...)
+	}
+	spans = look.DimIf(rw.done, spans...)
+	if len(state.controls) > 0 {
+		spans = append(append(spans, look.Default("  ")), state.controls...)
+	}
+	lines := []string{r.th.DrawCut(look.HeadingBar, width, spans...)}
 	t := rw.thread
 	if t == nil {
 		return lines

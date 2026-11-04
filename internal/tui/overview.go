@@ -148,17 +148,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		return n > 0
 	}
 	reviewRow := func(rv *store.Review, summary *review.ThreadView, parts ...[]look.Span) row {
-		bar := func(width int) []string {
-			spans := []look.Span{look.Default(" ")}
-			for i, p := range parts {
-				if i > 0 {
-					spans = append(spans, look.Default("  "))
-				}
-				spans = append(spans, p...)
-			}
-			return []string{th.Draw(look.HeadingBar, width, look.DimIf(finished(rv.ID), spans...)...)}
-		}
-		return row{kind: rowReview, file: -1, text: bar, review: rv, thread: summary}
+		return row{kind: rowReview, file: -1, review: rv, thread: summary, bar: parts, done: finished(rv.ID)}
 	}
 	divider := func(label string) row {
 		return text(func(width int) []string {
