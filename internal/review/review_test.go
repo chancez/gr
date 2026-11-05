@@ -922,3 +922,64 @@ func TestBranchFromAStaleMain(t *testing.T) {
 		t.Errorf("change on %s, revision %s..%s; want work/main, %s..%s", change.BaseBranch, rev.BaseSHA, rev.HeadSHA, stale, one)
 	}
 }
+
+// Moving a change onto its branch's new name drops a change opened there without reviews.
+func TestSetBranch(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "poc")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(s, "")
+	if _, err := s.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: "hm"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Submit(ctx, change, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Git("branch", "-m", "poc", "feature")
+	if fresh, _ := e.ensure(s, ""); fresh.ID == change.ID {
+		t.Fatal("the renamed branch found the old change before it was moved")
+	}
+
+	type listed struct {
+		Seq    int
+		Branch string
+		Title  string
+	}
+	list := func() []listed {
+		changes, err := s.ListChanges(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []listed
+		for _, c := range changes {
+			out = append(out, listed{Seq: c.Seq, Branch: c.Branch, Title: c.Title})
+		}
+		return out
+	}
+	moved, _, err := s.SetBranch(ctx, change, "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]listed{{Seq: 1, Branch: "feature", Title: "feature"}}, list()); diff != "" {
+		t.Errorf("after moving #1 onto feature (-want +got):\n%s", diff)
+	}
+
+	// A change with reviews on the branch stays, and so does the one that would replace it.
+	e.repo.Git("checkout", "-q", "-b", "other")
+	other, _ := e.ensure(s, "")
+	if _, err := s.Submit(ctx, other, store.VerdictComment, "fine"); err != nil {
+		t.Fatal(err)
+	}
+	for _, branch := range []string{"other", "main", "nope"} {
+		if _, _, err := s.SetBranch(ctx, moved, branch); err == nil {
+			t.Errorf("SetBranch(%q) succeeded, want an error", branch)
+		}
+	}
+	want := []listed{{Seq: 2, Branch: "other", Title: "other"}, {Seq: 1, Branch: "feature", Title: "feature"}}
+	if diff := cmp.Diff(want, list()); diff != "" {
+		t.Errorf("after refused moves (-want +got):\n%s", diff)
+	}
+}

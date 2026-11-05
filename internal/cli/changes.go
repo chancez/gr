@@ -159,6 +159,35 @@ re-anchor onto it.
 	}
 	bf.register(base)
 
+	branch := &cobra.Command{
+		Use:   "branch <change> [branch]",
+		Short: "Move a branch change onto another branch, as after renaming its branch",
+		Long: `Move a branch change onto another branch, by default the current one, as after renaming the branch
+it follows. A change already open on that branch is dropped if it has no reviews; with reviews,
+the move fails. A title that was the old branch's name becomes the new one's.
+
+The change is a number such as 4 or #4, or the branch it follows now, if that still exists.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			svc, change, _, err := a.findChange(cmd.Context(), changeRef{}, args[0], false)
+			if err != nil {
+				return err
+			}
+			to := firstArg(args[1:])
+			if to == "" {
+				if to, err = svc.Git().CurrentBranch(cmd.Context()); err != nil {
+					return fmt.Errorf("name a branch: %w", err)
+				}
+			}
+			from := change.Branch
+			if change, _, err = svc.SetBranch(cmd.Context(), change, to); err != nil {
+				return err
+			}
+			fmt.Fprintf(a.stderr, "change #%d moved from %s to %s\n", change.Seq, from, change.Branch)
+			return nil
+		},
+	}
+
 	var df changeRef
 	var force bool
 	del := &cobra.Command{
@@ -184,7 +213,7 @@ with --force. Abandoning keeps a change listed; deleting removes it.
 	df.register(del)
 	del.Flags().BoolVar(&force, "force", false, "delete a change that has reviews")
 
-	cmd.AddCommand(a.changeListCommand(), show, title, base, del,
+	cmd.AddCommand(a.changeListCommand(), show, title, base, branch, del,
 		setState("abandon", "Abandon a change", store.ChangeAbandoned),
 		setState("merged", "Mark a change merged, as when it landed somewhere other than its base", store.ChangeMerged),
 		setState("reopen", "Reopen an abandoned or merged change", store.ChangeOpen))

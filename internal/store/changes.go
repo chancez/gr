@@ -181,6 +181,12 @@ func (q queries) SetChangeBase(ctx context.Context, id, base string) error {
 		`UPDATE changes SET base_branch = ?, updated_at = ? WHERE id = ?`, base, formatTime(q.now()), id)
 }
 
+// SetChangeBranch sets the branch a branch change follows.
+func (q queries) SetChangeBranch(ctx context.Context, id, branch string) error {
+	return q.execOne(ctx, "change "+id,
+		`UPDATE changes SET branch = ?, updated_at = ? WHERE id = ?`, branch, formatTime(q.now()), id)
+}
+
 // CountChangeContent counts a change's reviews and threads, drafts included.
 func (q queries) CountChangeContent(ctx context.Context, id string) (reviews, threads int, err error) {
 	err = q.q.QueryRowContext(ctx,

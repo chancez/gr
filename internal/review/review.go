@@ -455,6 +455,62 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 	return s.Sync(ctx, change)
 }
 
+// SetBranch moves a branch change onto another branch, such as the one its branch was renamed to.
+// A change already open on that branch goes if it has no reviews, as one opened on the new name
+// before the old was followed; with reviews it stays, and the move fails. A title that was the
+// branch's name follows it.
+func (s *Service) SetBranch(ctx context.Context, change store.Change, branch string) (store.Change, store.Revision, error) {
+	fail := func(err error) (store.Change, store.Revision, error) { return store.Change{}, store.Revision{}, err }
+	if change.Kind != store.KindBranch {
+		return fail(fmt.Errorf("change #%d is a %s, not a branch; it follows no branch to move", change.Seq, change.Kind))
+	}
+	if branch == change.Branch {
+		return s.Sync(ctx, change)
+	}
+	if branch == change.BaseBranch {
+		return fail(fmt.Errorf("branch %s is change #%d's base; a change cannot follow its own base", branch, change.Seq))
+	}
+	exists, err := s.git.BranchExists(ctx, branch)
+	if err != nil {
+		return fail(err)
+	}
+	if !exists {
+		return fail(fmt.Errorf("no branch %s", branch))
+	}
+	err = s.store.Tx(ctx, func(tx *store.Tx) error {
+		other, err := tx.OpenBranchChange(ctx, s.repo.ID, branch)
+		if err != nil && !errors.Is(err, store.ErrNotFound) {
+			return err
+		}
+		if err == nil {
+			reviews, _, err := tx.CountChangeContent(ctx, other.ID)
+			if err != nil {
+				return err
+			}
+			if reviews > 0 {
+				return fmt.Errorf("change #%d already follows %s, with %s", other.Seq, branch, plural(reviews, "review", "reviews"))
+			}
+			slog.Info("change without reviews dropped", "change", other.Seq, "branch", branch)
+			if err := tx.DeleteChange(ctx, other.ID); err != nil {
+				return err
+			}
+		}
+		if change.Title == change.Branch {
+			if err := tx.SetChangeTitle(ctx, change.ID, branch); err != nil {
+				return err
+			}
+			change.Title = branch
+		}
+		return tx.SetChangeBranch(ctx, change.ID, branch)
+	})
+	if err != nil {
+		return fail(err)
+	}
+	slog.Info("change branch moved", "change", change.Seq, "from", change.Branch, "to", branch)
+	change.Branch = branch
+	return s.Sync(ctx, change)
+}
+
 // DeleteChange deletes a change and everything on it. A change with reviews, anyone's drafts
 // included, is deleted only with force, since its reviews and threads go with it.
 func (s *Service) DeleteChange(ctx context.Context, change store.Change, force bool) error {
