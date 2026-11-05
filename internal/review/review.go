@@ -459,7 +459,9 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 // branch.
 type Rename struct {
 	Change store.Change
-	From   string
+	// From is the earlier name, and To the branch that had it.
+	From string
+	To   string
 	// Kept is set while From is still a branch, copied rather than renamed, or made again since: the
 	// change is left where it is, for the user to move or not.
 	Kept bool
@@ -502,7 +504,7 @@ func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool
 				return none(err)
 			}
 		}
-		return Rename{Change: c, From: o.Name, Kept: kept}, true, nil
+		return Rename{Change: c, From: o.Name, To: branch, Kept: kept}, true, nil
 	}
 	return none(nil)
 }

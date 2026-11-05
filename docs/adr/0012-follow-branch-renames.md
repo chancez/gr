@@ -18,8 +18,9 @@ local: it is not pushed or fetched, and expires with the reflog.
   its reflog names an earlier name with an open change, and that name is no longer a branch, the
   change moves onto the new name. A change already opened on the new name without reviews is
   dropped. The CLI and the TUI say what moved.
-- **A copy is left.** When the earlier name is still a branch, copied or made again since, either
-  could be the change's, so gr leaves it and says how to move it.
+- **A copy is asked about.** When the earlier name is still a branch, copied or made again since,
+  either could be the change's, so gr leaves it: the TUI asks whether to move it, and the CLI says
+  how.
   Names before a copy in the log are its source's, and are not followed.
 - **Anything else is moved by hand**, with `gr change branch <change> [branch]`.
 

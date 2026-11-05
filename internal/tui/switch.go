@@ -30,8 +30,11 @@ func (m *model) pickChange() tea.Cmd {
 }
 
 // inNewTab opens a change in a new tab.
-func inNewTab(_ *model, svc *review.Service, c store.Change) tea.Cmd {
-	return tabCmd(newTabMsg{svc: svc, change: c})
+func inNewTab(m *model, svc *review.Service, c store.Change) tea.Cmd {
+	// The new tab offers what the branch picked was copied from.
+	msg := newTabMsg{svc: svc, change: c, rename: m.renamed}
+	m.renamed = nil
+	return tabCmd(msg)
 }
 
 // pickTab opens a picker of the changes and branches of this repository, then the open changes of
@@ -241,12 +244,37 @@ func (m *model) reviewBranch(svc *review.Service, b string, open openChange) tea
 		m.setError(err)
 		return nil
 	}
+	if ok && r.Kept {
+		m.renamed = &r
+	}
 	cmd := open(m, svc, c)
+	if m.renamed != nil {
+		// Opened here, not in a new tab, which took it.
+		m.offerRename(*m.renamed)
+		m.renamed = nil
+	}
 	if ok && !r.Kept {
 		// After opening, which says what it opened.
 		m.setStatus("change #%d follows %s, renamed from %s", r.Change.Seq, b, r.From)
 	}
 	return cmd
+}
+
+// movedMsg is a change moved onto the branch of the one shown, to show in its place.
+type movedMsg struct {
+	change store.Change
+	err    error
+}
+
+// offerRename asks whether r's change, of the branch the one shown was copied from, should follow
+// this branch instead, in place of the new change shown, which goes.
+func (m *model) offerRename(r review.Rename) {
+	svc, ctx := m.svc, m.ctx
+	m.ask(fmt.Sprintf("%s was copied from %s. Move change #%d onto %s, in place of this new change?", r.To, r.From, r.Change.Seq, r.To),
+		func() tea.Msg {
+			c, _, err := svc.SetBranch(ctx, r.Change, r.To)
+			return movedMsg{change: c, err: err}
+		})
 }
 
 // switchChange shows change c in place of the one shown: everything about the old change is

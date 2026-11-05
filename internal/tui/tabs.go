@@ -63,6 +63,8 @@ type tabMsg struct {
 type newTabMsg struct {
 	svc    *review.Service
 	change store.Change
+	// rename is a change the new tab offers to move onto its change's branch.
+	rename *review.Rename
 }
 
 type closeTabMsg struct{}
@@ -241,7 +243,9 @@ func (a *app) open(msg newTabMsg) tea.Cmd {
 			return nil
 		}
 	}
-	m, err := newTab(a.ctx, msg.svc, msg.change, a.opts)
+	opts := a.opts
+	opts.Notice, opts.Rename = "", msg.rename
+	m, err := newTab(a.ctx, msg.svc, msg.change, opts)
 	if err != nil {
 		cur := a.tabs[a.active]
 		cur.setError(err)

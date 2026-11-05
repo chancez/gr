@@ -34,6 +34,9 @@ type Options struct {
 	Theme string
 	// Notice is shown in the status bar when the TUI opens, such as a base gr chose.
 	Notice string
+	// Rename is a change of the branch the one opened was copied from, which the TUI offers to
+	// move onto it.
+	Rename *review.Rename
 	// Glyphs is "ascii", "unicode", or "nerd". Empty picks them from what the terminal is.
 	Glyphs string
 	// Scrolloff is the lines kept between the cursor and the main pane's edges. Nil is the default.
@@ -92,6 +95,9 @@ func newTab(ctx context.Context, svc *review.Service, change store.Change, opts 
 	m.openRepo, m.opened = opts.OpenRepo, change
 	if p, ok := m.readPlace(change); ok {
 		m.savedPlace = &p
+	}
+	if opts.Rename != nil && opts.Rename.Kept {
+		m.offerRename(*opts.Rename)
 	}
 	return m, nil
 }
@@ -157,6 +163,9 @@ type model struct {
 	opened store.Change
 	// openRepo opens another repository, for its changes to open in tabs.
 	openRepo func(ctx context.Context, dir string) (*review.Service, error)
+	// renamed is, while a branch picked is opened, the change of the branch it was copied from,
+	// for whichever tab shows it to offer.
+	renamed *review.Rename
 	// savedPlace is where you were in the change, to open once it loads, and pendingPlace where to
 	// go once its view's diff does.
 	savedPlace   *place
@@ -376,6 +385,14 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewLoadedMsg:
 		m.applyView(msg)
 		return m, nil
+	case movedMsg:
+		if msg.err != nil {
+			m.setError(msg.err)
+			return m, nil
+		}
+		cmd := m.switchChange(msg.change)
+		m.setStatus("change #%d follows %s now", msg.change.Seq, msg.change.Branch)
+		return m, cmd
 	case opMsg:
 		if msg.err != nil {
 			m.setError(msg.err)

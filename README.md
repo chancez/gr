@@ -58,7 +58,8 @@ remote, or the one that is not `remote.pushDefault`. A local branch of the same 
 unless it is only behind the remote's. A branch stacked on another local branch is based on that
 one. `--base` overrides it, and a change remembers its base. To move a change onto another base
 later, pass a different `--base`, run `gr change base <branch>`, or press `B` in the TUI. A change
-follows its branch through `git branch -m`. To move one onto another branch yourself, run
+follows its branch through `git branch -m`, and for a branch copied with `git branch -c` the TUI
+asks whether it should. To move one onto another branch yourself, run
 `gr change branch <change>` on that branch.
 
 The sidebar lists the overview, the changes since your last review once the branch has moved, each

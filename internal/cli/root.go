@@ -44,6 +44,8 @@ type app struct {
 	svc   *review.Service
 	// notice is something gr decided for the user, shown when the TUI opens.
 	notice string
+	// rename is the change of the branch the one opened was copied from, for the TUI to offer.
+	rename *review.Rename
 }
 
 // Execute runs gr with os.Args and returns the exit code.
@@ -100,7 +102,7 @@ commands only find one, and take a change number such as 4 directly.`,
 		if err != nil {
 			return err
 		}
-		opts.Notice = a.notice
+		opts.Notice, opts.Rename = a.notice, a.rename
 		// Another repository's changes open in tabs through a service of their own, on the same
 		// database and as the same author.
 		opts.OpenRepo = func(ctx context.Context, dir string) (*review.Service, error) {
@@ -303,14 +305,15 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 }
 
 // followRename moves the change of the branch's earlier name onto it, when git recorded a rename,
-// and says so. A branch copied from one with a change is only told about, as gr change branch
-// moves it. A moved change keeps its base, so the target is read again.
+// and says so. A branch copied from one with a change is only told about, for the TUI to offer
+// and gr change branch to move. A moved change keeps its base, so the target is read again.
 func (a *app) followRename(ctx context.Context, svc *review.Service, target review.Target, spec, base string) (review.Target, error) {
 	r, ok, err := svc.FollowRename(ctx, target.Branch)
 	if err != nil || !ok {
 		return target, err
 	}
 	if r.Kept {
+		a.rename = &r
 		a.notice = fmt.Sprintf("%s was copied from %s, which change #%d follows; gr change branch %d moves it here",
 			target.Branch, r.From, r.Change.Seq, r.Change.Seq)
 		fmt.Fprintln(a.stderr, a.notice)
