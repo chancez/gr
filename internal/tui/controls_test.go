@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/gittest"
 	"github.com/chancez/gr/internal/review"
@@ -505,5 +506,43 @@ func TestReviewChevron(t *testing.T) {
 		if r.kind == rowReview && r.thread != nil && r.collapsed == before {
 			t.Errorf("a click on the review's name left its summary folded %v", before)
 		}
+	}
+}
+
+func TestSummaryButtons(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Overview")
+	summary := func() (int, review.ThreadView) {
+		for i, r := range e.m.main.rows {
+			if r.kind == rowReview && r.thread != nil {
+				return i, *r.thread
+			}
+		}
+		t.Fatal("no review with a summary in the overview")
+		return 0, review.ThreadView{}
+	}
+	at, th := summary()
+	where := "row" + strconv.Itoa(at) + ":"
+	// The bar's chevron and Delete, then the summary's buttons on the line under it.
+	want := []string{actToggleReview.Title, actDeleteReview.Title, actReplyToThread.Title, actResolveThread.Title,
+		actAddressThread.Title}
+	if diff := cmp.Diff(want, e.shownControls(where)); diff != "" {
+		t.Errorf("an open summary's controls (-want +got):\n%s", diff)
+	}
+
+	// Resolving it from its button resolves the summary's thread, which then reopens.
+	e.click(where, actResolveThread.Title)
+	at, got := summary()
+	if got.ID != th.ID || got.State != store.ThreadResolved {
+		t.Fatalf("summary after resolve = %s %s, want %s resolved", got.ID, got.State, th.ID)
+	}
+	// Resolving folds it, which hides its buttons, as a thread's.
+	if !e.m.main.rows[at].collapsed {
+		t.Fatal("a resolved summary is open")
+	}
+	e.press("enter")
+	want = []string{actToggleReview.Title, actDeleteReview.Title, actReplyToThread.Title, actResolveThread.Title}
+	if diff := cmp.Diff(want, e.shownControls("row"+strconv.Itoa(at)+":")); diff != "" {
+		t.Errorf("a resolved summary's controls (-want +got):\n%s", diff)
 	}
 }

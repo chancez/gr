@@ -148,19 +148,18 @@ func (m *model) rowControls(i int, state *rowState) {
 		if r.collapsed {
 			return
 		}
-		resolve := resolveButton
-		if r.thread.State == store.ThreadResolved {
-			resolve = reopenButton
-		}
-		cs := []control{replyButton, resolve}
-		if r.thread.State == store.ThreadOpen {
-			cs = append(cs, addressedButton)
-		}
-		state.controls = controls(t, append(cs, editButton, deleteButton)...)
+		state.controls = controls(t, append(stateButtons(*r.thread), editButton, deleteButton)...)
 	case rowReview:
-		if r.thread != nil && len(r.bar) > 0 {
-			// The summary folds from a chevron heading the review's name.
-			state.lead = controls(t, reviewFold.checked(!r.collapsed).heading(append([]look.Span{look.Default(" ")}, r.bar[0]...)...))
+		if r.thread != nil {
+			if len(r.bar) > 0 {
+				// The summary folds from a chevron heading the review's name.
+				state.lead = controls(t, reviewFold.checked(!r.collapsed).heading(append([]look.Span{look.Default(" ")}, r.bar[0]...)...))
+			}
+			// The summary is a thread, replied to and resolved as one, from buttons under it while
+			// it is open, as a thread's are.
+			if !r.collapsed {
+				state.below = controls(t, stateButtons(*r.thread)...)
+			}
 		}
 		state.controls = controls(t, deleteReview)
 	case rowFile:
@@ -171,6 +170,20 @@ func (m *model) rowControls(i int, state *rowState) {
 			state.controls = []look.Span{look.Reviewed()}
 		}
 	}
+}
+
+// stateButtons are the buttons that reply to a thread and move it on: resolve or reopen, and mark
+// an open one addressed.
+func stateButtons(t review.ThreadView) []control {
+	resolve := resolveButton
+	if t.State == store.ThreadResolved {
+		resolve = reopenButton
+	}
+	cs := []control{replyButton, resolve}
+	if t.State == store.ThreadOpen {
+		cs = append(cs, addressedButton)
+	}
+	return cs
 }
 
 func (m *model) setView(i int) {
