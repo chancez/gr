@@ -181,7 +181,8 @@ func TestMenuOffersOnlyYourComments(t *testing.T) {
 	e.openNav("Overview")
 	e.cursorTo(func(r row) bool { return r.kind == rowThread })
 	t1, _ := e.m.cursorTarget()
-	if got, want := menuTitles(e.m, t1), []string{"expand", "reply", "resolve", "addressed", "open in diff", "open in commit", "filter", "comment", "submit"}; !slices.Equal(got, want) {
+	// A thread on the whole change has no code to open.
+	if got, want := menuTitles(e.m, t1), []string{"expand", "reply", "resolve", "addressed", "filter", "comment", "submit"}; !slices.Equal(got, want) {
 		t.Errorf("menu on another's thread = %q, want %q", got, want)
 	}
 	if bar := ansi.Strip(e.m.renderStatus()); strings.Contains(bar, "edit") || strings.Contains(bar, "delete") {

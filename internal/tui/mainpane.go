@@ -149,6 +149,9 @@ func (m *model) rowControls(i int, state *rowState) {
 			return
 		}
 		state.controls = controls(t, append(stateButtons(*r.thread), editButton, deleteButton)...)
+		// An overview thread opens where its code is from its header, which has the room its box
+		// has not; a thread in the diff is there already, and is offered neither.
+		state.trail = controls(t, openInDiff, openInCommit)
 	case rowReview:
 		if r.thread != nil {
 			if len(r.bar) > 0 {

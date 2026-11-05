@@ -343,12 +343,15 @@ var (
 	actOpenThreadInDiff = &interact.Action[*model, threadSubject]{
 		Title: "open in diff",
 		Help:  "open the thread in the whole diff",
-		Run:   func(m *model, s threadSubject) tea.Cmd { m.openThread(s.thread, true); return nil },
+		// A thread on the whole change has no code to open.
+		Applies: func(m *model, s threadSubject) bool { return s.thread.Location.Scope != store.ScopeChange },
+		Run:     func(m *model, s threadSubject) tea.Cmd { m.openThread(s.thread, true); return nil },
 	}
 	actOpenThreadInCommit = &interact.Action[*model, threadSubject]{
-		Title: "open in commit",
-		Help:  "open the thread in its commit",
-		Run:   func(m *model, s threadSubject) tea.Cmd { m.openThread(s.thread, false); return nil },
+		Title:   "open in commit",
+		Help:    "open the thread in its commit",
+		Applies: func(m *model, s threadSubject) bool { return s.thread.Location.Scope == store.ScopeCommit },
+		Run:     func(m *model, s threadSubject) tea.Cmd { m.openThread(s.thread, false); return nil },
 	}
 )
 

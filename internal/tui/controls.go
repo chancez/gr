@@ -136,6 +136,8 @@ var (
 	editButton      control
 	deleteButton    control
 	deleteReview    control
+	openInDiff      control
+	openInCommit    control
 	prevCommit      control
 	nextCommit      control
 	prevFile        control
@@ -160,6 +162,8 @@ func init() {
 	editButton = link(actEditComment, look.GlyphEdit, "Edit")
 	deleteButton = link(actDeleteComment, look.GlyphDelete, "Delete")
 	deleteReview = link(actDeleteReview, look.GlyphDelete, "Delete")
+	openInDiff = link(actOpenThreadInDiff, look.GlyphNone, "Open in diff")
+	openInCommit = link(actOpenThreadInCommit, look.GlyphNone, "Open in commit")
 	prevCommit = button(actPrevCommit, look.GlyphPrev, "Prev")
 	nextCommit = button(actNextCommit, look.GlyphNext, "Next")
 	prevFile = button(actPrevFile, look.GlyphPrev, "Prev file")

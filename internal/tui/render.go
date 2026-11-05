@@ -61,6 +61,8 @@ type rowState struct {
 	lead     []look.Span
 	// below are drawn on a line of their own under the row, as an open review summary's buttons.
 	below []look.Span
+	// trail are drawn at the end of an open thread's header line in the overview.
+	trail []look.Span
 }
 
 // hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
@@ -560,6 +562,9 @@ func (r *renderer) threadHeader(d *changeData, t review.ThreadView, width int, s
 	spans = append(spans, look.Muted("  "))
 	spans = append(spans, where...)
 	spans = append(spans, look.Muted(fmt.Sprintf("  %d comments  %s", len(t.Comments), first)))
+	if open && len(state.trail) > 0 {
+		spans = append(append(spans, look.Muted("  ")), state.trail...)
+	}
 	surf := look.Plain
 	if state.cursor {
 		surf = cursorSurface(state)

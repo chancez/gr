@@ -254,7 +254,7 @@ func TestThreadAndTitleControls(t *testing.T) {
 	e.pressRun("l")
 	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.Seq == 2 })
 	at := "row" + strconv.Itoa(e.m.main.cursor) + ":"
-	if got, want := e.shownControls(at), []string{"expand", "reply", "resolve", "edit", "delete"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls(at), []string{"expand", "open in diff", "reply", "resolve", "edit", "delete"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("an addressed thread's controls = %q, want %q", got, want)
 	}
 	e.click(at, "resolve")
@@ -544,5 +544,58 @@ func TestSummaryButtons(t *testing.T) {
 	want = []string{actToggleReview.Title, actDeleteReview.Title, actReplyToThread.Title, actResolveThread.Title}
 	if diff := cmp.Diff(want, e.shownControls("row"+strconv.Itoa(at)+":")); diff != "" {
 		t.Errorf("a resolved summary's controls (-want +got):\n%s", diff)
+	}
+}
+
+func TestOverviewThreadOpenButtons(t *testing.T) {
+	e := goldenEnv(t)
+	threadRow := func(scope store.Scope) (int, review.ThreadView) {
+		e.openNav("Overview")
+		for i, r := range e.m.main.rows {
+			if r.kind == rowThread && !r.collapsed && r.thread.Location.Scope == scope {
+				return i, *r.thread
+			}
+		}
+		t.Fatalf("no open %s thread in the overview", scope)
+		return 0, review.ThreadView{}
+	}
+	// opened is what the view and the cursor are on after a click on title.
+	type opened struct {
+		Kind   viewKind
+		Thread string
+	}
+	click := func(i int, title string) opened {
+		e.click("row"+strconv.Itoa(i)+":", title)
+		cur := e.m.main.rows[e.m.main.cursor]
+		got := opened{Kind: e.m.views[e.m.current].kind}
+		if cur.kind == rowThread {
+			got.Thread = cur.thread.ID
+		}
+		return got
+	}
+
+	i, th := threadRow(store.ScopeCommit)
+	// The header's chevron and its open buttons, then the box's.
+	want := []string{actToggleThread.Title, actOpenThreadInDiff.Title, actOpenThreadInCommit.Title,
+		actReplyToThread.Title, actResolveThread.Title, actAddressThread.Title, actEditComment.Title,
+		actDeleteComment.Title}
+	if diff := cmp.Diff(want, e.shownControls("row"+strconv.Itoa(i)+":")); diff != "" {
+		t.Errorf("a commit's thread's header (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff(opened{Kind: viewDiff, Thread: th.ID}, click(i, actOpenThreadInDiff.Title)); diff != "" {
+		t.Errorf("open in diff (-want +got):\n%s", diff)
+	}
+	i, th = threadRow(store.ScopeCommit)
+	if diff := cmp.Diff(opened{Kind: viewCommit, Thread: th.ID}, click(i, actOpenThreadInCommit.Title)); diff != "" {
+		t.Errorf("open in commit (-want +got):\n%s", diff)
+	}
+
+	// A thread on the whole diff has no commit to open.
+	// It is addressed, so it cannot be marked addressed again.
+	i, _ = threadRow(store.ScopeDiff)
+	want = []string{actToggleThread.Title, actOpenThreadInDiff.Title, actReplyToThread.Title, actResolveThread.Title,
+		actEditComment.Title, actDeleteComment.Title}
+	if diff := cmp.Diff(want, e.shownControls("row"+strconv.Itoa(i)+":")); diff != "" {
+		t.Errorf("a whole diff's thread's header (-want +got):\n%s", diff)
 	}
 }
