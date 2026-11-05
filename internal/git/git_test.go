@@ -483,3 +483,36 @@ func TestMergeTree(t *testing.T) {
 		t.Errorf("conflicting merge (-want +got):\n%s", diff)
 	}
 }
+
+func TestBranchOrigins(t *testing.T) {
+	r := gittest.New(t)
+	r.Commit("root")
+	r.Git("branch", "a")
+	r.Git("branch", "-m", "a", "b")
+	r.Git("branch", "-m", "b", "c")
+	r.Git("branch", "-c", "c", "d")
+	r.Git("branch", "-m", "d", "e")
+	r.Git("branch", "fresh")
+	repo := open(t, r.Dir)
+
+	got := map[string][]git.BranchOrigin{}
+	for _, b := range []string{"c", "e", "fresh"} {
+		origins, err := repo.BranchOrigins(t.Context(), b)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got[b] = origins
+	}
+	want := map[string][]git.BranchOrigin{
+		"c": {{Name: "b"}, {Name: "a"}},
+		// A copy's log is its source's before it: c's earlier names are c's, not e's.
+		"e":     {{Name: "d"}, {Name: "c", Copied: true}},
+		"fresh": nil,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("origins (-want +got):\n%s", diff)
+	}
+	if _, err := repo.BranchOrigins(t.Context(), "missing"); err == nil {
+		t.Error("origins of a missing branch: no error")
+	}
+}

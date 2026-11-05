@@ -238,6 +238,44 @@ func (r *Repo) BranchExists(ctx context.Context, name string) (bool, error) {
 	return false, err
 }
 
+// BranchOrigin is a name a branch had before, or the branch it was copied from, by git's record of
+// renaming or copying it.
+type BranchOrigin struct {
+	Name   string
+	Copied bool
+}
+
+// BranchOrigins are branch's earlier names, newest first, from its reflog: git branch -m writes
+// "renamed" there, and git branch -c "copied". A copy brings its source's log along, so the
+// names before a copy are the source's, and the list ends at it. A branch whose log is gone, or
+// was never kept, has none.
+func (r *Repo) BranchOrigins(ctx context.Context, branch string) ([]BranchOrigin, error) {
+	out, err := r.run(ctx, "reflog", "show", "--format=%gs", "refs/heads/"+branch, "--")
+	if err != nil {
+		return nil, err
+	}
+	var origins []BranchOrigin
+	for line := range strings.Lines(string(out)) {
+		// git writes these in English whatever the locale: "Branch: renamed refs/heads/a to
+		// refs/heads/b".
+		verb, rest, ok := strings.Cut(strings.TrimSpace(line), " ")
+		if !ok || verb != "Branch:" {
+			continue
+		}
+		how, rest, _ := strings.Cut(rest, " ")
+		from, _, ok := strings.Cut(rest, " to ")
+		name, isBranch := strings.CutPrefix(from, "refs/heads/")
+		if !ok || !isBranch || how != "renamed" && how != "copied" {
+			continue
+		}
+		origins = append(origins, BranchOrigin{Name: name, Copied: how == "copied"})
+		if how == "copied" {
+			break
+		}
+	}
+	return origins, nil
+}
+
 // CurrentBranch returns the short name of the checked out branch. It fails on a detached HEAD.
 func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
 	return r.line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
