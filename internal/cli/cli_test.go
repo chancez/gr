@@ -476,13 +476,37 @@ func TestChangeBranch(t *testing.T) {
 	human := "Human <h@example.com>"
 	e.run(human, "comment", "-m", "a start")
 	e.run(human, "submit", "-m", "")
-	e.repo.Git("branch", "-m", "poc", "feature")
+	// Made again under a new name rather than renamed, so git has no record to follow.
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Git("branch", "-D", "poc")
 	e.run(human, "review")
 	if got, want := e.run(human, "change", "list"), "#2\topen\tfeature onto main\tfeature\n#1\topen\tpoc onto main\tpoc\n"; got != want {
-		t.Errorf("after the rename, change list = %q, want %q", got, want)
+		t.Errorf("after the new branch, change list = %q, want %q", got, want)
 	}
 	e.run(human, "change", "branch", "1")
 	if got, want := e.run(human, "change", "list"), "#1\topen\tfeature onto main\tfeature\n"; got != want {
 		t.Errorf("after change branch 1, change list = %q, want %q", got, want)
+	}
+}
+
+func TestFollowRenamedBranch(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "poc")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "comment", "-m", "a start")
+	e.run(human, "submit", "-m", "")
+	e.repo.Git("branch", "-m", "poc", "feature")
+	e.run(human, "review")
+	if got, want := e.run(human, "change", "list"), "#1\topen\tfeature onto main\tfeature\n"; got != want {
+		t.Errorf("after renaming poc to feature, change list = %q, want %q", got, want)
+	}
+	// A copy is a branch of its own until moved: the change stays on the branch copied.
+	e.repo.Git("branch", "-c", "feature", "copy")
+	e.repo.Git("checkout", "-q", "copy")
+	e.run(human, "review")
+	if got, want := e.run(human, "change", "list"), "#2\topen\tcopy onto main\tcopy\n#1\topen\tfeature onto main\tfeature\n"; got != want {
+		t.Errorf("after copying, change list = %q, want %q", got, want)
 	}
 }

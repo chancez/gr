@@ -455,6 +455,58 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 	return s.Sync(ctx, change)
 }
 
+// Rename is the change of a branch's earlier name, found by git's record of renaming or copying the
+// branch.
+type Rename struct {
+	Change store.Change
+	From   string
+	// Kept is set while From is still a branch, copied rather than renamed, or made again since: the
+	// change is left where it is, for the user to move or not.
+	Kept bool
+}
+
+// FollowRename finds the open change of an earlier name of branch, when branch has no change with
+// reviews of its own, and moves it onto branch when that name is gone: a renamed branch is the
+// same branch, so its change goes with it. While the earlier name is still a branch, it is
+// reported and left.
+func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool, error) {
+	none := func(err error) (Rename, bool, error) { return Rename{}, false, err }
+	own, err := s.store.OpenBranchChange(ctx, s.repo.ID, branch)
+	if err != nil && !errors.Is(err, store.ErrNotFound) {
+		return none(err)
+	}
+	if err == nil {
+		reviews, _, err := s.store.CountChangeContent(ctx, own.ID)
+		if err != nil || reviews > 0 {
+			return none(err)
+		}
+	}
+	origins, err := s.git.BranchOrigins(ctx, branch)
+	if err != nil {
+		return none(err)
+	}
+	for _, o := range origins {
+		c, err := s.store.OpenBranchChange(ctx, s.repo.ID, o.Name)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return none(err)
+		}
+		kept, err := s.git.BranchExists(ctx, o.Name)
+		if err != nil {
+			return none(err)
+		}
+		if !kept {
+			if c, _, err = s.SetBranch(ctx, c, branch); err != nil {
+				return none(err)
+			}
+		}
+		return Rename{Change: c, From: o.Name, Kept: kept}, true, nil
+	}
+	return none(nil)
+}
+
 // SetBranch moves a branch change onto another branch, such as the one its branch was renamed to.
 // A change already open on that branch goes if it has no reviews, as one opened on the new name
 // before the old was followed; with reviews it stays, and the move fails. A title that was the

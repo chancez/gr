@@ -48,8 +48,8 @@ Repo 1--* Change 1--* Revision
             1--* Thread 1--* Comment
 ```
 
-- A change belongs to a repo. A branch change records the branch name and base branch name. A
-  frozen change records its fixed shas.
+- A change belongs to a repo. A branch change records the branch name and base branch name, and
+  follows the branch when git records a rename (ADR 12). A frozen change records its fixed shas.
 - A revision records `base_sha` and `head_sha`. Base is `merge-base(head, base_branch)`.
 - A thread belongs to a change and records the revision it was created on and its current anchor.
 - A comment belongs to a thread and to the review it was written in. Thread-starting comments are

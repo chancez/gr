@@ -286,6 +286,11 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
 	}
+	if target.Kind == store.KindBranch {
+		if target, err = a.followRename(ctx, svc, target, spec, f.base); err != nil {
+			return nil, store.Change{}, store.Revision{}, err
+		}
+	}
 	c, rev, err := svc.EnsureChange(ctx, target)
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
@@ -295,6 +300,25 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 		fmt.Fprintln(a.stderr, a.notice)
 	}
 	return a.moveBase(ctx, svc, c, rev, f.base)
+}
+
+// followRename moves the change of the branch's earlier name onto it, when git recorded a rename,
+// and says so. A branch copied from one with a change is only told about, as gr change branch
+// moves it. A moved change keeps its base, so the target is read again.
+func (a *app) followRename(ctx context.Context, svc *review.Service, target review.Target, spec, base string) (review.Target, error) {
+	r, ok, err := svc.FollowRename(ctx, target.Branch)
+	if err != nil || !ok {
+		return target, err
+	}
+	if r.Kept {
+		a.notice = fmt.Sprintf("%s was copied from %s, which change #%d follows; gr change branch %d moves it here",
+			target.Branch, r.From, r.Change.Seq, r.Change.Seq)
+		fmt.Fprintln(a.stderr, a.notice)
+		return target, nil
+	}
+	a.notice = fmt.Sprintf("change #%d follows %s, renamed from %s", r.Change.Seq, target.Branch, r.From)
+	fmt.Fprintln(a.stderr, a.notice)
+	return svc.ParseTarget(ctx, spec, base)
 }
 
 // moveBase moves a branch change onto base when --base names a different one, so passing --base

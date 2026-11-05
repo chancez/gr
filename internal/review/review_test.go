@@ -983,3 +983,62 @@ func TestSetBranch(t *testing.T) {
 		t.Errorf("after refused moves (-want +got):\n%s", diff)
 	}
 }
+
+// A change follows its branch through git branch -m, and is only reported for git branch -c.
+func TestFollowRename(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "poc")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	reviewed := func() store.Change {
+		c, _ := e.ensure(s, "")
+		if _, err := s.Submit(ctx, c, store.VerdictComment, "noted"); err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	reviewed()
+
+	type followed struct {
+		OK     bool
+		Seq    int
+		Branch string
+		From   string
+		Kept   bool
+	}
+	follow := func(branch string) followed {
+		t.Helper()
+		r, ok, err := s.FollowRename(ctx, branch)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return followed{OK: ok, Seq: r.Change.Seq, Branch: r.Change.Branch, From: r.From, Kept: r.Kept}
+	}
+
+	// Renamed twice, with a change opened on the new name meanwhile, which has no reviews.
+	e.repo.Git("branch", "-m", "poc", "wip")
+	e.repo.Git("branch", "-m", "wip", "feature")
+	e.ensure(s, "")
+	if diff := cmp.Diff(followed{OK: true, Seq: 1, Branch: "feature", From: "poc"}, follow("feature")); diff != "" {
+		t.Errorf("after renames (-want +got):\n%s", diff)
+	}
+	if c, _ := e.ensure(s, ""); c.Seq != 1 {
+		t.Errorf("feature's change after following = #%d, want #1", c.Seq)
+	}
+	// Its own change has reviews now, so there is nothing to follow.
+	if diff := cmp.Diff(followed{}, follow("feature")); diff != "" {
+		t.Errorf("a branch with its own reviewed change (-want +got):\n%s", diff)
+	}
+
+	// A copy is reported, and its change left on the branch it was copied from.
+	e.repo.Git("branch", "-c", "feature", "copy")
+	if diff := cmp.Diff(followed{OK: true, Seq: 1, Branch: "feature", From: "feature", Kept: true}, follow("copy")); diff != "" {
+		t.Errorf("a copy (-want +got):\n%s", diff)
+	}
+	e.repo.Git("branch", "fresh")
+	if diff := cmp.Diff(followed{}, follow("fresh")); diff != "" {
+		t.Errorf("a branch never renamed (-want +got):\n%s", diff)
+	}
+}

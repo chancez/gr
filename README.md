@@ -57,8 +57,9 @@ The default branch is the base remote's HEAD, or its `main` or `master`. The bas
 remote, or the one that is not `remote.pushDefault`. A local branch of the same name is used instead
 unless it is only behind the remote's. A branch stacked on another local branch is based on that
 one. `--base` overrides it, and a change remembers its base. To move a change onto another base
-later, pass a different `--base`, run `gr change base <branch>`, or press `B` in the TUI. To move a
-change onto another branch, as after renaming its branch, run `gr change branch <change>` on it.
+later, pass a different `--base`, run `gr change base <branch>`, or press `B` in the TUI. A change
+follows its branch through `git branch -m`. To move one onto another branch yourself, run
+`gr change branch <change>` on that branch.
 
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:

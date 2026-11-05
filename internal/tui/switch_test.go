@@ -48,3 +48,33 @@ func TestSwitchChange(t *testing.T) {
 		t.Errorf("after picking #1: change #%d %q", c.Seq, c.Branch)
 	}
 }
+
+// Picking a branch renamed from one with a change opens that change, moved onto the new name.
+func TestSwitchToRenamedBranch(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "-b", "other", "main")
+	e.repo.Write("other.go", "package main\n")
+	e.repo.Commit("add other")
+	target, err := e.svc.ParseTarget(t.Context(), "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.svc.EnsureChange(t.Context(), target); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Git("branch", "-m", "other", "renamed")
+	e.repo.Git("checkout", "-q", "feature")
+	e.press("w")
+	e.typeText("renamed")
+	e.pressRun("enter")
+	type shown struct {
+		Seq    int
+		Branch string
+		Status string
+	}
+	c := e.m.data.change
+	want := shown{Seq: 2, Branch: "renamed", Status: "change #2 follows renamed, renamed from other"}
+	if got := (shown{Seq: c.Seq, Branch: c.Branch, Status: e.m.status}); got != want {
+		t.Errorf("after picking the renamed branch: %+v, want %+v", got, want)
+	}
+}

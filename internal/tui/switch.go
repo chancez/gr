@@ -225,6 +225,12 @@ func changeLabel(c store.Change) string {
 // reviewBranch finds or makes the change for branch b of svc's repository, onto the default
 // branch, and opens it.
 func (m *model) reviewBranch(svc *review.Service, b string, open openChange) tea.Cmd {
+	// A branch renamed from one with a change takes that change along, as the CLI does.
+	r, ok, err := svc.FollowRename(m.ctx, b)
+	if err != nil {
+		m.setError(err)
+		return nil
+	}
 	t, err := svc.ParseTarget(m.ctx, b, "")
 	if err != nil {
 		m.setError(err)
@@ -235,7 +241,12 @@ func (m *model) reviewBranch(svc *review.Service, b string, open openChange) tea
 		m.setError(err)
 		return nil
 	}
-	return open(m, svc, c)
+	cmd := open(m, svc, c)
+	if ok && !r.Kept {
+		// After opening, which says what it opened.
+		m.setStatus("change #%d follows %s, renamed from %s", r.Change.Seq, b, r.From)
+	}
+	return cmd
 }
 
 // switchChange shows change c in place of the one shown: everything about the old change is
