@@ -39,6 +39,22 @@ type changeJSON struct {
 	UpdatedAt  time.Time     `json:"updated_at"`
 }
 
+// moveJSON is a change's branch or base moved: kind is "branch" or "base", and how "hand",
+// "renamed", or "copied".
+type moveJSON struct {
+	Kind      string     `json:"kind"`
+	From      string     `json:"from"`
+	To        string     `json:"to"`
+	How       string     `json:"how"`
+	Author    authorJSON `json:"author"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+func toMove(m store.Move) moveJSON {
+	return moveJSON{Kind: string(m.Kind), From: m.From, To: m.To, How: string(m.How),
+		Author: authorJSON{Name: m.Author.Name, Email: m.Author.Email}, CreatedAt: m.CreatedAt}
+}
+
 type reviewJSON struct {
 	ID          string     `json:"id"`
 	Seq         int        `json:"seq"`

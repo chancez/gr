@@ -502,6 +502,19 @@ func TestFollowRenamedBranch(t *testing.T) {
 	if got, want := e.run(human, "change", "list"), "#1\topen\tfeature onto main\tfeature\n"; got != want {
 		t.Errorf("after renaming poc to feature, change list = %q, want %q", got, want)
 	}
+	var shown changeDetailJSON
+	if err := json.Unmarshal([]byte(e.run(human, "change", "show", "1", "--json")), &shown); err != nil {
+		t.Fatal(err)
+	}
+	want := []moveJSON{{Kind: "branch", From: "poc", To: "feature", How: "renamed", Author: authorJSON{Name: "Human", Email: "h@example.com"}}}
+	if diff := cmp.Diff(want, shown.Moves, cmpopts.IgnoreFields(moveJSON{}, "CreatedAt")); diff != "" {
+		t.Errorf("change show --json moves (-want +got):\n%s", diff)
+	}
+	text := e.run(human, "change", "show", "1")
+	if _, moves, _ := strings.Cut(text, "\nMoves:\n"); !strings.HasSuffix(moves, " branch poc -> feature, following a rename, by Human <h@example.com>\n") {
+		t.Errorf("change show moves = %q", moves)
+	}
+
 	// A copy is a branch of its own until moved: the change stays on the branch copied.
 	e.repo.Git("branch", "-c", "feature", "copy")
 	e.repo.Git("checkout", "-q", "copy")

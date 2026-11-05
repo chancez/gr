@@ -224,8 +224,10 @@ type changeDetailJSON struct {
 	changeJSON
 	Revisions []*revisionJSON `json:"revisions"`
 	Reviews   []reviewJSON    `json:"reviews"`
-	Threads   threadCounts    `json:"threads"`
-	Reviewed  reviewedJSON    `json:"reviewed"`
+	// Moves are the change's branch and base moves, oldest first, every one.
+	Moves    []moveJSON   `json:"moves"`
+	Threads  threadCounts `json:"threads"`
+	Reviewed reviewedJSON `json:"reviewed"`
 }
 
 type threadCounts struct {
@@ -249,6 +251,10 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 		return err
 	}
 	marked, err := reviewedStatus(ctx, svc, change, rev)
+	if err != nil {
+		return err
+	}
+	moves, err := svc.Moves(ctx, change)
 	if err != nil {
 		return err
 	}
@@ -285,6 +291,10 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 			}
 			out.Reviews = append(out.Reviews, rj)
 		}
+		out.Moves = []moveJSON{}
+		for _, m := range moves {
+			out.Moves = append(out.Moves, toMove(m))
+		}
 		return a.printJSON(out)
 	}
 
@@ -312,7 +322,25 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 			}
 		}
 	}
+	if len(moves) > 0 {
+		fmt.Fprintln(w, "\nMoves:")
+		for _, m := range moves {
+			fmt.Fprintf(w, "  %s %s %s -> %s, %s, by %s\n", m.CreatedAt.Local().Format("2006-01-02 15:04"), m.Kind,
+				m.From, m.To, moveHow(m.How), m.Author)
+		}
+	}
 	return nil
+}
+
+// moveHow says how a move came about.
+func moveHow(h store.MoveHow) string {
+	switch h {
+	case store.MovedRenamed:
+		return "following a rename"
+	case store.MovedCopied:
+		return "onto a copy"
+	}
+	return "by hand"
 }
 
 func describeTarget(c store.Change) string {
