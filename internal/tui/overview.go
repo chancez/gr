@@ -2,7 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
@@ -157,6 +159,23 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		})
 	}
 
+	// The moves made before each review show above it, and those since the last after it.
+	moves := d.moves
+	movesBefore := func(at time.Time, all bool) {
+		n := 0
+		for n < len(moves) && (all || moves[n].CreatedAt.Before(at)) {
+			n++
+		}
+		merged := mergeMoves(moves[:n])
+		for _, m := range merged {
+			rows = append(rows, divider(m.label()))
+		}
+		if len(merged) > 0 {
+			rows = append(rows, plain(blank))
+		}
+		moves = moves[n:]
+	}
+
 	shown := 0
 	lastRev := 0
 	for i := range d.reviews {
@@ -164,6 +183,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		if rv.State != store.ReviewSubmitted {
 			continue
 		}
+		movesBefore(rv.SubmittedAt, false)
 		threads := threadRows(byReview[rv.ID])
 		summary := summaryOf(rv.ID)
 		summaryShown := summary != nil && filter.match(*summary)
@@ -203,6 +223,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		rows = append(rows, plain(blank))
 		shown += len(threads) + 1
 	}
+	movesBefore(time.Time{}, true)
 	if draft, ok := d.draft(); ok {
 		threads := threadRows(byReview[draft.ID])
 		if lastRev != 0 && lastRev != rev.Seq {
@@ -224,6 +245,54 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		rows = append(rows, plain([]look.Span{look.Muted(msg)}))
 	}
 	return rows
+}
+
+// mergedMove is a run of moves of one kind with no review between them, shown as one: from where
+// the first started to where the last ended, so trying a few bases before settling on one is one
+// line.
+type mergedMove struct {
+	kind  store.MoveKind
+	how   store.MoveHow
+	from  string
+	to    string
+	count int
+}
+
+// mergeMoves merges moves, which no review comes between, by kind, in the order each kind last
+// moved. A run that ends where it started moved nothing, and is left out.
+func mergeMoves(moves []store.Move) []mergedMove {
+	var out []mergedMove
+	for _, mv := range moves {
+		i := slices.IndexFunc(out, func(m mergedMove) bool { return m.kind == mv.Kind })
+		if i < 0 {
+			out = append(out, mergedMove{kind: mv.Kind, how: mv.How, from: mv.From, to: mv.To, count: 1})
+			continue
+		}
+		m := out[i]
+		m.to, m.count = mv.To, m.count+1
+		if mv.How != m.how {
+			m.how = store.MovedByHand
+		}
+		// It moves to the end, as the kind moved last.
+		out = append(slices.Delete(out, i, i+1), m)
+	}
+	return slices.DeleteFunc(out, func(m mergedMove) bool { return m.from == m.to })
+}
+
+// label is how the overview's timeline says what moved.
+func (m mergedMove) label() string {
+	what := "base changed"
+	if m.kind == store.MoveBranch {
+		what = "branch moved"
+		if m.how == store.MovedRenamed {
+			what = "branch renamed"
+		}
+	}
+	label := fmt.Sprintf("%s: %s -> %s", what, m.from, m.to)
+	if m.count > 1 {
+		label += fmt.Sprintf(" (%d moves)", m.count)
+	}
+	return label
 }
 
 func hasSummary(d *changeData, reviewID string) bool {
