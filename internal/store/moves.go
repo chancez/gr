@@ -18,6 +18,17 @@ func (q queries) CreateMove(ctx context.Context, m Move) (Move, error) {
 	return m, nil
 }
 
+// ChangeByOldBranch finds the change that most recently moved off branch, as one renamed from it.
+func (q queries) ChangeByOldBranch(ctx context.Context, repoID, branch string) (Change, error) {
+	c, err := scanChange(q.q.QueryRowContext(ctx,
+		`SELECT `+prefixed("c", changeColumns)+`
+		FROM changes c JOIN moves m ON m.change_id = c.id
+		WHERE c.repo_id = ? AND m.kind = 'branch' AND m.from_name = ?
+		ORDER BY m.created_at DESC, m.id DESC LIMIT 1`,
+		repoID, branch))
+	return c, notFound(err, "change that followed branch "+branch)
+}
+
 // ListMoves lists a change's moves, oldest first.
 func (q queries) ListMoves(ctx context.Context, changeID string) ([]Move, error) {
 	rows, err := q.q.QueryContext(ctx,

@@ -515,6 +515,13 @@ func TestFollowRenamedBranch(t *testing.T) {
 		t.Errorf("change show moves = %q", moves)
 	}
 
+	// The name it had still finds it, as a change, a target, or --change.
+	for _, args := range [][]string{{"change", "show", "poc"}, {"review", "poc"}, {"change", "show", "--change", "poc"}} {
+		if got, _, _ := strings.Cut(e.run(human, args...), "\n"); got != "Change #1: feature" {
+			t.Errorf("gr %s = %q, want change #1", strings.Join(args, " "), got)
+		}
+	}
+
 	// A copy is a branch of its own until moved: the change stays on the branch copied.
 	e.repo.Git("branch", "-c", "feature", "copy")
 	e.repo.Git("checkout", "-q", "copy")

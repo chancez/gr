@@ -23,6 +23,10 @@ local: it is not pushed or fetched, and expires with the reflog.
   how.
   Names before a copy in the log are its source's, and are not followed.
 - **Anything else is moved by hand**, with `gr change branch <change> [branch]`.
+- **Moves are recorded**, base moves too, with who made them and how. The overview shows them
+  between the reviews they came between, a run of one kind merged into one line and left out
+  when it ends where it started; `gr change show` lists every one. A branch's old name still
+  finds its change.
 
 ## Consequences
 

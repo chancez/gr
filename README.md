@@ -60,7 +60,8 @@ one. `--base` overrides it, and a change remembers its base. To move a change on
 later, pass a different `--base`, run `gr change base <branch>`, or press `B` in the TUI. A change
 follows its branch through `git branch -m`, and for a branch copied with `git branch -c` the TUI
 asks whether it should. To move one onto another branch yourself, run
-`gr change branch <change>` on that branch.
+`gr change branch <change>` on that branch. The overview shows these moves among the reviews,
+`gr change show` lists them, and a branch's old name still finds its change.
 
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:

@@ -286,7 +286,15 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	}
 	target, err := svc.ParseTarget(ctx, spec, f.base)
 	if err != nil {
-		return nil, store.Change{}, store.Revision{}, err
+		// A branch's old name finds the change that moved off it.
+		c, rev, oldErr := svc.ChangeByOldBranch(ctx, spec)
+		if spec == "" || errors.Is(oldErr, store.ErrNotFound) {
+			return nil, store.Change{}, store.Revision{}, err
+		}
+		if oldErr != nil {
+			return nil, store.Change{}, store.Revision{}, oldErr
+		}
+		return a.moveBase(ctx, svc, c, rev, f.base)
 	}
 	if target.Kind == store.KindBranch {
 		if target, err = a.followRename(ctx, svc, target, spec, f.base); err != nil {
@@ -388,6 +396,10 @@ func (a *app) findChange(ctx context.Context, f changeRef, arg string, latest bo
 		return fail(err)
 	}
 	if !isBranch {
+		// A branch's old name finds the change that moved off it.
+		if c, rev, err := svc.ChangeByOldBranch(ctx, branch); err == nil || !errors.Is(err, store.ErrNotFound) {
+			return svc, c, rev, err
+		}
 		if target, err = svc.ParseTarget(ctx, arg, ""); err != nil {
 			return fail(err)
 		}

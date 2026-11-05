@@ -397,7 +397,20 @@ func (s *Service) ChangeByRef(ctx context.Context, ref string) (store.Change, st
 		change, err = s.store.ChangeBySeq(ctx, s.repo.ID, seq)
 	} else {
 		change, err = s.store.ResolveChangePrefix(ctx, s.repo.ID, ref)
+		if errors.Is(err, store.ErrNotFound) {
+			return s.ChangeByOldBranch(ctx, ref)
+		}
 	}
+	if err != nil {
+		return store.Change{}, store.Revision{}, err
+	}
+	return s.Sync(ctx, change)
+}
+
+// ChangeByOldBranch finds the change that followed branch before moving off it, as when the
+// branch was renamed, and syncs it.
+func (s *Service) ChangeByOldBranch(ctx context.Context, branch string) (store.Change, store.Revision, error) {
+	change, err := s.store.ChangeByOldBranch(ctx, s.repo.ID, branch)
 	if err != nil {
 		return store.Change{}, store.Revision{}, err
 	}
