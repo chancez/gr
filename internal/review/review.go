@@ -444,10 +444,20 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 	if base == change.Branch {
 		return fail(fmt.Errorf("branch %s cannot be its own base", base))
 	}
+	if base == change.BaseBranch {
+		return s.Sync(ctx, change)
+	}
 	if _, err := s.git.ResolveCommit(ctx, base); err != nil {
 		return fail(fmt.Errorf("%q is not a branch or commit", base))
 	}
-	if err := s.store.SetChangeBase(ctx, change.ID, base); err != nil {
+	err := s.store.Tx(ctx, func(tx *store.Tx) error {
+		if _, err := tx.CreateMove(ctx, store.Move{ChangeID: change.ID, Kind: store.MoveBase, From: change.BaseBranch, To: base,
+			How: store.MovedByHand, Author: s.author}); err != nil {
+			return err
+		}
+		return tx.SetChangeBase(ctx, change.ID, base)
+	})
+	if err != nil {
 		return fail(err)
 	}
 	slog.Info("change base moved", "change", change.Seq, "from", change.BaseBranch, "to", base)
@@ -500,7 +510,7 @@ func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool
 			return none(err)
 		}
 		if !kept {
-			if c, _, err = s.SetBranch(ctx, c, branch); err != nil {
+			if c, _, err = s.SetBranch(ctx, c, branch, store.MovedRenamed); err != nil {
 				return none(err)
 			}
 		}
@@ -512,8 +522,8 @@ func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool
 // SetBranch moves a branch change onto another branch, such as the one its branch was renamed to.
 // A change already open on that branch goes if it has no reviews, as one opened on the new name
 // before the old was followed; with reviews it stays, and the move fails. A title that was the
-// branch's name follows it.
-func (s *Service) SetBranch(ctx context.Context, change store.Change, branch string) (store.Change, store.Revision, error) {
+// branch's name follows it. The move is recorded as how says it came about.
+func (s *Service) SetBranch(ctx context.Context, change store.Change, branch string, how store.MoveHow) (store.Change, store.Revision, error) {
 	fail := func(err error) (store.Change, store.Revision, error) { return store.Change{}, store.Revision{}, err }
 	if change.Kind != store.KindBranch {
 		return fail(fmt.Errorf("change #%d is a %s, not a branch; it follows no branch to move", change.Seq, change.Kind))
@@ -555,6 +565,10 @@ func (s *Service) SetBranch(ctx context.Context, change store.Change, branch str
 			}
 			change.Title = branch
 		}
+		if _, err := tx.CreateMove(ctx, store.Move{ChangeID: change.ID, Kind: store.MoveBranch, From: change.Branch, To: branch,
+			How: how, Author: s.author}); err != nil {
+			return err
+		}
 		return tx.SetChangeBranch(ctx, change.ID, branch)
 	})
 	if err != nil {
@@ -563,6 +577,11 @@ func (s *Service) SetBranch(ctx context.Context, change store.Change, branch str
 	slog.Info("change branch moved", "change", change.Seq, "from", change.Branch, "to", branch)
 	change.Branch = branch
 	return s.Sync(ctx, change)
+}
+
+// Moves are a change's branch and base moves, oldest first.
+func (s *Service) Moves(ctx context.Context, change store.Change) ([]store.Move, error) {
+	return s.store.ListMoves(ctx, change.ID)
 }
 
 // DeleteChange deletes a change and everything on it. A change with reviews, anyone's drafts

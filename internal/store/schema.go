@@ -154,6 +154,20 @@ CREATE TABLE places (
 	PRIMARY KEY (change_id, author_name, author_email)
 );
 `,
+	`
+CREATE TABLE moves (
+	id           TEXT PRIMARY KEY,
+	change_id    TEXT NOT NULL REFERENCES changes(id) ON DELETE CASCADE,
+	kind         TEXT NOT NULL,
+	from_name    TEXT NOT NULL,
+	to_name      TEXT NOT NULL,
+	how          TEXT NOT NULL,
+	author_name  TEXT NOT NULL,
+	author_email TEXT NOT NULL,
+	created_at   TEXT NOT NULL
+);
+CREATE INDEX moves_change ON moves (change_id, created_at);
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.

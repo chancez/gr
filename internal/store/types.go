@@ -62,6 +62,36 @@ type Change struct {
 	UpdatedAt  time.Time
 }
 
+// MoveKind is what a move moved: the branch a change follows, or its base branch.
+type MoveKind string
+
+const (
+	MoveBranch MoveKind = "branch"
+	MoveBase   MoveKind = "base"
+)
+
+// MoveHow is how a move came about: by hand, or following git's record of renaming or copying the
+// branch.
+type MoveHow string
+
+const (
+	MovedByHand  MoveHow = "hand"
+	MovedRenamed MoveHow = "renamed"
+	MovedCopied  MoveHow = "copied"
+)
+
+// Move is a branch change's branch or base moved from one branch to another.
+type Move struct {
+	ID        string
+	ChangeID  string
+	Kind      MoveKind
+	From      string
+	To        string
+	How       MoveHow
+	Author    Author
+	CreatedAt time.Time
+}
+
 // Revision is a snapshot of a change.
 type Revision struct {
 	ID       string

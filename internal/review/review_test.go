@@ -847,6 +847,14 @@ func TestSetBase(t *testing.T) {
 			t.Errorf("SetBase(%q) succeeded, want an error", base)
 		}
 	}
+	// Moving onto the base it has is no move.
+	if _, _, err := s.SetBase(ctx, moved, "parent"); err != nil {
+		t.Fatal(err)
+	}
+	want := []store.Move{{Kind: store.MoveBase, From: "main", To: "parent", How: store.MovedByHand, Author: human}}
+	if diff := cmp.Diff(want, moves(t, s, moved), ignoreMoveIDs); diff != "" {
+		t.Errorf("moves (-want +got):\n%s", diff)
+	}
 }
 
 // Deleting a change takes everything on it, but a change with reviews needs force.
@@ -959,7 +967,7 @@ func TestSetBranch(t *testing.T) {
 		}
 		return out
 	}
-	moved, _, err := s.SetBranch(ctx, change, "feature")
+	moved, _, err := s.SetBranch(ctx, change, "feature", store.MovedByHand)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,7 +982,7 @@ func TestSetBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, branch := range []string{"other", "main", "nope"} {
-		if _, _, err := s.SetBranch(ctx, moved, branch); err == nil {
+		if _, _, err := s.SetBranch(ctx, moved, branch, store.MovedByHand); err == nil {
 			t.Errorf("SetBranch(%q) succeeded, want an error", branch)
 		}
 	}
@@ -982,6 +990,23 @@ func TestSetBranch(t *testing.T) {
 	if diff := cmp.Diff(want, list()); diff != "" {
 		t.Errorf("after refused moves (-want +got):\n%s", diff)
 	}
+	// Only the move made is recorded.
+	wantMoves := []store.Move{{Kind: store.MoveBranch, From: "poc", To: "feature", How: store.MovedByHand, Author: human}}
+	if diff := cmp.Diff(wantMoves, moves(t, s, moved), ignoreMoveIDs); diff != "" {
+		t.Errorf("moves (-want +got):\n%s", diff)
+	}
+}
+
+// ignoreMoveIDs drops a move's generated fields.
+var ignoreMoveIDs = cmpopts.IgnoreFields(store.Move{}, "ID", "ChangeID", "CreatedAt")
+
+func moves(t *testing.T, s *review.Service, c store.Change) []store.Move {
+	t.Helper()
+	m, err := s.Moves(t.Context(), c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return m
 }
 
 // A change follows its branch through git branch -m, and is only reported for git branch -c.
@@ -1024,8 +1049,14 @@ func TestFollowRename(t *testing.T) {
 	if diff := cmp.Diff(followed{OK: true, Seq: 1, Branch: "feature", From: "poc"}, follow("feature")); diff != "" {
 		t.Errorf("after renames (-want +got):\n%s", diff)
 	}
-	if c, _ := e.ensure(s, ""); c.Seq != 1 {
+	c, _ := e.ensure(s, "")
+	if c.Seq != 1 {
 		t.Errorf("feature's change after following = #%d, want #1", c.Seq)
+	}
+	// Followed once, from the name it had to the one it has.
+	want := []store.Move{{Kind: store.MoveBranch, From: "poc", To: "feature", How: store.MovedRenamed, Author: human}}
+	if diff := cmp.Diff(want, moves(t, s, c), ignoreMoveIDs); diff != "" {
+		t.Errorf("moves (-want +got):\n%s", diff)
 	}
 	// Its own change has reviews now, so there is nothing to follow.
 	if diff := cmp.Diff(followed{}, follow("feature")); diff != "" {

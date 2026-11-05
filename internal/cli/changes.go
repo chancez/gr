@@ -180,7 +180,7 @@ The change is a number such as 4 or #4, or the branch it follows now, if that st
 				}
 			}
 			from := change.Branch
-			if change, _, err = svc.SetBranch(cmd.Context(), change, to); err != nil {
+			if change, _, err = svc.SetBranch(cmd.Context(), change, to, store.MovedByHand); err != nil {
 				return err
 			}
 			fmt.Fprintf(a.stderr, "change #%d moved from %s to %s\n", change.Seq, from, change.Branch)
