@@ -170,3 +170,32 @@ func TestCopiedBranchInNewTab(t *testing.T) {
 		t.Errorf("new tab (-want +got):\n%s", diff)
 	}
 }
+
+// A change whose branch landed since gr last looked is not offered as open.
+func TestSwitchPickerSeesLanded(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "-b", "other", "main")
+	e.repo.Write("other.go", "package main\n")
+	e.repo.Commit("add other")
+	target, err := e.svc.ParseTarget(t.Context(), "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := e.svc.EnsureChange(t.Context(), target); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "other")
+	e.repo.Git("checkout", "-q", "feature")
+	e.press("w")
+	var got []string
+	for _, it := range e.m.picker.items {
+		if !it.heading {
+			got = append(got, it.value)
+		}
+	}
+	// Its branch is left, as any branch without an open change is.
+	if diff := cmp.Diff([]string{"#1 feature onto main", "other"}, got); diff != "" {
+		t.Errorf("picker (-want +got):\n%s", diff)
+	}
+}

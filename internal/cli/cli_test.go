@@ -563,3 +563,26 @@ func TestEmptiedChangeNotice(t *testing.T) {
 		t.Errorf("after gr change merged, change list = %q, want %q", got, want)
 	}
 }
+
+// A branch that landed while gr was closed, as found by pulling main, lists as merged, unless the
+// list reads only what is recorded.
+func TestChangeListSeesLanded(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "review")
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+
+	got := []string{
+		e.run(human, "change", "list", "--sync=false"),
+		e.run(human, "change", "list"),
+		e.run(human, "change", "list", "--all"),
+	}
+	want := []string{"#1\topen\tfeature onto main\tfeature\n", "", "#1\tmerged\tfeature onto main\tfeature\n"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("change lists (-want +got):\n%s", diff)
+	}
+}

@@ -145,7 +145,9 @@ curl -fsSL https://github.com/chancez/gr/archive/refs/heads/main.tar.gz |
 
 ### Use gr from an agent
 
-Every data command takes `--json`. Set `GR_AUTHOR` to your agent's name. Under an agent, as
+Every data command takes `--json`. Commands that only read, as `gr change list`, `gr change show`,
+and `gr threads`, first ask git whether changes moved or landed, so a branch merged since gr last
+looked lists as merged; `--sync=false` reads what is recorded. Set `GR_AUTHOR` to your agent's name. Under an agent, as
 Claude Code, gr refuses to write as your git identity without it.
 
 ```

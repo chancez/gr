@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -52,6 +53,13 @@ func (a *app) changeListCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			// Branches that landed since gr last looked, as when main was pulled, are merged.
+			if changes, err = svc.MarkLanded(ctx, changes); err != nil {
+				return err
+			}
+			if !all {
+				changes = slices.DeleteFunc(changes, func(c store.Change) bool { return c.State != store.ChangeOpen })
+			}
 			if a.json {
 				out := make([]changeJSON, 0, len(changes))
 				for _, c := range changes {
@@ -70,6 +78,7 @@ func (a *app) changeListCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "include merged and abandoned changes")
+	a.syncFlag(cmd)
 	return cmd
 }
 
@@ -93,6 +102,7 @@ func (a *app) changeCommand() *cobra.Command {
 		},
 	}
 	cf.register(show)
+	a.syncFlag(show)
 
 	setState := func(use, short string, state store.ChangeState) *cobra.Command {
 		var cf changeRef

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -186,6 +187,11 @@ func (m *model) repoItems(svc *review.Service, open openChange, branches bool) (
 	if err != nil {
 		return nil, err
 	}
+	// Changes that landed since gr last looked are not open any more.
+	if changes, err = svc.MarkLanded(m.ctx, changes); err != nil {
+		return nil, err
+	}
+	changes = slices.DeleteFunc(changes, func(c store.Change) bool { return c.State != store.ChangeOpen })
 	items := []pickerItem{repoHeading(name, dir)}
 	reviewed := map[string]bool{}
 	for _, c := range changes {

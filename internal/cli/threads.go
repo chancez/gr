@@ -61,6 +61,7 @@ func (a *app) threadsCommand() *cobra.Command {
 		},
 	}
 	cf.register(cmd)
+	a.syncFlag(cmd)
 	cmd.Flags().StringVar(&commit, "commit", "", "list threads anchored to this commit, in any change")
 	cmd.Flags().StringSliceVar(&states, "state", nil, "only threads in these states: open, addressed, resolved")
 	cmd.Flags().BoolVarP(&unresolved, "unresolved", "u", false, "only open and addressed threads")
@@ -96,6 +97,7 @@ func (a *app) threadCommand() *cobra.Command {
 		},
 	}
 	cf.register(cmd)
+	a.syncFlag(cmd)
 	return cmd
 }
 

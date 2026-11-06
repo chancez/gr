@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -30,7 +31,14 @@ type Service struct {
 	beforeReanchorWrite func()
 	// beforeThreadWrite, if set, runs between placing a new thread and its write transaction.
 	beforeThreadWrite func()
+	// stale is set to read changes as recorded, without asking git whether they moved or landed.
+	stale bool
 }
+
+// ReadRecorded makes the service read changes as the database has them: Sync and MarkLanded look
+// at nothing in git, and record nothing. It is for commands that only read, where git's word is not
+// wanted or not worth waiting for.
+func (s *Service) ReadRecorded() { s.stale = true }
 
 // Open identifies the repository and records where it was last seen.
 func Open(ctx context.Context, st *store.Store, g *git.Repo, author store.Author) (*Service, error) {
@@ -274,6 +282,10 @@ func shortSHA(sha string) string {
 // and marks it merged once its commits have landed on the base branch. It returns the change and its
 // latest revision. Nothing is written when nothing moved.
 func (s *Service) Sync(ctx context.Context, change store.Change) (store.Change, store.Revision, error) {
+	if s.stale {
+		latest, err := s.store.LatestRevision(ctx, change.ID)
+		return change, latest, err
+	}
 	for range syncAttempts {
 		synced, rev, err := s.sync(ctx, change)
 		if !errors.Is(err, errStale) {
@@ -403,6 +415,31 @@ func (s *Service) landed(ctx context.Context, change store.Change, latest store.
 		slog.Debug("cannot tell whether a change landed", "change", change.Seq, "err", err)
 	}
 	return err == nil && on
+}
+
+// MarkLanded marks merged the open branch changes of changes whose commits have landed on their
+// base, as since main was pulled, without recording revisions: enough for a list to be right.
+// It returns changes with their states as they are now.
+func (s *Service) MarkLanded(ctx context.Context, changes []store.Change) ([]store.Change, error) {
+	out := slices.Clone(changes)
+	if s.stale {
+		return out, nil
+	}
+	for i, c := range out {
+		if c.Kind != store.KindBranch || c.State != store.ChangeOpen {
+			continue
+		}
+		latest, err := s.store.LatestRevision(ctx, c.ID)
+		if err != nil {
+			return nil, err
+		}
+		if s.landed(ctx, c, latest) {
+			if out[i], _, err = s.markMerged(ctx, c, latest); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return out, nil
 }
 
 // Emptied reports whether an open branch change's branch has no commits of its own any more while

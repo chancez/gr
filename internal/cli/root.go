@@ -42,6 +42,9 @@ type app struct {
 
 	store *store.Store
 	svc   *review.Service
+	// sync asks git whether changes moved or landed before reading them. Commands that only read
+	// can turn it off with --sync=false.
+	sync bool
 	// notice is something gr decided for the user, shown when the TUI opens.
 	notice string
 	// rename is the change of the branch the one opened was copied from, for the TUI to offer.
@@ -68,6 +71,7 @@ func Execute(ctx context.Context) int {
 func (a *app) rootCommand() *cobra.Command {
 	// Names, paths, and comments can hold control characters, which a terminal would act on.
 	a.stdout, a.stderr = termtext.NewWriter(a.stdout), termtext.NewWriter(a.stderr)
+	a.sync = true
 	info, ok := debug.ReadBuildInfo()
 	root := &cobra.Command{
 		Short: "Local code review for git",
@@ -214,6 +218,9 @@ func (a *app) service(ctx context.Context) (*review.Service, error) {
 	if a.svc, err = review.Open(ctx, st, g, author); err != nil {
 		return nil, err
 	}
+	if !a.sync {
+		a.svc.ReadRecorded()
+	}
 	return a.svc, nil
 }
 
@@ -296,7 +303,7 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 		}
 		return a.moveBase(ctx, svc, c, rev, f.base)
 	}
-	if target.Kind == store.KindBranch {
+	if target.Kind == store.KindBranch && a.sync {
 		if target, err = a.followRename(ctx, svc, target, spec, f.base); err != nil {
 			return nil, store.Change{}, store.Revision{}, err
 		}
@@ -305,13 +312,18 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
 	}
-	if emptied, err := svc.Emptied(ctx, c, rev); err != nil {
-		return nil, store.Change{}, store.Revision{}, err
-	} else if emptied {
-		a.notice = fmt.Sprintf("%s has none of change #%d's commits now, and %s has not got them either; "+
-			"gr change merged or gr change abandon closes it", c.Branch, c.Seq, c.BaseBranch)
-		fmt.Fprintln(a.stderr, a.notice)
+	if a.sync {
+		emptied, err := svc.Emptied(ctx, c, rev)
+		if err != nil {
+			return nil, store.Change{}, store.Revision{}, err
+		}
+		if emptied {
+			a.notice = fmt.Sprintf("%s has none of change #%d's commits now, and %s has not got them either; "+
+				"gr change merged or gr change abandon closes it", c.Branch, c.Seq, c.BaseBranch)
+			fmt.Fprintln(a.stderr, a.notice)
+		}
 	}
+
 	if target.Stacked {
 		a.notice = fmt.Sprintf("change #%d is based on %s, the branch it is stacked on; gr change base or B in the TUI moves it", c.Seq, c.BaseBranch)
 		fmt.Fprintln(a.stderr, a.notice)
@@ -337,6 +349,12 @@ func (a *app) followRename(ctx context.Context, svc *review.Service, target revi
 	a.notice = fmt.Sprintf("change #%d follows %s, renamed from %s", r.Change.Seq, target.Branch, r.From)
 	fmt.Fprintln(a.stderr, a.notice)
 	return svc.ParseTarget(ctx, spec, base)
+}
+
+// syncFlag gives a command that only reads --sync, on by default, to read changes as the database
+// has them, without asking git whether they moved or landed.
+func (a *app) syncFlag(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&a.sync, "sync", true, "first ask git whether changes moved or landed; false reads what is recorded")
 }
 
 // moveBase moves a branch change onto base when --base names a different one, so passing --base
