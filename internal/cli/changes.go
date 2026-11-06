@@ -339,6 +339,8 @@ func eventHow(h store.EventHow) string {
 		return "following a rename"
 	case store.ByCopy:
 		return "onto a copy"
+	case store.Detected:
+		return "as its branch landed"
 	}
 	return "by hand"
 }

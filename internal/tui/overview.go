@@ -168,7 +168,7 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		}
 		merged := mergeEvents(moves[:n])
 		for _, m := range merged {
-			rows = append(rows, divider(m.label()))
+			rows = append(rows, divider(m.label(d.change.BaseBranch)))
 		}
 		if len(merged) > 0 {
 			rows = append(rows, plain(blank))
@@ -279,8 +279,19 @@ func mergeEvents(moves []store.Event) []mergedEvent {
 	return slices.DeleteFunc(out, func(m mergedEvent) bool { return m.from == m.to })
 }
 
-// label is how the overview's timeline says what moved.
-func (m mergedEvent) label() string {
+// label is how the overview's timeline says what happened, to a change onto base.
+func (m mergedEvent) label(base string) string {
+	if m.kind == store.EventState {
+		switch {
+		case m.to == string(store.ChangeMerged) && m.how == store.Detected:
+			return "merged into " + base
+		case m.to == string(store.ChangeMerged):
+			return "marked merged"
+		case m.to == string(store.ChangeAbandoned):
+			return "abandoned"
+		}
+		return "reopened"
+	}
 	what := "base changed"
 	if m.kind == store.EventBranch {
 		what = "branch moved"

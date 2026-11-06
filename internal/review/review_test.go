@@ -140,6 +140,10 @@ func TestRevisions(t *testing.T) {
 	if merged.State != store.ChangeMerged || latest.ID != rev3.ID {
 		t.Errorf("after merging: state %s, revision %d; want merged, 2", merged.State, latest.Seq)
 	}
+	want := []store.Event{{Kind: store.EventState, From: "open", To: "merged", How: store.Detected, Author: human}}
+	if diff := cmp.Diff(want, events(t, s, merged), ignoreEventIDs); diff != "" {
+		t.Errorf("events after merging (-want +got):\n%s", diff)
+	}
 	// The branch can be reviewed again as a new change.
 	e.repo.Git("checkout", "-q", "feature")
 	e.repo.Commit("three")
@@ -1071,5 +1075,29 @@ func TestFollowRename(t *testing.T) {
 	e.repo.Git("branch", "fresh")
 	if diff := cmp.Diff(followed{}, follow("fresh")); diff != "" {
 		t.Errorf("a branch never renamed (-want +got):\n%s", diff)
+	}
+}
+
+// Abandoning and reopening a change are its events; setting the state it has is not.
+func TestStateEvents(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	c, _ := e.ensure(s, "")
+	for _, state := range []store.ChangeState{store.ChangeOpen, store.ChangeAbandoned, store.ChangeOpen} {
+		if err := s.SetChangeState(ctx, c, state); err != nil {
+			t.Fatal(err)
+		}
+		c.State = state
+	}
+	want := []store.Event{
+		{Kind: store.EventState, From: "open", To: "abandoned", How: store.ByHand, Author: human},
+		{Kind: store.EventState, From: "abandoned", To: "open", How: store.ByHand, Author: human},
+	}
+	if diff := cmp.Diff(want, events(t, s, c), ignoreEventIDs); diff != "" {
+		t.Errorf("events (-want +got):\n%s", diff)
 	}
 }

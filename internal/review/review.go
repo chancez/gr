@@ -380,7 +380,7 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 }
 
 func (s *Service) markMerged(ctx context.Context, change store.Change, latest store.Revision) (store.Change, store.Revision, error) {
-	if err := s.store.SetChangeState(ctx, change.ID, store.ChangeMerged); err != nil {
+	if err := s.setState(ctx, change, store.ChangeMerged, store.Detected); err != nil {
 		return store.Change{}, store.Revision{}, err
 	}
 	change.State = store.ChangeMerged
@@ -592,7 +592,7 @@ func (s *Service) SetBranch(ctx context.Context, change store.Change, branch str
 	return s.Sync(ctx, change)
 }
 
-// Events are what happened to a change, oldest first: its branch and base moves.
+// Events are what happened to a change, oldest first: its branch and base moves, and its state.
 func (s *Service) Events(ctx context.Context, change store.Change) ([]store.Event, error) {
 	return s.store.ListEvents(ctx, change.ID)
 }
@@ -657,7 +657,22 @@ func (s *Service) OtherRepos(ctx context.Context) ([]RepoChanges, error) {
 
 // SetChangeState abandons or reopens a change.
 func (s *Service) SetChangeState(ctx context.Context, change store.Change, state store.ChangeState) error {
-	return s.store.SetChangeState(ctx, change.ID, state)
+	return s.setState(ctx, change, state, store.ByHand)
+}
+
+// setState moves change to state, recording it as how says it came about. A change already in
+// state is left.
+func (s *Service) setState(ctx context.Context, change store.Change, state store.ChangeState, how store.EventHow) error {
+	if change.State == state {
+		return nil
+	}
+	return s.store.Tx(ctx, func(tx *store.Tx) error {
+		if _, err := tx.CreateEvent(ctx, store.Event{ChangeID: change.ID, Kind: store.EventState, From: string(change.State),
+			To: string(state), How: how, Author: s.author}); err != nil {
+			return err
+		}
+		return tx.SetChangeState(ctx, change.ID, state)
+	})
 }
 
 // Revisions lists a change's revisions, oldest first.

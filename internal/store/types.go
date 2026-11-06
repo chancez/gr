@@ -68,6 +68,8 @@ type EventKind string
 const (
 	EventBranch EventKind = "branch"
 	EventBase   EventKind = "base"
+	// EventState is a change opened again, merged, or abandoned: its From and To are states.
+	EventState EventKind = "state"
 )
 
 // EventHow is how an event came about: by hand, or following git's record of renaming or copying the
@@ -78,10 +80,12 @@ const (
 	ByHand   EventHow = "hand"
 	ByRename EventHow = "renamed"
 	ByCopy   EventHow = "copied"
+	// Detected is gr seeing the change's branch land on its base.
+	Detected EventHow = "detected"
 )
 
 // Event is something that happened to a change: its branch or base moved from one branch to
-// another.
+// another, or its state changed.
 type Event struct {
 	ID        string
 	ChangeID  string

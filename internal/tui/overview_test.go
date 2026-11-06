@@ -26,7 +26,7 @@ func TestMergeEvents(t *testing.T) {
 		base("other", "main"),
 		branch("feature", "final", store.ByHand),
 	}) {
-		got = append(got, m.label())
+		got = append(got, m.label("main"))
 	}
 	// The base went back where it started; the branch moved by hand once, so it was not only renamed.
 	if diff := cmp.Diff([]string{"branch moved: poc -> final (3 moves)"}, got); diff != "" {
@@ -35,10 +35,35 @@ func TestMergeEvents(t *testing.T) {
 
 	got = nil
 	for _, m := range mergeEvents([]store.Event{base("main", "parent"), branch("poc", "feature", store.ByRename)}) {
-		got = append(got, m.label())
+		got = append(got, m.label("main"))
 	}
 	if diff := cmp.Diff([]string{"base changed: main -> parent", "branch renamed: poc -> feature"}, got); diff != "" {
 		t.Errorf("one of each (-want +got):\n%s", diff)
+	}
+
+	state := func(from, to store.ChangeState, how store.EventHow) store.Event {
+		return store.Event{Kind: store.EventState, From: string(from), To: string(to), How: how}
+	}
+	labels := func(events ...store.Event) []string {
+		var out []string
+		for _, m := range mergeEvents(events) {
+			out = append(out, m.label("main"))
+		}
+		return out
+	}
+	got = nil
+	for _, run := range [][]store.Event{
+		{state(store.ChangeOpen, store.ChangeMerged, store.Detected)},
+		{state(store.ChangeOpen, store.ChangeMerged, store.ByHand)},
+		{state(store.ChangeOpen, store.ChangeAbandoned, store.ByHand)},
+		{state(store.ChangeMerged, store.ChangeOpen, store.ByHand)},
+		// Abandoned and opened again before anyone looked is nothing.
+		{state(store.ChangeOpen, store.ChangeAbandoned, store.ByHand), state(store.ChangeAbandoned, store.ChangeOpen, store.ByHand)},
+	} {
+		got = append(got, labels(run...)...)
+	}
+	if diff := cmp.Diff([]string{"merged into main", "marked merged", "abandoned", "reopened"}, got); diff != "" {
+		t.Errorf("states (-want +got):\n%s", diff)
 	}
 }
 
