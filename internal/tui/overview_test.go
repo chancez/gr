@@ -119,3 +119,26 @@ func TestOverviewShowsEvents(t *testing.T) {
 		t.Errorf("overview timeline (-want +got):\n%s", diff)
 	}
 }
+
+// Merging the branch into its base while the change is open shows it merged, in the timeline too.
+func TestMergeSeenWhileOpen(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	e.repo.Git("checkout", "-q", "feature")
+	_, cmd := e.m.Update(e.m.refreshCmd()())
+	if cmd == nil {
+		t.Fatal("moving the base read nothing again")
+	}
+	e.drain(cmd)
+	e.openNav("Overview")
+	type seen struct {
+		State  store.ChangeState
+		Status string
+		Merged bool
+	}
+	got := seen{State: e.m.data.change.State, Status: e.m.status, Merged: strings.Contains(e.screen(), "--- merged into main ---")}
+	if diff := cmp.Diff(seen{State: store.ChangeMerged, Status: "change #1 merged into main", Merged: true}, got); diff != "" {
+		t.Errorf("after merging (-want +got):\n%s", diff)
+	}
+}

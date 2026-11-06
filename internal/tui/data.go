@@ -16,9 +16,12 @@ import (
 // contents lazily: commitFiles, diffFiles, and interdiff hold file lists without hunks until their
 // view is loaded, which loaded records by view key.
 type changeData struct {
-	change      store.Change
-	revision    store.Revision
-	revisions   []store.Revision
+	change    store.Change
+	revision  store.Revision
+	revisions []store.Revision
+	// baseTip is the base branch's commit when the change was loaded, to see it move, as when the
+	// branch is merged into it.
+	baseTip     string
 	commits     []git.Commit
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
@@ -68,11 +71,16 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 	if err != nil {
 		return nil, err
 	}
+	// The base's tip, read before syncing: should it move meanwhile, the next look sees it did.
+	var baseTip string
+	if change.Kind == store.KindBranch {
+		baseTip, _ = svc.Git().ResolveCommit(ctx, change.BaseBranch)
+	}
 	change, rev, err := svc.Sync(ctx, change)
 	if err != nil {
 		return nil, err
 	}
-	d := &changeData{change: change, revision: rev, loaded: map[string]bool{}, diffPlacements: map[string]store.Location{}}
+	d := &changeData{change: change, revision: rev, baseTip: baseTip, loaded: map[string]bool{}, diffPlacements: map[string]store.Location{}}
 	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
 		return nil, err
 	}

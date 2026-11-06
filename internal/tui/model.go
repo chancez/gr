@@ -258,8 +258,8 @@ type opMsg struct {
 
 type tickMsg struct{}
 
-// refreshMsg reports another process's writes (changed), or the branch moving (headMoved), which
-// needs git read again.
+// refreshMsg reports another process's writes (changed), or the branch or its base moving
+// (headMoved), which needs git read again.
 type refreshMsg struct {
 	version   int64
 	changed   bool

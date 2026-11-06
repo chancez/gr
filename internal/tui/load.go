@@ -116,9 +116,9 @@ func (m *model) loadCmd() tea.Cmd {
 func (m *model) refreshCmd() tea.Cmd {
 	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
 	var change store.Change
-	var head string
+	var head, baseTip string
 	if m.data != nil {
-		change, head = m.data.change, m.data.revision.HeadSHA
+		change, head, baseTip = m.data.change, m.data.revision.HeadSHA, m.data.baseTip
 	}
 	return func() tea.Msg {
 		v, err := w.Version(ctx)
@@ -128,6 +128,10 @@ func (m *model) refreshCmd() tea.Cmd {
 		msg := refreshMsg{version: v, changed: v != last}
 		if change.Kind == store.KindBranch && change.State == store.ChangeOpen {
 			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != head {
+				msg.headMoved = true
+			}
+			// The base moving can merge the change, as fast-forwarding main onto the branch does.
+			if sha, err := svc.Git().ResolveCommit(ctx, change.BaseBranch); err == nil && sha != baseTip {
 				msg.headMoved = true
 			}
 		}
@@ -149,6 +153,9 @@ func (m *model) applyData(d *changeData) {
 	prevY := m.main.cursorY()
 	prevSeg := m.main.itemSegment()
 	m.closeStaleMenus()
+	if !first && m.data.change.State == store.ChangeOpen && d.change.State == store.ChangeMerged {
+		m.setStatus("change #%d merged into %s", d.change.Seq, d.change.BaseBranch)
+	}
 	m.data = d
 	if c := m.comparing; c != nil && !d.compare(c[0], c[1]) {
 		m.comparing = nil
