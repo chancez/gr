@@ -51,7 +51,16 @@ func (m *model) renderStatus() string {
 		spans = append(append(spans, look.Default("  ")), look.Hint("A R C", "skip the summary")...)
 		return th.DrawCut(look.Plain, m.width, spans...)
 	case modeConfirm:
-		spans := append([]look.Span{look.Error(m.confirm.prompt), look.Default("  ")}, m.controls("confirm", modeConfirm, theConfirm.Target(confirmSubject{}),
+		t := theConfirm.Target(confirmSubject{})
+		if c := m.confirm; c.no != nil {
+			// A choice, not a warning: its answers are its own.
+			spans := append([]look.Span{look.Warning(c.prompt), look.Default("  ")}, m.controls("confirm", modeConfirm, t,
+				button(actConfirmYes, look.GlyphNone, c.yes),
+				button(actConfirmNo, look.GlyphNone, c.noLabel),
+				button(actConfirmLater, look.GlyphNone, "Later"))...)
+			return th.DrawCut(look.Plain, m.width, spans...)
+		}
+		spans := append([]look.Span{look.Error(m.confirm.prompt), look.Default("  ")}, m.controls("confirm", modeConfirm, t,
 			button(actConfirmYes, look.GlyphYes, "Yes"),
 			button(actConfirmNo, look.GlyphNo, "No"))...)
 		return th.DrawCut(look.Plain, m.width, spans...)

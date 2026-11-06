@@ -163,6 +163,8 @@ type model struct {
 	opened store.Change
 	// openRepo opens another repository, for its changes to open in tabs.
 	openRepo func(ctx context.Context, dir string) (*review.Service, error)
+	// asked is what askAboutLanding asked already, so it is asked once.
+	asked map[string]bool
 	// renamed is, while a branch picked is opened, the change of the branch it was copied from,
 	// for whichever tab shows it to offer.
 	renamed *review.Rename
@@ -385,6 +387,14 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewLoadedMsg:
 		m.applyView(msg)
 		return m, nil
+	case openedMsg:
+		if msg.err != nil {
+			m.setError(msg.err)
+			return m, nil
+		}
+		cmd := m.switchChange(msg.change)
+		m.setStatus("%s", msg.status)
+		return m, cmd
 	case movedMsg:
 		if msg.err != nil {
 			m.setError(msg.err)
@@ -564,15 +574,26 @@ func (m *model) focusSection(dir int) {
 	}
 }
 
-// confirmation is a destructive action waiting for y.
+// confirmation is a destructive action waiting for y, or a choice between two, waiting for y or n.
 type confirmation struct {
 	prompt string
 	run    func() tea.Msg
+	// no runs on n, for a choice whose no is an answer of its own, as abandoned is to merged, and
+	// yes and noLabel name the answers. Without it, n is no, as esc and any other key are.
+	no      func() tea.Msg
+	yes     string
+	noLabel string
 }
 
 // ask puts a destructive action behind a y/n prompt.
 func (m *model) ask(prompt string, run func() tea.Msg) {
 	m.confirm = confirmation{prompt: prompt, run: run}
+	m.mode = modeConfirm
+}
+
+// choose asks to pick between two answers, yes on y and no on n, or neither for now on esc.
+func (m *model) choose(prompt, yesLabel string, yes func() tea.Msg, noLabel string, no func() tea.Msg) {
+	m.confirm = confirmation{prompt: prompt, run: yes, no: no, yes: yesLabel, noLabel: noLabel}
 	m.mode = modeConfirm
 }
 

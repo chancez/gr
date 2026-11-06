@@ -63,6 +63,11 @@ asks whether it should. To move one onto another branch yourself, run
 `gr change branch <change>` on that branch. The overview shows these moves among the reviews,
 `gr change show` lists them, and a branch's old name still finds its change.
 
+A change is merged once its commits are on its base, which the TUI notices while open. A branch
+emptied some other way, as reset after a squash merge, leaves its change open, and the TUI asks
+whether it merged or was abandoned. Once a change is closed, new commits on its branch are a new
+change's, which the TUI offers to open.
+
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:
 every review, its summary, and its threads with the code they are on. `?` lists every key. The most used:

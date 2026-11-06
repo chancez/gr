@@ -19,9 +19,17 @@ type changeData struct {
 	change    store.Change
 	revision  store.Revision
 	revisions []store.Revision
-	// baseTip is the base branch's commit when the change was loaded, to see it move, as when the
-	// branch is merged into it.
-	baseTip     string
+	// tip and baseTip are the branch's and its base's commits when the change was loaded, to see
+	// them move: the branch with new work, the base as the branch is merged into it.
+	tip     string
+	baseTip string
+	// emptied is set on an open change whose branch has no commits of its own left, though its
+	// own are not on the base: whether it merged is the viewer's to say.
+	emptied bool
+	// newWork is how many commits a closed change's branch has that the change never had, up to
+	// branchHead, for a new change.
+	newWork     int
+	branchHead  string
 	commits     []git.Commit
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
@@ -71,16 +79,18 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 	if err != nil {
 		return nil, err
 	}
-	// The base's tip, read before syncing: should it move meanwhile, the next look sees it did.
-	var baseTip string
+	// The branch's and base's tips, read before syncing: should one move meanwhile, the next look
+	// sees it did.
+	var tip, baseTip string
 	if change.Kind == store.KindBranch {
+		tip, _ = svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch)
 		baseTip, _ = svc.Git().ResolveCommit(ctx, change.BaseBranch)
 	}
 	change, rev, err := svc.Sync(ctx, change)
 	if err != nil {
 		return nil, err
 	}
-	d := &changeData{change: change, revision: rev, baseTip: baseTip, loaded: map[string]bool{}, diffPlacements: map[string]store.Location{}}
+	d := &changeData{change: change, revision: rev, tip: tip, baseTip: baseTip, loaded: map[string]bool{}, diffPlacements: map[string]store.Location{}}
 	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
 		return nil, err
 	}
@@ -94,6 +104,12 @@ func load(ctx context.Context, svc *review.Service, changeID string) (*changeDat
 		return nil, err
 	}
 	if err := loadDB(ctx, svc, d); err != nil {
+		return nil, err
+	}
+	if d.emptied, err = svc.Emptied(ctx, change, rev); err != nil {
+		return nil, err
+	}
+	if d.newWork, d.branchHead, err = svc.NewWork(ctx, change, rev); err != nil {
 		return nil, err
 	}
 	if from, fromReview, ok := interdiffBase(d, svc.Author()); ok {

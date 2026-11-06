@@ -410,6 +410,25 @@ func (s *Service) Emptied(ctx context.Context, change store.Change, latest store
 	return base == head, nil
 }
 
+// NewWork is the commits a closed branch change's branch has of its own that the change never
+// had, as work started on the branch after it merged, and the branch's head: a new change's to
+// review.
+func (s *Service) NewWork(ctx context.Context, change store.Change, latest store.Revision) (int, string, error) {
+	if change.Kind != store.KindBranch || change.State == store.ChangeOpen {
+		return 0, "", nil
+	}
+	exists, err := s.git.BranchExists(ctx, change.Branch)
+	if err != nil || !exists {
+		return 0, "", err
+	}
+	base, head, err := s.branchRevision(ctx, change.Branch, change.BaseBranch)
+	if err != nil || base == head || head == latest.HeadSHA {
+		return 0, "", err
+	}
+	commits, err := s.git.Commits(ctx, base, head)
+	return len(commits), head, err
+}
+
 // ChangeByRef finds a change in this repository by number or id prefix, and syncs it.
 func (s *Service) ChangeByRef(ctx context.Context, ref string) (store.Change, store.Revision, error) {
 	ref = strings.TrimPrefix(ref, "#")

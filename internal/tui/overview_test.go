@@ -142,3 +142,76 @@ func TestMergeSeenWhileOpen(t *testing.T) {
 		t.Errorf("after merging (-want +got):\n%s", diff)
 	}
 }
+
+// tick runs one refresh, as the TUI's timer does, and what it starts.
+func (e *tuiEnv) tick() {
+	e.t.Helper()
+	_, cmd := e.m.Update(e.m.refreshCmd()())
+	e.drain(cmd)
+}
+
+// A branch emptied without landing, as reset after a squash merge, asks whether the change merged.
+func TestEmptiedBranchAsks(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--squash", "feature")
+	e.repo.Commit("hello, squashed")
+	e.repo.Git("checkout", "-q", "feature")
+	e.repo.Git("reset", "-q", "--hard", "main")
+	e.tick()
+	type asked struct {
+		Mode   mode
+		Prompt string
+		State  store.ChangeState
+	}
+	got := asked{Mode: e.m.mode, Prompt: e.m.confirm.prompt, State: e.m.data.change.State}
+	want := asked{Mode: modeConfirm, Prompt: "feature has none of #1's commits, and main has not got them: was it merged?", State: store.ChangeOpen}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Fatalf("after the squash merge (-want +got):\n%s", diff)
+	}
+	// Later leaves it open, and is not asked again for the same revision.
+	e.pressRun("esc")
+	e.tick()
+	if diff := cmp.Diff(asked{Mode: modeNormal, State: store.ChangeOpen}, asked{Mode: e.m.mode, Prompt: e.m.confirm.prompt, State: e.m.data.change.State}); diff != "" {
+		t.Errorf("after later (-want +got):\n%s", diff)
+	}
+}
+
+func TestEmptiedBranchAbandoned(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("reset", "-q", "--hard", "main")
+	e.tick()
+	e.pressRun("n")
+	e.drain(e.m.loadCmd())
+	if got := e.m.data.change.State; got != store.ChangeAbandoned {
+		t.Errorf("after n: change is %s, want abandoned", got)
+	}
+}
+
+// Work on a merged change's branch is offered a new change.
+func TestNewWorkAfterMerge(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	e.repo.Git("checkout", "-q", "feature")
+	e.tick()
+	if e.m.mode != modeNormal || e.m.data.change.State != store.ChangeMerged {
+		t.Fatalf("after merging: mode %d, state %s; want no question, merged", e.m.mode, e.m.data.change.State)
+	}
+	e.repo.Write("next.go", "package main\n")
+	e.repo.Commit("next")
+	e.tick()
+	if want := "feature has 1 new commit since #1 merged. Open a new change for them?"; e.m.mode != modeConfirm || e.m.confirm.prompt != want {
+		t.Fatalf("after new work: mode %d prompt %q, want %q", e.m.mode, e.m.confirm.prompt, want)
+	}
+	e.pressRun("y")
+	type shown struct {
+		Seq    int
+		State  store.ChangeState
+		Status string
+	}
+	c := e.m.data.change
+	if diff := cmp.Diff(shown{Seq: 2, State: store.ChangeOpen, Status: "change #2 for feature's new work"}, shown{c.Seq, c.State, e.m.status}); diff != "" {
+		t.Errorf("after y (-want +got):\n%s", diff)
+	}
+}

@@ -84,7 +84,7 @@ func (e *tuiEnv) drain(cmd tea.Cmd) {
 	for cmd != nil {
 		msg := cmd()
 		switch msg.(type) {
-		case dataMsg, opMsg, movedMsg:
+		case dataMsg, opMsg, movedMsg, openedMsg:
 			_, cmd = e.m.Update(msg)
 		default:
 			return

@@ -552,7 +552,20 @@ var (
 	}
 	actConfirmNo = &interact.Action[*model, confirmSubject]{
 		Title: "no",
-		Run:   do[confirmSubject](func(m *model) { m.endConfirm() }),
+		Run: func(m *model, _ confirmSubject) tea.Cmd {
+			no := m.confirm.no
+			m.endConfirm()
+			if no == nil {
+				return nil
+			}
+			return no
+		},
+	}
+	actConfirmLater = &interact.Action[*model, confirmSubject]{
+		Title:   "later",
+		Help:    "answer later",
+		Applies: func(m *model, _ confirmSubject) bool { return m.confirm.no != nil },
+		Run:     do[confirmSubject](func(m *model) { m.endConfirm() }),
 	}
 
 	actVerdictApprove        = verdictAction("approve", store.VerdictApprove, false)
@@ -653,7 +666,7 @@ func init() {
 	verdictKind = interact.NewKind(func(verdictSubject) string { return "Submit" },
 		actVerdictApprove, actVerdictRequestChanges, actVerdictComment, actVerdictApproveNow, actVerdictRequestNow,
 		actVerdictCommentNow, actVerdictCancel)
-	confirmKind = interact.NewKind(func(confirmSubject) string { return "Confirm" }, actConfirmYes, actConfirmNo)
+	confirmKind = interact.NewKind(func(confirmSubject) string { return "Confirm" }, actConfirmYes, actConfirmNo, actConfirmLater)
 	foldPrefixKind = interact.NewKind(func(paneSubject) string { return "Folds" },
 		actFoldOpen, actFoldClose, actFoldToggle, actFoldOpenIn, actFoldCloseIn, actFoldOpenAll, actFoldCloseAll)
 }
@@ -803,7 +816,8 @@ func init() {
 	verdictKind.Bind(actVerdictCommentNow, "", "", "C")
 	verdictKind.Bind(actVerdictCancel, "esc", "cancel", "esc")
 	confirmKind.Bind(actConfirmYes, "y", "yes", "y")
-	confirmKind.Bind(actConfirmNo, "n", "no, as any other key", "n", "esc")
+	confirmKind.Bind(actConfirmNo, "n", "no, as any other key", "n")
+	confirmKind.Bind(actConfirmLater, "esc", "answer later", "esc")
 
 	foldPrefixKind.Bind(actFoldOpen, "zo", "open the fold", "o")
 	foldPrefixKind.Bind(actFoldClose, "zc", "close the fold", "c")

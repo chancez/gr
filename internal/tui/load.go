@@ -116,9 +116,9 @@ func (m *model) loadCmd() tea.Cmd {
 func (m *model) refreshCmd() tea.Cmd {
 	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
 	var change store.Change
-	var head, baseTip string
+	var tip, baseTip string
 	if m.data != nil {
-		change, head, baseTip = m.data.change, m.data.revision.HeadSHA, m.data.baseTip
+		change, tip, baseTip = m.data.change, m.data.tip, m.data.baseTip
 	}
 	return func() tea.Msg {
 		v, err := w.Version(ctx)
@@ -126,13 +126,16 @@ func (m *model) refreshCmd() tea.Cmd {
 			return refreshMsg{version: last}
 		}
 		msg := refreshMsg{version: v, changed: v != last}
-		if change.Kind == store.KindBranch && change.State == store.ChangeOpen {
-			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != head {
+		if change.Kind == store.KindBranch {
+			// Closed changes too: new work on a merged change's branch is a new change's to offer.
+			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != tip {
 				msg.headMoved = true
 			}
 			// The base moving can merge the change, as fast-forwarding main onto the branch does.
-			if sha, err := svc.Git().ResolveCommit(ctx, change.BaseBranch); err == nil && sha != baseTip {
-				msg.headMoved = true
+			if change.State == store.ChangeOpen {
+				if sha, err := svc.Git().ResolveCommit(ctx, change.BaseBranch); err == nil && sha != baseTip {
+					msg.headMoved = true
+				}
 			}
 		}
 		return msg
@@ -187,4 +190,5 @@ func (m *model) applyData(d *changeData) {
 		// With nowhere saved, the conversation opens at its newest end, as a chat does.
 		m.main.readerSelect(len(m.main.items) - 1)
 	}
+	m.askAboutLanding()
 }
