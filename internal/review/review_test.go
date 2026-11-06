@@ -1101,3 +1101,41 @@ func TestStateEvents(t *testing.T) {
 		t.Errorf("events (-want +got):\n%s", diff)
 	}
 }
+
+// A branch reset onto its base after a squash merge has no commits, but gr cannot tell it landed:
+// the change stays open, emptied, for the user to say.
+func TestEmptiedBySquashMerge(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.txt", "a\n")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(s, "")
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--squash", "feature")
+	e.repo.Commit("one, squashed")
+	e.repo.Git("checkout", "-q", "feature")
+	e.repo.Git("reset", "-q", "--hard", "main")
+
+	synced, latest, err := s.Sync(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptied, err := s.Emptied(ctx, synced, latest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	type state struct {
+		State    store.ChangeState
+		Revision int
+		Emptied  bool
+	}
+	if diff := cmp.Diff(state{State: store.ChangeOpen, Revision: 1, Emptied: true}, state{synced.State, latest.Seq, emptied}); diff != "" {
+		t.Errorf("after the squash merge (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]store.Event(nil), events(t, s, synced), ignoreEventIDs); diff != "" {
+		t.Errorf("events (-want +got):\n%s", diff)
+	}
+}

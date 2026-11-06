@@ -530,3 +530,36 @@ func TestFollowRenamedBranch(t *testing.T) {
 		t.Errorf("after copying, change list = %q, want %q", got, want)
 	}
 }
+
+// A change whose branch was reset after a squash merge stays open, and gr says how to close it.
+func TestEmptiedChangeNotice(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.txt", "a\n")
+	e.repo.Commit("one")
+	human := "Human <h@example.com>"
+	e.run(human, "review")
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--squash", "feature")
+	e.repo.Commit("one, squashed")
+	e.repo.Git("checkout", "-q", "feature")
+	e.repo.Git("reset", "-q", "--hard", "main")
+
+	var stdout, stderr bytes.Buffer
+	a := &app{stdin: strings.NewReader(""), stdout: &stdout, stderr: &stderr, logPath: e.log}
+	defer a.close()
+	cmd := a.rootCommand()
+	cmd.SetArgs([]string{"--db", e.db, "-C", e.repo.Dir, "--author", human, "review"})
+	if err := cmd.ExecuteContext(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	want := "feature has none of change #1's commits now, and main has not got them either; gr change merged or gr change abandon closes it\n"
+	if got := stderr.String(); got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+	e.run(human, "change", "merged")
+	if got, want := e.run(human, "change", "list", "--all"), "#1\tmerged\tfeature onto main\tfeature\n"; got != want {
+		t.Errorf("after gr change merged, change list = %q, want %q", got, want)
+	}
+}

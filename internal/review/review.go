@@ -317,7 +317,11 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 		return change, latest, nil
 	}
 	if base == head && latest.BaseSHA != latest.HeadSHA {
-		// The branch's commits are all on the base branch now.
+		// The branch has no commits of its own now. Its last ones on the base branch landed; any
+		// other way, as squashed, or reset away, is the user's to say: see Emptied.
+		if onBase, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch); err != nil || !onBase {
+			return change, latest, err
+		}
 		return s.markMerged(ctx, change, latest)
 	}
 
@@ -386,6 +390,24 @@ func (s *Service) markMerged(ctx context.Context, change store.Change, latest st
 	change.State = store.ChangeMerged
 	slog.Info("change merged", "change", change.Seq)
 	return change, latest, nil
+}
+
+// Emptied reports whether an open branch change's branch has no commits of its own any more while
+// its latest revision's are not on its base: it landed some way gr cannot see, as squashed, or
+// was reset and its work dropped. Whether it merged or was abandoned is the user's to say.
+func (s *Service) Emptied(ctx context.Context, change store.Change, latest store.Revision) (bool, error) {
+	if change.Kind != store.KindBranch || change.State != store.ChangeOpen || latest.BaseSHA == latest.HeadSHA {
+		return false, nil
+	}
+	exists, err := s.git.BranchExists(ctx, change.Branch)
+	if err != nil || !exists {
+		return false, err
+	}
+	base, head, err := s.branchRevision(ctx, change.Branch, change.BaseBranch)
+	if err != nil {
+		return false, err
+	}
+	return base == head, nil
 }
 
 // ChangeByRef finds a change in this repository by number or id prefix, and syncs it.

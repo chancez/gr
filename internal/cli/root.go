@@ -305,6 +305,13 @@ func (a *app) resolveChange(ctx context.Context, f changeFlags, spec string) (*r
 	if err != nil {
 		return nil, store.Change{}, store.Revision{}, err
 	}
+	if emptied, err := svc.Emptied(ctx, c, rev); err != nil {
+		return nil, store.Change{}, store.Revision{}, err
+	} else if emptied {
+		a.notice = fmt.Sprintf("%s has none of change #%d's commits now, and %s has not got them either; "+
+			"gr change merged or gr change abandon closes it", c.Branch, c.Seq, c.BaseBranch)
+		fmt.Fprintln(a.stderr, a.notice)
+	}
 	if target.Stacked {
 		a.notice = fmt.Sprintf("change #%d is based on %s, the branch it is stacked on; gr change base or B in the TUI moves it", c.Seq, c.BaseBranch)
 		fmt.Fprintln(a.stderr, a.notice)
