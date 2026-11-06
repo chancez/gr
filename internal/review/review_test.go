@@ -1139,3 +1139,35 @@ func TestEmptiedBySquashMerge(t *testing.T) {
 		t.Errorf("events (-want +got):\n%s", diff)
 	}
 }
+
+// A change whose commits landed is merged even when its branch moved on before gr looked: the new
+// commits are a new change's, not a revision of the landed one.
+func TestLandedThenMovedOn(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s := e.service(human)
+	ctx := t.Context()
+	change, _ := e.ensure(s, "")
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	e.repo.Git("checkout", "-q", "feature")
+	two := e.repo.Commit("two")
+
+	synced, latest, err := s.Sync(ctx, change)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next, rev := e.ensure(s, "")
+	type seen struct {
+		State    store.ChangeState
+		Revision int
+		Next     int
+		NextHead string
+	}
+	got := seen{State: synced.State, Revision: latest.Seq, Next: next.Seq, NextHead: rev.HeadSHA}
+	if diff := cmp.Diff(seen{State: store.ChangeMerged, Revision: 1, Next: 2, NextHead: two}, got); diff != "" {
+		t.Errorf("after landing and moving on (-want +got):\n%s", diff)
+	}
+}

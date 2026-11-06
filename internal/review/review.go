@@ -302,8 +302,7 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 	}
 	if !exists {
 		// A branch deleted after landing is merged. Any other deleted branch keeps its last revision.
-		merged, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch)
-		if err != nil || !merged || latest.BaseSHA == latest.HeadSHA {
+		if !s.landed(ctx, change, latest) {
 			return change, latest, nil
 		}
 		return s.markMerged(ctx, change, latest)
@@ -316,13 +315,14 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 	if base == latest.BaseSHA && head == latest.HeadSHA {
 		return change, latest, nil
 	}
-	if base == head && latest.BaseSHA != latest.HeadSHA {
-		// The branch has no commits of its own now. Its last ones on the base branch landed; any
-		// other way, as squashed, or reset away, is the user's to say: see Emptied.
-		if onBase, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch); err != nil || !onBase {
-			return change, latest, err
-		}
+	// Commits on the branch since are a new change's, as gr offers.
+	if s.landed(ctx, change, latest) {
 		return s.markMerged(ctx, change, latest)
+	}
+	if base == head && latest.BaseSHA != latest.HeadSHA {
+		// The branch has no commits of its own now, and its last ones did not land: squashed, or
+		// reset away. Which is the user's to say: see Emptied.
+		return change, latest, nil
 	}
 
 	// Git runs before the write transaction, so other writers do not wait on it.
@@ -390,6 +390,19 @@ func (s *Service) markMerged(ctx context.Context, change store.Change, latest st
 	change.State = store.ChangeMerged
 	slog.Info("change merged", "change", change.Seq)
 	return change, latest, nil
+}
+
+// landed reports whether a change's last revision's commits are on its base branch, merged
+// whatever its branch has done since. A base gr cannot read has nothing landed on it.
+func (s *Service) landed(ctx context.Context, change store.Change, latest store.Revision) bool {
+	if latest.BaseSHA == latest.HeadSHA {
+		return false
+	}
+	on, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch)
+	if err != nil {
+		slog.Debug("cannot tell whether a change landed", "change", change.Seq, "err", err)
+	}
+	return err == nil && on
 }
 
 // Emptied reports whether an open branch change's branch has no commits of its own any more while
