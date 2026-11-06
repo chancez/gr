@@ -150,13 +150,9 @@ func (e *tuiEnv) tick() {
 	e.drain(cmd)
 }
 
-// A branch emptied without landing, as reset after a squash merge, asks whether the change merged.
+// A branch emptied without landing, as reset to drop its work, asks whether the change merged.
 func TestEmptiedBranchAsks(t *testing.T) {
 	e := newTUIEnv(t)
-	e.repo.Git("checkout", "-q", "main")
-	e.repo.Git("merge", "-q", "--squash", "feature")
-	e.repo.Commit("hello, squashed")
-	e.repo.Git("checkout", "-q", "feature")
 	e.repo.Git("reset", "-q", "--hard", "main")
 	e.tick()
 	type asked struct {
@@ -167,7 +163,7 @@ func TestEmptiedBranchAsks(t *testing.T) {
 	got := asked{Mode: e.m.mode, Prompt: e.m.confirm.prompt, State: e.m.data.change.State}
 	want := asked{Mode: modeConfirm, Prompt: "feature has none of #1's commits, and main has not got them: was it merged?", State: store.ChangeOpen}
 	if diff := cmp.Diff(want, got); diff != "" {
-		t.Fatalf("after the squash merge (-want +got):\n%s", diff)
+		t.Fatalf("after the reset (-want +got):\n%s", diff)
 	}
 	// Later leaves it open, and is not asked again for the same revision.
 	e.pressRun("esc")

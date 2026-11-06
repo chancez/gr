@@ -325,6 +325,10 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 		return store.Change{}, store.Revision{}, err
 	}
 	if base == latest.BaseSHA && head == latest.HeadSHA {
+		// Nothing moved here, but a rebase merge puts copies on the base, which moves neither.
+		if s.landed(ctx, change, latest) {
+			return s.markMerged(ctx, change, latest)
+		}
 		return change, latest, nil
 	}
 	// Commits on the branch since are a new change's, as gr offers.
@@ -405,16 +409,63 @@ func (s *Service) markMerged(ctx context.Context, change store.Change, latest st
 }
 
 // landed reports whether a change's last revision's commits are on its base branch, merged
-// whatever its branch has done since. A base gr cannot read has nothing landed on it.
+// whatever its branch has done since: the commits themselves, or copies of each with the same
+// diff, as a rebase merge makes. A base gr cannot read has nothing landed on it.
 func (s *Service) landed(ctx context.Context, change store.Change, latest store.Revision) bool {
 	if latest.BaseSHA == latest.HeadSHA {
 		return false
 	}
-	on, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch)
+	on, err := s.landedOn(ctx, change, latest)
 	if err != nil {
 		slog.Debug("cannot tell whether a change landed", "change", change.Seq, "err", err)
 	}
 	return err == nil && on
+}
+
+func (s *Service) landedOn(ctx context.Context, change store.Change, latest store.Revision) (bool, error) {
+	if on, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch); err != nil || on {
+		return on, err
+	}
+	commits, err := s.git.Commits(ctx, latest.BaseSHA, latest.HeadSHA)
+	if err != nil || len(commits) == 0 {
+		return false, err
+	}
+	// Copies are committed after what they copy was written, so only the base's commits since the
+	// oldest of the change's can be them: the work this costs is that, not the base's history.
+	since := commits[0].AuthorTime
+	shas := make([]string, len(commits))
+	for i, c := range commits {
+		shas[i] = c.SHA
+		if c.AuthorTime.Before(since) {
+			since = c.AuthorTime
+		}
+	}
+	candidates, err := s.git.CommitsSince(ctx, latest.BaseSHA, change.BaseBranch, since)
+	if err != nil || len(candidates) == 0 {
+		return false, err
+	}
+	ids, err := s.git.PatchIDs(ctx, append(shas, candidates...))
+	if err != nil {
+		return false, err
+	}
+	onBase := map[string]bool{}
+	for _, c := range candidates {
+		if id := ids[c]; id != "" {
+			onBase[id] = true
+		}
+	}
+	// Each commit with a diff has a copy. Some but not all is a change still partly to land.
+	matched := 0
+	for _, sha := range shas {
+		switch id := ids[sha]; {
+		case id == "":
+		case onBase[id]:
+			matched++
+		default:
+			return false, nil
+		}
+	}
+	return matched > 0, nil
 }
 
 // MarkLanded marks merged the open branch changes of changes whose commits have landed on their

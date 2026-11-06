@@ -65,9 +65,11 @@ number or a UUID prefix.
 ### Change lifecycle
 
 - **open**: the default.
-- **merged**: detected when the head becomes reachable from the base branch. A branch left with no
-  commits of its own whose last ones are not on the base, as after a squash merge and a reset, or
-  work reset away, is not guessed at: the change stays open until marked merged or abandoned.
+- **merged**: detected when the head becomes reachable from the base branch, or each of its commits
+  has a copy there with the same patch id, as a rebase merge makes, or a squash of one commit. A
+  branch left with no commits of its own whose last ones are not on the base, as after squashing
+  several and a reset, or work reset away, is not guessed at: the change stays open until marked
+  merged or abandoned.
 - **abandoned**: set by hand.
 
 Each change of state is an event in the change's history, with the moves of its branch and base.

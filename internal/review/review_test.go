@@ -2,6 +2,7 @@ package review_test
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -1102,14 +1103,16 @@ func TestStateEvents(t *testing.T) {
 	}
 }
 
-// A branch reset onto its base after a squash merge has no commits, but gr cannot tell it landed:
-// the change stays open, emptied, for the user to say.
+// A branch reset onto its base after a squash merge of several commits has no commits, but gr
+// cannot tell it landed: the change stays open, emptied, for the user to say.
 func TestEmptiedBySquashMerge(t *testing.T) {
 	e := newEnv(t)
 	e.repo.Commit("root")
 	e.repo.Git("checkout", "-q", "-b", "feature")
 	e.repo.Write("a.txt", "a\n")
 	e.repo.Commit("one")
+	e.repo.Write("b.txt", "b\n")
+	e.repo.Commit("two")
 	s := e.service(human)
 	ctx := t.Context()
 	change, _ := e.ensure(s, "")
@@ -1169,5 +1172,53 @@ func TestLandedThenMovedOn(t *testing.T) {
 	got := seen{State: synced.State, Revision: latest.Seq, Next: next.Seq, NextHead: rev.HeadSHA}
 	if diff := cmp.Diff(seen{State: store.ChangeMerged, Revision: 1, Next: 2, NextHead: two}, got); diff != "" {
 		t.Errorf("after landing and moving on (-want +got):\n%s", diff)
+	}
+}
+
+// A change rebase merged onto its base, its commits copied there with new shas, has landed; one
+// partly copied has not. A squash of one commit is a copy of it; a squash of several is not.
+func TestRebaseMerged(t *testing.T) {
+	run := func(t *testing.T, commits int, land func(e *env, shas []string)) store.ChangeState {
+		e := newEnv(t)
+		e.repo.Commit("root")
+		e.repo.Git("checkout", "-q", "-b", "feature")
+		var shas []string
+		for i := range commits {
+			e.repo.Write(fmt.Sprintf("f%d.txt", i), "content\n")
+			shas = append(shas, e.repo.Commit(fmt.Sprintf("commit %d", i)))
+		}
+		s := e.service(human)
+		change, _ := e.ensure(s, "")
+		e.repo.Git("checkout", "-q", "main")
+		land(e, shas)
+		e.repo.Git("checkout", "-q", "feature")
+		// gr change list's check, then a sync of the change itself, agree.
+		listed, err := s.MarkLanded(t.Context(), []store.Change{change})
+		if err != nil {
+			t.Fatal(err)
+		}
+		synced, _, err := s.Sync(t.Context(), change)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if listed[0].State != synced.State {
+			t.Errorf("listed %s, synced %s", listed[0].State, synced.State)
+		}
+		return synced.State
+	}
+	cherryPick := func(e *env, shas []string) { e.repo.Git(append([]string{"cherry-pick"}, shas...)...) }
+	squash := func(e *env, _ []string) {
+		e.repo.Git("merge", "-q", "--squash", "feature")
+		e.repo.Commit("squashed")
+	}
+	got := []store.ChangeState{
+		run(t, 3, cherryPick),
+		run(t, 3, func(e *env, shas []string) { cherryPick(e, shas[:2]) }),
+		run(t, 1, squash),
+		run(t, 3, squash),
+	}
+	want := []store.ChangeState{store.ChangeMerged, store.ChangeOpen, store.ChangeMerged, store.ChangeOpen}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("states: rebased, partly rebased, one squashed, several squashed (-want +got):\n%s", diff)
 	}
 }

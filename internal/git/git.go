@@ -523,6 +523,16 @@ func (r *Repo) PatchIDs(ctx context.Context, shas []string) (map[string]string, 
 	return ids, nil
 }
 
+// CommitsSince lists the commits in from..to committed at or after since, newest first: the commits
+// that can have copied commits written since then, as a rebase merge's copies of a branch's.
+func (r *Repo) CommitsSince(ctx context.Context, from, to string, since time.Time) ([]string, error) {
+	out, err := r.run(ctx, "rev-list", "--since="+strconv.FormatInt(since.Unix(), 10), to, "^"+from, "--")
+	if err != nil {
+		return nil, err
+	}
+	return strings.Fields(string(out)), nil
+}
+
 // EmptyTree returns the id of the empty tree in this repository's hash algorithm.
 func (r *Repo) EmptyTree(ctx context.Context) (string, error) {
 	out, err := run(ctx, r.Dir, []byte{}, "hash-object", "-t", "tree", "--stdin")

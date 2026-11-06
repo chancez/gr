@@ -531,13 +531,16 @@ func TestFollowRenamedBranch(t *testing.T) {
 	}
 }
 
-// A change whose branch was reset after a squash merge stays open, and gr says how to close it.
+// A change whose branch was reset after a squash merge of several commits stays open, and gr says
+// how to close it.
 func TestEmptiedChangeNotice(t *testing.T) {
 	e := newCLIEnv(t)
 	e.repo.Commit("root")
 	e.repo.Git("checkout", "-q", "-b", "feature")
 	e.repo.Write("a.txt", "a\n")
 	e.repo.Commit("one")
+	e.repo.Write("b.txt", "b\n")
+	e.repo.Commit("two")
 	human := "Human <h@example.com>"
 	e.run(human, "review")
 	e.repo.Git("checkout", "-q", "main")
