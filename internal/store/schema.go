@@ -168,6 +168,11 @@ CREATE TABLE moves (
 );
 CREATE INDEX moves_change ON moves (change_id, created_at);
 `,
+	`
+ALTER TABLE moves RENAME TO events;
+DROP INDEX moves_change;
+CREATE INDEX events_change ON events (change_id, created_at);
+`,
 }
 
 // backfills run Go code after the migration with the same index, inside its transaction.

@@ -272,7 +272,7 @@ func (m *model) offerRename(r review.Rename) {
 	svc, ctx := m.svc, m.ctx
 	m.ask(fmt.Sprintf("%s was copied from %s. Move change #%d onto %s, in place of this new change?", r.To, r.From, r.Change.Seq, r.To),
 		func() tea.Msg {
-			c, _, err := svc.SetBranch(ctx, r.Change, r.To, store.MovedCopied)
+			c, _, err := svc.SetBranch(ctx, r.Change, r.To, store.ByCopy)
 			return movedMsg{change: c, err: err}
 		})
 }

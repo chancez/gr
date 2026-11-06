@@ -62,32 +62,33 @@ type Change struct {
 	UpdatedAt  time.Time
 }
 
-// MoveKind is what a move moved: the branch a change follows, or its base branch.
-type MoveKind string
+// EventKind is what an event changed: the branch a change follows, or its base branch.
+type EventKind string
 
 const (
-	MoveBranch MoveKind = "branch"
-	MoveBase   MoveKind = "base"
+	EventBranch EventKind = "branch"
+	EventBase   EventKind = "base"
 )
 
-// MoveHow is how a move came about: by hand, or following git's record of renaming or copying the
+// EventHow is how an event came about: by hand, or following git's record of renaming or copying the
 // branch.
-type MoveHow string
+type EventHow string
 
 const (
-	MovedByHand  MoveHow = "hand"
-	MovedRenamed MoveHow = "renamed"
-	MovedCopied  MoveHow = "copied"
+	ByHand   EventHow = "hand"
+	ByRename EventHow = "renamed"
+	ByCopy   EventHow = "copied"
 )
 
-// Move is a branch change's branch or base moved from one branch to another.
-type Move struct {
+// Event is something that happened to a change: its branch or base moved from one branch to
+// another.
+type Event struct {
 	ID        string
 	ChangeID  string
-	Kind      MoveKind
+	Kind      EventKind
 	From      string
 	To        string
-	How       MoveHow
+	How       EventHow
 	Author    Author
 	CreatedAt time.Time
 }

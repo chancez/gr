@@ -464,8 +464,8 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 		return fail(fmt.Errorf("%q is not a branch or commit", base))
 	}
 	err := s.store.Tx(ctx, func(tx *store.Tx) error {
-		if _, err := tx.CreateMove(ctx, store.Move{ChangeID: change.ID, Kind: store.MoveBase, From: change.BaseBranch, To: base,
-			How: store.MovedByHand, Author: s.author}); err != nil {
+		if _, err := tx.CreateEvent(ctx, store.Event{ChangeID: change.ID, Kind: store.EventBase, From: change.BaseBranch, To: base,
+			How: store.ByHand, Author: s.author}); err != nil {
 			return err
 		}
 		return tx.SetChangeBase(ctx, change.ID, base)
@@ -523,7 +523,7 @@ func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool
 			return none(err)
 		}
 		if !kept {
-			if c, _, err = s.SetBranch(ctx, c, branch, store.MovedRenamed); err != nil {
+			if c, _, err = s.SetBranch(ctx, c, branch, store.ByRename); err != nil {
 				return none(err)
 			}
 		}
@@ -536,7 +536,7 @@ func (s *Service) FollowRename(ctx context.Context, branch string) (Rename, bool
 // A change already open on that branch goes if it has no reviews, as one opened on the new name
 // before the old was followed; with reviews it stays, and the move fails. A title that was the
 // branch's name follows it. The move is recorded as how says it came about.
-func (s *Service) SetBranch(ctx context.Context, change store.Change, branch string, how store.MoveHow) (store.Change, store.Revision, error) {
+func (s *Service) SetBranch(ctx context.Context, change store.Change, branch string, how store.EventHow) (store.Change, store.Revision, error) {
 	fail := func(err error) (store.Change, store.Revision, error) { return store.Change{}, store.Revision{}, err }
 	if change.Kind != store.KindBranch {
 		return fail(fmt.Errorf("change #%d is a %s, not a branch; it follows no branch to move", change.Seq, change.Kind))
@@ -578,7 +578,7 @@ func (s *Service) SetBranch(ctx context.Context, change store.Change, branch str
 			}
 			change.Title = branch
 		}
-		if _, err := tx.CreateMove(ctx, store.Move{ChangeID: change.ID, Kind: store.MoveBranch, From: change.Branch, To: branch,
+		if _, err := tx.CreateEvent(ctx, store.Event{ChangeID: change.ID, Kind: store.EventBranch, From: change.Branch, To: branch,
 			How: how, Author: s.author}); err != nil {
 			return err
 		}
@@ -592,9 +592,9 @@ func (s *Service) SetBranch(ctx context.Context, change store.Change, branch str
 	return s.Sync(ctx, change)
 }
 
-// Moves are a change's branch and base moves, oldest first.
-func (s *Service) Moves(ctx context.Context, change store.Change) ([]store.Move, error) {
-	return s.store.ListMoves(ctx, change.ID)
+// Events are what happened to a change, oldest first: its branch and base moves.
+func (s *Service) Events(ctx context.Context, change store.Change) ([]store.Event, error) {
+	return s.store.ListEvents(ctx, change.ID)
 }
 
 // DeleteChange deletes a change and everything on it. A change with reviews, anyone's drafts

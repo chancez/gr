@@ -506,12 +506,12 @@ func TestFollowRenamedBranch(t *testing.T) {
 	if err := json.Unmarshal([]byte(e.run(human, "change", "show", "1", "--json")), &shown); err != nil {
 		t.Fatal(err)
 	}
-	want := []moveJSON{{Kind: "branch", From: "poc", To: "feature", How: "renamed", Author: authorJSON{Name: "Human", Email: "h@example.com"}}}
-	if diff := cmp.Diff(want, shown.Moves, cmpopts.IgnoreFields(moveJSON{}, "CreatedAt")); diff != "" {
-		t.Errorf("change show --json moves (-want +got):\n%s", diff)
+	want := []eventJSON{{Kind: "branch", From: "poc", To: "feature", How: "renamed", Author: authorJSON{Name: "Human", Email: "h@example.com"}}}
+	if diff := cmp.Diff(want, shown.Events, cmpopts.IgnoreFields(eventJSON{}, "CreatedAt")); diff != "" {
+		t.Errorf("change show --json events (-want +got):\n%s", diff)
 	}
 	text := e.run(human, "change", "show", "1")
-	if _, moves, _ := strings.Cut(text, "\nMoves:\n"); !strings.HasSuffix(moves, " branch poc -> feature, following a rename, by Human <h@example.com>\n") {
+	if _, moves, _ := strings.Cut(text, "\nHistory:\n"); !strings.HasSuffix(moves, " branch poc -> feature, following a rename, by Human <h@example.com>\n") {
 		t.Errorf("change show moves = %q", moves)
 	}
 

@@ -180,7 +180,7 @@ The change is a number such as 4 or #4, or the branch it follows now, if that st
 				}
 			}
 			from := change.Branch
-			if change, _, err = svc.SetBranch(cmd.Context(), change, to, store.MovedByHand); err != nil {
+			if change, _, err = svc.SetBranch(cmd.Context(), change, to, store.ByHand); err != nil {
 				return err
 			}
 			fmt.Fprintf(a.stderr, "change #%d moved from %s to %s\n", change.Seq, from, change.Branch)
@@ -224,8 +224,8 @@ type changeDetailJSON struct {
 	changeJSON
 	Revisions []*revisionJSON `json:"revisions"`
 	Reviews   []reviewJSON    `json:"reviews"`
-	// Moves are the change's branch and base moves, oldest first, every one.
-	Moves    []moveJSON   `json:"moves"`
+	// Events are what happened to the change, oldest first, every one.
+	Events   []eventJSON  `json:"events"`
 	Threads  threadCounts `json:"threads"`
 	Reviewed reviewedJSON `json:"reviewed"`
 }
@@ -254,7 +254,7 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 	if err != nil {
 		return err
 	}
-	moves, err := svc.Moves(ctx, change)
+	events, err := svc.Events(ctx, change)
 	if err != nil {
 		return err
 	}
@@ -291,9 +291,9 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 			}
 			out.Reviews = append(out.Reviews, rj)
 		}
-		out.Moves = []moveJSON{}
-		for _, m := range moves {
-			out.Moves = append(out.Moves, toMove(m))
+		out.Events = []eventJSON{}
+		for _, ev := range events {
+			out.Events = append(out.Events, toEvent(ev))
 		}
 		return a.printJSON(out)
 	}
@@ -322,22 +322,22 @@ func (a *app) showChange(ctx context.Context, svc *review.Service, change store.
 			}
 		}
 	}
-	if len(moves) > 0 {
-		fmt.Fprintln(w, "\nMoves:")
-		for _, m := range moves {
+	if len(events) > 0 {
+		fmt.Fprintln(w, "\nHistory:")
+		for _, m := range events {
 			fmt.Fprintf(w, "  %s %s %s -> %s, %s, by %s\n", m.CreatedAt.Local().Format("2006-01-02 15:04"), m.Kind,
-				m.From, m.To, moveHow(m.How), m.Author)
+				m.From, m.To, eventHow(m.How), m.Author)
 		}
 	}
 	return nil
 }
 
-// moveHow says how a move came about.
-func moveHow(h store.MoveHow) string {
+// eventHow says how an event came about.
+func eventHow(h store.EventHow) string {
 	switch h {
-	case store.MovedRenamed:
+	case store.ByRename:
 		return "following a rename"
-	case store.MovedCopied:
+	case store.ByCopy:
 		return "onto a copy"
 	}
 	return "by hand"

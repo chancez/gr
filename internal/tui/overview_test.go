@@ -10,21 +10,21 @@ import (
 	"github.com/chancez/gr/internal/store"
 )
 
-func TestMergeMoves(t *testing.T) {
-	base := func(from, to string) store.Move {
-		return store.Move{Kind: store.MoveBase, From: from, To: to, How: store.MovedByHand}
+func TestMergeEvents(t *testing.T) {
+	base := func(from, to string) store.Event {
+		return store.Event{Kind: store.EventBase, From: from, To: to, How: store.ByHand}
 	}
-	branch := func(from, to string, how store.MoveHow) store.Move {
-		return store.Move{Kind: store.MoveBranch, From: from, To: to, How: how}
+	branch := func(from, to string, how store.EventHow) store.Event {
+		return store.Event{Kind: store.EventBranch, From: from, To: to, How: how}
 	}
 	var got []string
-	for _, m := range mergeMoves([]store.Move{
+	for _, m := range mergeEvents([]store.Event{
 		base("main", "parent"),
-		branch("poc", "wip", store.MovedRenamed),
+		branch("poc", "wip", store.ByRename),
 		base("parent", "other"),
-		branch("wip", "feature", store.MovedRenamed),
+		branch("wip", "feature", store.ByRename),
 		base("other", "main"),
-		branch("feature", "final", store.MovedByHand),
+		branch("feature", "final", store.ByHand),
 	}) {
 		got = append(got, m.label())
 	}
@@ -34,7 +34,7 @@ func TestMergeMoves(t *testing.T) {
 	}
 
 	got = nil
-	for _, m := range mergeMoves([]store.Move{base("main", "parent"), branch("poc", "feature", store.MovedRenamed)}) {
+	for _, m := range mergeEvents([]store.Event{base("main", "parent"), branch("poc", "feature", store.ByRename)}) {
 		got = append(got, m.label())
 	}
 	if diff := cmp.Diff([]string{"base changed: main -> parent", "branch renamed: poc -> feature"}, got); diff != "" {
@@ -44,7 +44,7 @@ func TestMergeMoves(t *testing.T) {
 
 // Moves show in the overview between the reviews they came between, merged where no review
 // separates them.
-func TestOverviewShowsMoves(t *testing.T) {
+func TestOverviewShowsEvents(t *testing.T) {
 	e := newTUIEnv(t)
 	ctx := t.Context()
 	e.repo.Git("branch", "a", "main")
@@ -65,7 +65,7 @@ func TestOverviewShowsMoves(t *testing.T) {
 		}
 	}
 	e.repo.Git("branch", "-m", "feature", "feat")
-	if _, _, err := e.svc.SetBranch(ctx, c, "feat", store.MovedRenamed); err != nil {
+	if _, _, err := e.svc.SetBranch(ctx, c, "feat", store.ByRename); err != nil {
 		t.Fatal(err)
 	}
 	e.drain(e.m.loadCmd())

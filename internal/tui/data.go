@@ -27,8 +27,8 @@ type changeData struct {
 	threadFiles map[string][]git.FileDiff
 	threads     []review.ThreadView
 	reviews     []store.Review
-	// moves are the change's branch and base moves, oldest first.
-	moves []store.Move
+	// events are what happened to the change, oldest first.
+	events []store.Event
 	// diffPlacements is where threads on commits show in the whole diff, by thread id.
 	diffPlacements map[string]store.Location
 	// marks is what the viewer marked reviewed.
@@ -128,7 +128,7 @@ func loadDB(ctx context.Context, svc *review.Service, d *changeData) error {
 	if d.reviews, err = svc.Reviews(ctx, d.change); err != nil {
 		return err
 	}
-	if d.moves, err = svc.Moves(ctx, d.change); err != nil {
+	if d.events, err = svc.Events(ctx, d.change); err != nil {
 		return err
 	}
 	if d.marks, err = svc.Marks(ctx, d.change); err != nil {

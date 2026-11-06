@@ -851,8 +851,8 @@ func TestSetBase(t *testing.T) {
 	if _, _, err := s.SetBase(ctx, moved, "parent"); err != nil {
 		t.Fatal(err)
 	}
-	want := []store.Move{{Kind: store.MoveBase, From: "main", To: "parent", How: store.MovedByHand, Author: human}}
-	if diff := cmp.Diff(want, moves(t, s, moved), ignoreMoveIDs); diff != "" {
+	want := []store.Event{{Kind: store.EventBase, From: "main", To: "parent", How: store.ByHand, Author: human}}
+	if diff := cmp.Diff(want, events(t, s, moved), ignoreEventIDs); diff != "" {
 		t.Errorf("moves (-want +got):\n%s", diff)
 	}
 }
@@ -967,7 +967,7 @@ func TestSetBranch(t *testing.T) {
 		}
 		return out
 	}
-	moved, _, err := s.SetBranch(ctx, change, "feature", store.MovedByHand)
+	moved, _, err := s.SetBranch(ctx, change, "feature", store.ByHand)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -982,7 +982,7 @@ func TestSetBranch(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, branch := range []string{"other", "main", "nope"} {
-		if _, _, err := s.SetBranch(ctx, moved, branch, store.MovedByHand); err == nil {
+		if _, _, err := s.SetBranch(ctx, moved, branch, store.ByHand); err == nil {
 			t.Errorf("SetBranch(%q) succeeded, want an error", branch)
 		}
 	}
@@ -991,18 +991,18 @@ func TestSetBranch(t *testing.T) {
 		t.Errorf("after refused moves (-want +got):\n%s", diff)
 	}
 	// Only the move made is recorded.
-	wantMoves := []store.Move{{Kind: store.MoveBranch, From: "poc", To: "feature", How: store.MovedByHand, Author: human}}
-	if diff := cmp.Diff(wantMoves, moves(t, s, moved), ignoreMoveIDs); diff != "" {
+	wantMoves := []store.Event{{Kind: store.EventBranch, From: "poc", To: "feature", How: store.ByHand, Author: human}}
+	if diff := cmp.Diff(wantMoves, events(t, s, moved), ignoreEventIDs); diff != "" {
 		t.Errorf("moves (-want +got):\n%s", diff)
 	}
 }
 
-// ignoreMoveIDs drops a move's generated fields.
-var ignoreMoveIDs = cmpopts.IgnoreFields(store.Move{}, "ID", "ChangeID", "CreatedAt")
+// ignoreEventIDs drops an event's generated fields.
+var ignoreEventIDs = cmpopts.IgnoreFields(store.Event{}, "ID", "ChangeID", "CreatedAt")
 
-func moves(t *testing.T, s *review.Service, c store.Change) []store.Move {
+func events(t *testing.T, s *review.Service, c store.Change) []store.Event {
 	t.Helper()
-	m, err := s.Moves(t.Context(), c)
+	m, err := s.Events(t.Context(), c)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1054,8 +1054,8 @@ func TestFollowRename(t *testing.T) {
 		t.Errorf("feature's change after following = #%d, want #1", c.Seq)
 	}
 	// Followed once, from the name it had to the one it has.
-	want := []store.Move{{Kind: store.MoveBranch, From: "poc", To: "feature", How: store.MovedRenamed, Author: human}}
-	if diff := cmp.Diff(want, moves(t, s, c), ignoreMoveIDs); diff != "" {
+	want := []store.Event{{Kind: store.EventBranch, From: "poc", To: "feature", How: store.ByRename, Author: human}}
+	if diff := cmp.Diff(want, events(t, s, c), ignoreEventIDs); diff != "" {
 		t.Errorf("moves (-want +got):\n%s", diff)
 	}
 	// Its own change has reviews now, so there is nothing to follow.

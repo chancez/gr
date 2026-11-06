@@ -39,9 +39,9 @@ type changeJSON struct {
 	UpdatedAt  time.Time     `json:"updated_at"`
 }
 
-// moveJSON is a change's branch or base moved: kind is "branch" or "base", and how "hand",
-// "renamed", or "copied".
-type moveJSON struct {
+// eventJSON is something that happened to a change: kind is "branch" or "base", for its branch or
+// base moved from one to another, and how "hand", "renamed", or "copied".
+type eventJSON struct {
 	Kind      string     `json:"kind"`
 	From      string     `json:"from"`
 	To        string     `json:"to"`
@@ -50,8 +50,8 @@ type moveJSON struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-func toMove(m store.Move) moveJSON {
-	return moveJSON{Kind: string(m.Kind), From: m.From, To: m.To, How: string(m.How),
+func toEvent(m store.Event) eventJSON {
+	return eventJSON{Kind: string(m.Kind), From: m.From, To: m.To, How: string(m.How),
 		Author: authorJSON{Name: m.Author.Name, Email: m.Author.Email}, CreatedAt: m.CreatedAt}
 }
 
