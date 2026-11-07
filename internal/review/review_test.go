@@ -1222,3 +1222,62 @@ func TestRebaseMerged(t *testing.T) {
 		t.Errorf("states: rebased, partly rebased, one squashed, several squashed (-want +got):\n%s", diff)
 	}
 }
+
+// A reply on an addressed thread from someone other than who addressed it reopens it, published
+// or, in a draft review, once that is submitted; whoever addressed it replying leaves it be.
+func TestReplyReopensAddressed(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	h, a := e.service(human), e.service(agent)
+	ctx := t.Context()
+	change, _ := e.ensure(h, "")
+	var ids []string
+	for _, body := range []string{"first", "second", "third"} {
+		th, err := h.StartThread(ctx, change, review.NewThread{Scope: store.ScopeChange, Body: body})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, th.ID)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range ids {
+		if err := a.SetThreadState(ctx, id, store.ThreadAddressed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reply := func(s *review.Service, id, body string, draft bool) {
+		t.Helper()
+		if _, err := s.Reply(ctx, change, id, body, draft); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reply(h, ids[0], "not fixed", false)
+	reply(a, ids[1], "see the commit", false)
+	reply(h, ids[2], "still wrong", true)
+	states := func() []store.ThreadState {
+		var out []store.ThreadState
+		for _, id := range ids {
+			th, err := h.Store().GetThread(ctx, id)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out = append(out, th.State)
+		}
+		return out
+	}
+	want := []store.ThreadState{store.ThreadOpen, store.ThreadAddressed, store.ThreadAddressed}
+	if diff := cmp.Diff(want, states()); diff != "" {
+		t.Errorf("after replies (-want +got):\n%s", diff)
+	}
+	if _, err := h.Submit(ctx, change, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	want[2] = store.ThreadOpen
+	if diff := cmp.Diff(want, states()); diff != "" {
+		t.Errorf("after submitting the draft reply (-want +got):\n%s", diff)
+	}
+}

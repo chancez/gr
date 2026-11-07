@@ -504,6 +504,11 @@ func (m *model) saveCompose() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	svc, ctx, change := m.svc, m.ctx, m.data.change
+	replied := "replied"
+	if t, ok := m.data.thread(c.threadID); ok && c.kind == composeReply && t.State == store.ThreadAddressed && t.StateBy != svc.Author() {
+		// Not done after all, which the reply says: it opens the thread again.
+		replied = fmt.Sprintf("replied; thread %s is open again", t.Label())
+	}
 	m.closeComposer()
 	m.main.anchor = -1
 	return m, func() tea.Msg {
@@ -514,7 +519,7 @@ func (m *model) saveCompose() (tea.Model, tea.Cmd) {
 			return opMsg{status: fmt.Sprintf("draft thread #%d added; S to submit", t.Seq), err: err}
 		case composeReply:
 			_, err := svc.Reply(ctx, change, c.threadID, body, false)
-			return opMsg{status: "replied", err: err}
+			return opMsg{status: replied, err: err}
 		case composeEdit:
 			return opMsg{status: "comment updated", err: svc.EditComment(ctx, c.commentID, body)}
 		case composeSubmit:

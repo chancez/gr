@@ -251,10 +251,24 @@ func (s *Service) Reply(ctx context.Context, change store.Change, threadID, body
 			c.ReviewID = review.ID
 		}
 		var err error
-		comment, err = tx.AddComment(ctx, c)
-		return err
+		if comment, err = tx.AddComment(ctx, c); err != nil || draft {
+			return err
+		}
+		return s.reopenOnReply(ctx, tx, threadID)
 	})
 	return comment, err
+}
+
+// reopenOnReply opens an addressed thread again when someone other than who marked it addressed
+// has replied: addressed waits on the others' word, and a reply that does not resolve it says it
+// is not done. A reply in a draft review counts once the review is submitted.
+func (s *Service) reopenOnReply(ctx context.Context, tx *store.Tx, threadID string) error {
+	t, err := tx.GetThread(ctx, threadID)
+	if err != nil || t.State != store.ThreadAddressed || t.StateBy == s.author {
+		return err
+	}
+	slog.Info("thread reopened by a reply", "thread", t.Seq)
+	return tx.SetThreadState(ctx, threadID, store.ThreadOpen, s.author)
 }
 
 // SetThreadState marks a thread open, addressed, or resolved.
@@ -414,9 +428,21 @@ func (s *Service) Submit(ctx context.Context, change store.Change, verdict store
 			return err
 		}
 		if strings.TrimSpace(body) != "" {
-			_, err = tx.CreateSummaryThread(ctx, review)
+			if _, err = tx.CreateSummaryThread(ctx, review); err != nil {
+				return err
+			}
 		}
-		return err
+		// Its replies are published now, and reopen what they reply to as a reply does.
+		ids, err := tx.ReviewThreadIDs(ctx, review.ID)
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := s.reopenOnReply(ctx, tx, id); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 	return review, err
 }

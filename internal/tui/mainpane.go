@@ -176,15 +176,19 @@ func (m *model) rowControls(i int, state *rowState) {
 }
 
 // stateButtons are the buttons that reply to a thread and move it on: resolve or reopen, and mark
-// an open one addressed.
+// an open one addressed, or reopen an addressed one.
 func stateButtons(t review.ThreadView) []control {
 	resolve := resolveButton
 	if t.State == store.ThreadResolved {
 		resolve = reopenButton
 	}
 	cs := []control{replyButton, resolve}
-	if t.State == store.ThreadOpen {
+	switch t.State {
+	case store.ThreadOpen:
 		cs = append(cs, addressedButton)
+	case store.ThreadAddressed:
+		// Not done after all: back to open, for whoever addressed it to look again.
+		cs = append(cs, unaddressButton)
 	}
 	return cs
 }

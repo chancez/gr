@@ -43,7 +43,8 @@ Flags and their meanings are in `gr <command> --help`.
 a reason for not acting, and every fix is committed.
 
 A thread the reviewer reopened is a fix they did not accept: read their newest comment and treat it
-as a fresh ask.
+as a fresh ask. The reviewer replying to a thread you addressed reopens it, so it is back in
+`gr threads --state open` with their reply as its newest comment.
 
 ## Resolving
 

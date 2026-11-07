@@ -107,6 +107,25 @@ func (q queries) CountReviewComments(ctx context.Context, reviewID string) (int,
 	return n, err
 }
 
+// ReviewThreadIDs lists the threads a review has comments in: those it started, and those it
+// replied to.
+func (q queries) ReviewThreadIDs(ctx context.Context, reviewID string) ([]string, error) {
+	rows, err := q.q.QueryContext(ctx, `SELECT DISTINCT thread_id FROM comments WHERE review_id = ?`, reviewID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 // DeleteReview deletes a review with its threads and comments.
 func (q queries) DeleteReview(ctx context.Context, id string) error {
 	return q.execOne(ctx, "review "+id, `DELETE FROM reviews WHERE id = ?`, id)

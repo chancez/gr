@@ -133,6 +133,7 @@ var (
 	resolveButton   control
 	reopenButton    control
 	addressedButton control
+	unaddressButton control
 	editButton      control
 	deleteButton    control
 	deleteReview    control
@@ -159,6 +160,7 @@ func init() {
 	resolveButton = link(actResolveThread, look.GlyphResolve, "Resolve")
 	reopenButton = link(actResolveThread, look.GlyphReopen, "Reopen")
 	addressedButton = link(actAddressThread, look.GlyphAddressed, "Addressed")
+	unaddressButton = link(actAddressThread, look.GlyphReopen, "Reopen")
 	editButton = link(actEditComment, look.GlyphEdit, "Edit")
 	deleteButton = link(actDeleteComment, look.GlyphDelete, "Delete")
 	deleteReview = link(actDeleteReview, look.GlyphDelete, "Delete")

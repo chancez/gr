@@ -254,7 +254,7 @@ func TestThreadAndTitleControls(t *testing.T) {
 	e.pressRun("l")
 	e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.Seq == 2 })
 	at := "row" + strconv.Itoa(e.m.main.cursor) + ":"
-	if got, want := e.shownControls(at), []string{"expand", "open in diff", "reply", "resolve", "edit", "delete"}; !reflect.DeepEqual(got, want) {
+	if got, want := e.shownControls(at), []string{"expand", "open in diff", "reply", "resolve", "addressed", "edit", "delete"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("an addressed thread's controls = %q, want %q", got, want)
 	}
 	e.click(at, "resolve")
@@ -591,11 +591,68 @@ func TestOverviewThreadOpenButtons(t *testing.T) {
 	}
 
 	// A thread on the whole diff has no commit to open.
-	// It is addressed, so it cannot be marked addressed again.
+	// It is addressed, so its addressed button reopens it.
 	i, _ = threadRow(store.ScopeDiff)
 	want = []string{actToggleThread.Title, actOpenThreadInDiff.Title, actReplyToThread.Title, actResolveThread.Title,
-		actEditComment.Title, actDeleteComment.Title}
+		actAddressThread.Title, actEditComment.Title, actDeleteComment.Title}
 	if diff := cmp.Diff(want, e.shownControls("row"+strconv.Itoa(i)+":")); diff != "" {
 		t.Errorf("a whole diff's thread's header (-want +got):\n%s", diff)
+	}
+}
+
+// An agent's addressed thread is not done until the reviewer says so: a reply reopens it, and a
+// opens it again too.
+func TestReopenAddressed(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	th, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "fix it"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictRequestChanges, ""); err != nil {
+		t.Fatal(err)
+	}
+	agent, err := review.Open(ctx, e.store, e.svc.Git(), store.Author{Name: "agent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	address := func() {
+		t.Helper()
+		if err := agent.SetThreadState(ctx, th.ID, store.ThreadAddressed); err != nil {
+			t.Fatal(err)
+		}
+		e.drain(e.m.loadCmd())
+		e.openNav("Overview")
+		e.cursorTo(func(r row) bool { return r.kind == rowThread && r.thread.ID == th.ID })
+	}
+	state := func() store.ThreadState {
+		got, err := e.svc.Store().GetThread(ctx, th.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return got.State
+	}
+	type after struct {
+		State  store.ThreadState
+		Status string
+	}
+	var got []after
+
+	address()
+	e.press("r")
+	e.typeText("not fixed")
+	e.pressRun("ctrl+s")
+	got = append(got, after{State: state(), Status: e.m.status})
+
+	address()
+	e.pressRun("a")
+	got = append(got, after{State: state(), Status: e.m.status})
+
+	want := []after{
+		{State: store.ThreadOpen, Status: "replied; thread #1 is open again"},
+		{State: store.ThreadOpen, Status: "thread #1 open"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("reply, then a (-want +got):\n%s", diff)
 	}
 }

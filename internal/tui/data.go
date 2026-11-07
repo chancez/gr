@@ -72,6 +72,16 @@ func (d *changeData) draft() (store.Review, bool) {
 
 func (d *changeData) isDraft(reviewID string) bool { return d.draftReviewIDs[reviewID] }
 
+// thread is the thread with id, if loaded.
+func (d *changeData) thread(id string) (review.ThreadView, bool) {
+	for _, t := range d.threads {
+		if t.ID == id {
+			return t, true
+		}
+	}
+	return review.ThreadView{}, false
+}
+
 // load reads a change: git's file lists, which need one process each, then what the database holds.
 // Diff contents are left to loadView.
 func load(ctx context.Context, svc *review.Service, changeID string) (*changeData, error) {

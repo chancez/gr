@@ -328,8 +328,14 @@ var (
 	}
 	actAddressThread = &interact.Action[*model, threadSubject]{
 		Title: "addressed",
-		Help:  "mark the thread addressed",
-		Run:   func(m *model, s threadSubject) tea.Cmd { return m.setThreadState(s.thread, store.ThreadAddressed) },
+		Help:  "mark the thread addressed, or open again an addressed one",
+		Run: func(m *model, s threadSubject) tea.Cmd {
+			state := store.ThreadAddressed
+			if s.thread.State == store.ThreadAddressed {
+				state = store.ThreadOpen
+			}
+			return m.setThreadState(s.thread, state)
+		},
 	}
 	actDeleteComment = &interact.Action[*model, threadSubject]{
 		Title:   "delete",
