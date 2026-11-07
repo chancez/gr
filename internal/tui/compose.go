@@ -386,6 +386,10 @@ func (m *model) composeCursor() *tea.Cursor {
 		return nil
 	}
 	c.X += left + m.composeIndent() + 2
+	if p.reader {
+		// The overview draws its rows after a margin, the selected item's marker's.
+		c.X++
+	}
 	c.Y = y
 	c.Shape = tea.CursorBlock
 	if m.compose.vim.Mode() == vimbubble.Insert {

@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -309,5 +310,55 @@ func TestShiftedKeysInTheCommentBox(t *testing.T) {
 	}
 	if diff := cmp.Diff([]string{"a\ndb", "a\ndb"}, got); diff != "" {
 		t.Errorf("text, without vim then with (-want +got):\n%s", diff)
+	}
+}
+
+// With vim, the terminal's cursor is right after what was typed: in a diff, a split diff, and the
+// overview, whose rows are drawn after a margin.
+func TestComposeCursorAfterTheText(t *testing.T) {
+	type where struct {
+		name string
+		open func(e *tuiEnv)
+	}
+	var got []string
+	for _, w := range []where{
+		{"diff", func(e *tuiEnv) {
+			e.openNav("say hello")
+			e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+			e.press("c")
+		}},
+		{"split", func(e *tuiEnv) {
+			e.openNav("say hello")
+			e.press("s")
+			e.cursorTo(func(r row) bool {
+				return r.kind == rowLine && r.right != nil && strings.Contains(r.right.Text, "hello")
+			})
+			e.m.main.side = anchor.SideNew
+			e.press("c")
+		}},
+		{"overview", func(e *tuiEnv) {
+			e.openNav("Overview")
+			e.cursorTo(func(r row) bool { return r.kind == rowThread && !r.collapsed })
+			e.press("r")
+		}},
+	} {
+		e := goldenEnv(t)
+		e.m.vim = true
+		w.open(e)
+		e.typeText("typed")
+		c := e.m.composeCursor()
+		if c == nil {
+			t.Fatalf("%s: no cursor:\n%s", w.name, e.screen())
+		}
+		line := ansi.Strip(strings.Split(e.m.render(), "\n")[c.Y])
+		end := -1
+		if at := strings.Index(line, "typed"); at >= 0 {
+			end = ansi.StringWidth(line[:at]) + len("typed")
+		}
+		got = append(got, fmt.Sprintf("%s: cursor at %d, text ends at %d", w.name, c.X, end))
+		want := fmt.Sprintf("%s: cursor at %d, text ends at %d", w.name, end, end)
+		if got[len(got)-1] != want {
+			t.Errorf("%s, want %s; line %q", got[len(got)-1], want, line)
+		}
 	}
 }
