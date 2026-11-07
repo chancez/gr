@@ -1,6 +1,7 @@
 package look
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -151,4 +152,44 @@ func MarkSHA(id string, spans ...Span) []Span {
 		out[i] = x
 	}
 	return out
+}
+
+// Wrap lays spans out in lines no wider than width, breaking only between marked runs, as between
+// a row's controls, so no control is split: a run of spans with one zone stays whole, and the
+// unmarked spans between runs, their gaps, are dropped where a line breaks. A run wider than width
+// has a line of its own.
+func (t *Theme) Wrap(width int, spans ...Span) [][]Span {
+	var lines [][]Span
+	var line, gap []Span
+	w := 0
+	for i := 0; i < len(spans); {
+		if spans[i].zone == "" {
+			gap = append(gap, spans[i])
+			i++
+			continue
+		}
+		j := i + 1
+		for j < len(spans) && spans[j].zone == spans[i].zone {
+			j++
+		}
+		run := spans[i:j]
+		gw, rw := ansi.StringWidth(t.Render(Plain, gap...)), ansi.StringWidth(t.Render(Plain, run...))
+		switch {
+		case len(line) == 0:
+			// A line starts with its first run, without the gap before it.
+			line, w = slices.Clone(run), rw
+		case w+gw+rw <= width:
+			line = append(append(line, gap...), run...)
+			w += gw + rw
+		default:
+			lines = append(lines, line)
+			line, w = slices.Clone(run), rw
+		}
+		gap = nil
+		i = j
+	}
+	if len(line) > 0 {
+		lines = append(lines, line)
+	}
+	return lines
 }

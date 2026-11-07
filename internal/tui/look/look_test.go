@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -131,5 +132,19 @@ func TestKeepMarks(t *testing.T) {
 	_, zones := Scan(restyled)
 	if want := map[string][]Zone{"sha": {{X: 3, Y: 0, W: 7}}}; !reflect.DeepEqual(zones, want) {
 		t.Errorf("zones = %+v, want %+v", zones, want)
+	}
+}
+
+// Wrap breaks between marked runs, never inside one, and drops the gap where it breaks.
+func TestWrap(t *testing.T) {
+	th := New(true, ThemeDefault)
+	spans := append(append(append(Mark("a", Text("Reply")), Fill(2), Default(" ")), Mark("b", Text("Resolve"))...),
+		append([]Span{Fill(2), Default(" ")}, Mark("c", Text("Delete"))...)...)
+	var got []string
+	for _, l := range th.Wrap(16, spans...) {
+		got = append(got, th.TextOf(l...))
+	}
+	if diff := cmp.Diff([]string{"Reply   Resolve", "Delete"}, got); diff != "" {
+		t.Errorf("wrapped (-want +got):\n%s", diff)
 	}
 }

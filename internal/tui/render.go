@@ -616,11 +616,15 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 	}
 	// The thread's controls sit in its bottom border, under its comments, where they take no line;
 	// the last one's room for its key runs into the border's line. A box too narrow for them, as on
-	// one side of a split diff, has them on a line of their own above the border instead.
+	// one side of a split diff, has them on lines of their own above the border instead, as many
+	// as they need.
 	controls := r.th.Render(look.Plain, look.OnBorder(state.cursor, state.controls...)...)
 	dashes := boxWidth - 5 - ansi.StringWidth(controls)
 	if len(state.controls) > 0 && dashes <= 0 {
-		lines = append(lines, "", ansi.Truncate(r.th.Render(look.Plain, state.controls...), inner, ""))
+		lines = append(lines, "")
+		for _, l := range r.th.Wrap(inner, state.controls...) {
+			lines = append(lines, ansi.Truncate(r.th.Render(look.Plain, l...), inner, ""))
+		}
 	} else {
 		// Room between the last comment and the controls in the bottom border.
 		lines = append(lines, "")
