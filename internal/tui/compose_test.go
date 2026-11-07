@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/go-cmp/cmp"
 	"github.com/guygrigsby/vimbubble/v2"
 
 	"github.com/chancez/gr/internal/anchor"
@@ -284,5 +285,29 @@ func TestSplitBoxesOnTheNewSide(t *testing.T) {
 				t.Errorf("the comment box starts at column %d, want %d:\n%s", got, code, e.screen())
 			}
 		}
+	}
+}
+
+// Shift held with enter, backspace, and the like does what the plain key does while typing, with
+// vim and without.
+func TestShiftedKeysInTheCommentBox(t *testing.T) {
+	shifted := func(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code, Mod: tea.ModShift} }
+	var got []string
+	for _, vim := range []bool{false, true} {
+		e := newTUIEnv(t)
+		e.m.vim = vim
+		e.openNav("say hello")
+		e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+		e.press("c")
+		e.typeText("abc")
+		// abc, then a|b, then a, b on the next line.
+		for _, k := range []tea.KeyPressMsg{shifted(tea.KeyBackspace), shifted(tea.KeyLeft), shifted(tea.KeyEnter)} {
+			e.m.Update(k)
+		}
+		e.typeText("d")
+		got = append(got, e.m.compose.area.Value())
+	}
+	if diff := cmp.Diff([]string{"a\ndb", "a\ndb"}, got); diff != "" {
+		t.Errorf("text, without vim then with (-want +got):\n%s", diff)
 	}
 }

@@ -452,6 +452,9 @@ func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if c, ok := m.runOn(msg, box); ok {
 		return m, c
 	}
+	if vim == nil || vim.Mode() == vimbubble.Insert {
+		msg = unshifted(msg)
+	}
 	if vim != nil {
 		if consumed, c := vim.Update(msg); consumed {
 			return m, c
@@ -460,6 +463,23 @@ func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.compose.area, cmd = m.compose.area.Update(msg)
 	return m, cmd
+}
+
+// unshifted is a key typed with shift held where shift means nothing to the text area, as
+// shift+enter, without it: the text area binds only the plain keys, so these did nothing. Shift
+// with tab is left, as it means something of its own.
+func unshifted(msg tea.KeyPressMsg) tea.KeyPressMsg {
+	k := msg.Key()
+	if k.Mod != tea.ModShift {
+		return msg
+	}
+	switch k.Code {
+	case tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete, tea.KeyLeft, tea.KeyRight, tea.KeyUp, tea.KeyDown,
+		tea.KeyHome, tea.KeyEnd, tea.KeyPgUp, tea.KeyPgDown:
+		k.Mod = 0
+		return tea.KeyPressMsg(k)
+	}
+	return msg
 }
 
 // closeOrAsk closes the comment box, or asks first when it has unsaved text, so a reflexive esc
