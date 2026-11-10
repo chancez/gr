@@ -417,6 +417,11 @@ func (m *model) pickerClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		m.closePicker()
 		return m, nil
 	}
+	// The filter is under the title, inside the border and padding.
+	if msg.Y == p.y+2 {
+		placeCursor(&p.filter, msg.X-p.x-2)
+		return m, nil
+	}
 	i := p.at(msg.X, msg.Y)
 	if i < 0 {
 		return m, nil
@@ -428,6 +433,25 @@ func (m *model) pickerClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	}
 	m.closePicker()
 	return m, p.pick(it)
+}
+
+// placeCursor moves in's cursor to what it shows at cell col, counted from its prompt's start: on
+// the prompt to the start, past the text to the end. An input scrolled along a long value shows
+// only some of it, so where that starts is found from what it shows.
+func placeCursor(in *textinput.Model, col int) {
+	value := []rune(in.Value())
+	shown := strings.TrimRight(strings.TrimPrefix(ansi.Strip(in.View()), in.Prompt), " ")
+	col -= ansi.StringWidth(in.Prompt)
+	pos := 0
+	if i := strings.Index(string(value), shown); shown != "" && i > 0 {
+		pos = len([]rune(string(value)[:i]))
+	}
+	for w := 0; pos < len(value); pos++ {
+		if w += ansi.StringWidth(string(value[pos])); w > col {
+			break
+		}
+	}
+	in.SetCursor(pos)
 }
 
 func (m *model) openPicker(p *picker) tea.Cmd {

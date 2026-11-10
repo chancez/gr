@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/go-cmp/cmp"
@@ -438,5 +439,63 @@ func TestPickerDrop(t *testing.T) {
 	chosen, _ := p.chosen()
 	if diff := cmp.Diff([]string{"B", "b2", "chosen b2"}, append(got, "chosen "+chosen.value)); diff != "" {
 		t.Errorf("after drop (-want +got):\n%s", diff)
+	}
+}
+
+// A click in the picker's filter, or the search bar, places the cursor at what it lands on: on the
+// prompt the start, past the text the end.
+func TestClickInTextInputs(t *testing.T) {
+	click := func(e *tuiEnv, x, y int) { e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}) }
+	// col is where s starts on line y of the screen.
+	col := func(e *tuiEnv, y int, s string) int {
+		e.t.Helper()
+		l := ansi.Strip(strings.Split(e.m.render(), "\n")[y])
+		i := strings.Index(l, s)
+		if i < 0 {
+			e.t.Fatalf("%q not on line %d: %q", s, y, l)
+		}
+		return ansi.StringWidth(l[:i])
+	}
+	var got []int
+
+	e := newTUIEnv(t)
+	e.press("w")
+	e.typeText("abcdef")
+	// Where the picker is is known once it is drawn.
+	e.m.render()
+	p := e.m.picker
+	y := p.y + 2
+	x := col(e, y, "abcdef")
+	for _, at := range []int{x + 2, x - 1, x + 20} {
+		click(e, at, y)
+		got = append(got, p.filter.Position())
+	}
+
+	e = newTUIEnv(t)
+	e.press("/")
+	e.typeText("hello")
+	_, _, bh := e.m.layoutSizes()
+	x = col(e, bh, "hello")
+	for _, at := range []int{x + 2, x - 1, x + 20} {
+		click(e, at, bh)
+		got = append(got, e.m.searchInput.Position())
+	}
+	if diff := cmp.Diff([]int{2, 0, 6, 2, 0, 5}, got); diff != "" {
+		t.Errorf("cursor positions, filter then search (-want +got):\n%s", diff)
+	}
+}
+
+// An input scrolled along a long value places the cursor by what it shows, not from the value's
+// start.
+func TestPlaceCursorScrolled(t *testing.T) {
+	in := textinput.New()
+	in.Prompt = "> "
+	in.SetWidth(5)
+	in.SetValue("0123456789")
+	in.CursorEnd()
+	shown := strings.TrimPrefix(ansi.Strip(in.View()), in.Prompt)
+	placeCursor(&in, len(in.Prompt)+1)
+	if got, want := in.Position(), strings.IndexByte("0123456789", shown[0])+1; got != want {
+		t.Errorf("showing %q, a click on its second cell put the cursor at %d, want %d", shown, got, want)
 	}
 }

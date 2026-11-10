@@ -29,17 +29,16 @@ In priority order.
 7. Test mouse handling in a real terminal.
 8. Suggestions on line comments, as GitHub's: a ```` ```suggestion ```` block the author can apply,
    over one line or several, filled in with the selected lines to edit.
-9. The mouse in the comment box and other text boxes: click to move the cursor, drag to select.
-10. Select text in a diff with the mouse, to copy it or act on it.
-11. Sessions: reopen the tabs gr had open, per session, so one gr per worktree or repository does
+9. Select text in a diff with the mouse, to copy it or act on it.
+10. Sessions: reopen the tabs gr had open, per session, so one gr per worktree or repository does
     not open every instance's tabs. A session could be named, or be where gr was started.
-12. gr on the web, or as an app in a native shell, through
+11. gr on the web, or as an app in a native shell, through
     [go-booba](https://github.com/NimbleMarkets/go-booba) or similar, running several reviews in one
     window as its tabs do.
 
 ## Polish
 
-13. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+12. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later

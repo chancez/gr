@@ -95,7 +95,8 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `ctrl+w`, `ctrl+pgdn` `ctrl+pgup`, `alt+1`..`9` | close the tab, next or previous tab, go to a tab |
 | `ctrl+shift+pgdn` `ctrl+shift+pgup` | move the tab right or left; drag a tab's label to move it, and click its `x` to close it |
 
-Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. Quitting remembers where you were in a change, the view,
+Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. In the comment box, a click places the
+cursor and a drag selects, as shift with the arrows does; `ctrl+shift+c` copies the selection. Quitting remembers where you were in a change, the view,
 the line, folds, and split, and opening it again goes back there.
 
 Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in
