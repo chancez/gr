@@ -179,6 +179,7 @@ func (t *Theme) EditorStyles() textarea.Styles {
 		state.CursorLine = text
 		state.EndOfBuffer = muted
 		state.Prompt = muted
+		state.Selection = t.style(elText, 0, Selected)
 	}
 	return styles
 }

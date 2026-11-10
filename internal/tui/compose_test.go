@@ -290,7 +290,7 @@ func TestSplitBoxesOnTheNewSide(t *testing.T) {
 }
 
 // Shift held with enter, backspace, and the like does what the plain key does while typing, with
-// vim and without.
+// vim and without; with the arrows it selects, as the text area has it.
 func TestShiftedKeysInTheCommentBox(t *testing.T) {
 	shifted := func(code rune) tea.KeyPressMsg { return tea.KeyPressMsg{Code: code, Mod: tea.ModShift} }
 	var got []string
@@ -301,14 +301,14 @@ func TestShiftedKeysInTheCommentBox(t *testing.T) {
 		e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
 		e.press("c")
 		e.typeText("abc")
-		// abc, then a|b, then a, b on the next line.
+		// abc, then ab, then b selected, then replaced by a new line.
 		for _, k := range []tea.KeyPressMsg{shifted(tea.KeyBackspace), shifted(tea.KeyLeft), shifted(tea.KeyEnter)} {
 			e.m.Update(k)
 		}
 		e.typeText("d")
 		got = append(got, e.m.compose.area.Value())
 	}
-	if diff := cmp.Diff([]string{"a\ndb", "a\ndb"}, got); diff != "" {
+	if diff := cmp.Diff([]string{"a\nd", "a\nd"}, got); diff != "" {
 		t.Errorf("text, without vim then with (-want +got):\n%s", diff)
 	}
 }

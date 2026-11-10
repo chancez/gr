@@ -471,15 +471,14 @@ func (m *model) composeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 // unshifted is a key typed with shift held where shift means nothing to the text area, as
 // shift+enter, without it: the text area binds only the plain keys, so these did nothing. Shift
-// with tab is left, as it means something of its own.
+// with the arrows selects, and with tab means something of its own, so those are left.
 func unshifted(msg tea.KeyPressMsg) tea.KeyPressMsg {
 	k := msg.Key()
 	if k.Mod != tea.ModShift {
 		return msg
 	}
 	switch k.Code {
-	case tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete, tea.KeyLeft, tea.KeyRight, tea.KeyUp, tea.KeyDown,
-		tea.KeyHome, tea.KeyEnd, tea.KeyPgUp, tea.KeyPgDown:
+	case tea.KeyEnter, tea.KeyBackspace, tea.KeyDelete, tea.KeyHome, tea.KeyEnd, tea.KeyPgUp, tea.KeyPgDown:
 		k.Mod = 0
 		return tea.KeyPressMsg(k)
 	}
