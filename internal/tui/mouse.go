@@ -67,6 +67,11 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.mode != modeNormal || (msg.Button != tea.MouseLeft && !right) {
 		return m, nil
 	}
+	// A press on code starts selecting its text, for a drag to carry on; the click still moves
+	// the cursor, as below.
+	if !right {
+		m.textPress(msg.X, msg.Y)
+	}
 	// A mention, such as a sha in a thread's location, never takes the cursor: any click on it
 	// opens its menu.
 	if t, ok := m.mentionAt(msg.X, msg.Y); ok {
@@ -225,6 +230,10 @@ func (m *model) selected() tea.Cmd {
 func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modeCompose && m.compose.dragging {
 		m.composeDrag(msg.X, msg.Y)
+		return m, nil
+	}
+	if m.text != nil && m.text.down {
+		m.textDragTo(msg.X, msg.Y)
 		return m, nil
 	}
 	if m.selecting != nil {

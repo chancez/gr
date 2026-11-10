@@ -163,6 +163,8 @@ type model struct {
 	opened store.Change
 	// openRepo opens another repository, for its changes to open in tabs.
 	openRepo func(ctx context.Context, dir string) (*review.Service, error)
+	// text is code text selected with the mouse, or nil.
+	text *textDrag
 	// asked is what askAboutLanding asked already, so it is asked once.
 	asked map[string]bool
 	// renamed is, while a branch picked is opened, the change of the branch it was copied from,
@@ -453,6 +455,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.composeRelease()
 			return m, nil
 		}
+		if m.text != nil && m.text.down {
+			return m, m.textRelease()
+		}
 		if m.selecting != nil {
 			return m, m.selected()
 		}
@@ -473,7 +478,15 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modePicker:
 			return m.pickerKey(msg)
 		}
-		return m.normalKey(msg)
+		cursor, view := m.main.cursor, m.current
+		model, cmd := m.normalKey(msg)
+		if m.text != nil && (m.main.cursor != cursor || m.current != view) {
+			// Moving on from text selected with the mouse lets it go, with the lines it selected,
+			// as an editor's selection goes.
+			m.text = nil
+			m.main.anchor = -1
+		}
+		return model, cmd
 	}
 	if m.mode == modeCompose {
 		var cmd tea.Cmd

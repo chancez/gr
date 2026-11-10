@@ -40,6 +40,9 @@ func (m *model) rebuildMain() {
 		}
 	}
 	m.main.anchor = -1
+	// Rows are made anew, so what was selected on the old ones is not.
+	m.text = nil
+	m.main.fresh = func(i int) bool { _, _, ok := m.textOnRow(i); return ok }
 	_, mw, bh := m.layoutSizes()
 	m.main.width, m.main.height = mw, m.rowsHeight(bh)
 	// The rows' controls go with the rows' drawings.
@@ -84,7 +87,11 @@ func (m *model) renderMainRow(i int, state rowState) []string {
 		width--
 	}
 	m.rowControls(i, &state)
+	state.code = codeRow(i)
 	lines := m.r.renderRow(m.data, m.views[m.current], m.main.rows[i], width, state)
+	if len(lines) > 0 {
+		lines[0] = m.paintText(i, lines[0])
+	}
 	if m.r.segments != nil {
 		m.segments[i] = m.r.segments
 	}

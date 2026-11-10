@@ -96,7 +96,10 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `ctrl+shift+pgdn` `ctrl+shift+pgup` | move the tab right or left; drag a tab's label to move it, and click its `x` to close it |
 
 Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. In the comment box, a click places the
-cursor and a drag selects, as shift with the arrows does; `ctrl+shift+c` copies the selection. Quitting remembers where you were in a change, the view,
+cursor and a drag selects, as shift with the arrows does; `ctrl+shift+c` copies the selection.
+In a diff, dragging over code selects its text, the code alone: letting go copies it to the
+clipboard, through the terminal, and selects its lines, so `c` comments on them. It stays as the
+view scrolls, and goes as the cursor moves. Quitting remembers where you were in a change, the view,
 the line, folds, and split, and opening it again goes back there.
 
 Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in

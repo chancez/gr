@@ -16,6 +16,9 @@ type pane struct {
 	starts []int
 	total  int
 	cache  map[int][]string
+	// fresh, when set, says which rows to draw afresh rather than from the cache, as those text is
+	// selected on.
+	fresh  func(i int) bool
 	cursor int
 	// anchor is the other end of a line selection, or -1.
 	anchor int
@@ -516,7 +519,8 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 			state.focusOld, state.focusNew = p.rows[i].covers(p.focusThread)
 		}
 		var lines []string
-		if state.cursor || state.selected || state.activeHunk || state.hover || state.focusOld || state.focusNew || p.attaching(i) {
+		if state.cursor || state.selected || state.activeHunk || state.hover || state.focusOld || state.focusNew || p.attaching(i) ||
+			p.fresh != nil && p.fresh(i) {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {
 			lines = cached

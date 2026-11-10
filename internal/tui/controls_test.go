@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"reflect"
 	"sort"
 	"strconv"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/gittest"
@@ -654,5 +656,195 @@ func TestReopenAddressed(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("reply, then a (-want +got):\n%s", diff)
+	}
+}
+
+// Dragging over a diff's code selects its text, the code alone, across lines: letting go copies it
+// and selects its lines, for c to comment on them. A click without a drag selects nothing.
+func TestSelectTextInADiff(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.pressRun("l")
+	// at is where on screen s starts.
+	at := func(s string) (int, int) {
+		t.Helper()
+		for y, l := range strings.Split(e.m.render(), "\n") {
+			if i := strings.Index(ansi.Strip(l), s); i >= 0 {
+				return ansi.StringWidth(ansi.Strip(l)[:i]), y
+			}
+		}
+		t.Fatalf("%q not on screen:\n%s", s, e.screen())
+		return 0, 0
+	}
+	type copied struct {
+		Clipboard string
+		Status    string
+		Lines     [2]int
+	}
+	drag := func(fromX, fromY, toX, toY int) copied {
+		t.Helper()
+		e.m.Update(tea.MouseClickMsg{X: fromX, Y: fromY, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+		_, cmd := e.m.Update(tea.MouseReleaseMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+		got := copied{Status: e.m.status, Lines: [2]int{e.m.main.anchor, e.m.main.cursor}}
+		if cmd != nil {
+			got.Clipboard = fmt.Sprint(cmd())
+		}
+		return got
+	}
+	row := func(text string) int {
+		for i, r := range e.m.main.rows {
+			if r.kind == rowLine && r.line != nil && r.line.Text == text {
+				return i
+			}
+		}
+		t.Fatalf("no row %q", text)
+		return 0
+	}
+
+	// Within a line: from println's p to the end of the line, past its text.
+	px, py := at(`println("hello")`)
+	hello := row("\tprintln(\"hello\")")
+	got := []copied{drag(px, py, px+40, py)}
+	// Across lines, from main's m on the line above, to println's n on the added line.
+	mx, my := at("main() {")
+	got = append(got, drag(mx, my, px+6, py))
+	// A click, no drag.
+	got = append(got, drag(px, py, px, py))
+	want := []copied{
+		{Clipboard: `println("hello")`, Status: "copied 1 line; c comments on them", Lines: [2]int{hello, hello}},
+		{Clipboard: "main() {\n\tprintln(\"hi\")\n\tprintl", Status: "copied 3 lines; c comments on them",
+			Lines: [2]int{row("func main() {"), hello}},
+		{Status: "copied 3 lines; c comments on them", Lines: [2]int{-1, hello}},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("drags (-want +got):\n%s", diff)
+	}
+}
+
+// What a drag selects is drawn selected, c comments on its lines, and in a split diff it stays on
+// the side it began on.
+func TestSelectedTextIsShownAndCommentedOn(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.pressRun("l")
+	line := func(y int) string { return strings.Split(e.m.render(), "\n")[y] }
+	at := func(s string) (int, int) {
+		t.Helper()
+		for y, l := range strings.Split(e.m.render(), "\n") {
+			if i := strings.LastIndex(ansi.Strip(l), s); i >= 0 {
+				return ansi.StringWidth(ansi.Strip(l)[:i]), y
+			}
+		}
+		t.Fatalf("%q not on screen:\n%s", s, e.screen())
+		return 0, 0
+	}
+	drag := func(fromX, fromY, toX, toY int) string {
+		e.m.Update(tea.MouseClickMsg{X: fromX, Y: fromY, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+		_, cmd := e.m.Update(tea.MouseReleaseMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+		if cmd == nil {
+			return ""
+		}
+		return fmt.Sprint(cmd())
+	}
+
+	x, y := at(`println("hello")`)
+	before := line(y)
+	drag(x, y, x+7, y)
+	if line(y) == before {
+		t.Error("the selection is not drawn")
+	}
+	if ansi.Strip(line(y)) != ansi.Strip(before) {
+		t.Errorf("the selection changed the text drawn: %q, was %q", ansi.Strip(line(y)), ansi.Strip(before))
+	}
+	e.press("c")
+	if want := "Comment on main.go:4 in commit"; !strings.Contains(e.screen(), want) {
+		t.Errorf("c after a drag does not comment on its line:\n%s", e.screen())
+	}
+	e.press("esc")
+
+	// Split: a drag from the new side onto the old side's stops at the start of the new side's
+	// code, its indent.
+	e.press("s")
+	nx, ny := at(`println("hello")`)
+	if got := drag(nx, ny, nx-40, ny); got != "\t" {
+		t.Errorf("a drag onto the old side copied %q, want the new side's indent, a tab", got)
+	}
+	if got, want := drag(nx, ny, nx+7, ny), "println"; got != want {
+		t.Errorf("a drag on the new side copied %q, want %q", got, want)
+	}
+}
+
+// Text selected with the mouse stays as the view scrolls, out of view and back, and goes, with
+// its lines, once the cursor moves by key.
+func TestSelectedTextScrollsAndGoes(t *testing.T) {
+	e := goldenEnv(t)
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 12})
+	e.openNav("say hello")
+	e.pressRun("l")
+	// Down to the first code drawn with a few cells to it.
+	x, y := -1, -1
+	for scrolled := 0; y < 0 && scrolled < 30; scrolled++ {
+		e.m.render()
+		for id, zs := range e.m.zones {
+			if _, _, ok := parseCodeZone(id); ok && zs[0].W > 4 && (y < 0 || zs[0].Y < y) {
+				x, y = zs[0].X, zs[0].Y
+			}
+		}
+		if y < 0 {
+			e.m.Update(tea.MouseWheelMsg{X: 40, Y: 5, Button: tea.MouseWheelDown})
+		}
+	}
+	e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: x + 4, Y: y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: x + 4, Y: y, Button: tea.MouseLeft})
+	if e.m.text == nil {
+		t.Fatalf("the drag at %d, %d selected nothing:\n%s", x, y, e.screen())
+	}
+	row := e.m.text.anchor.row
+	// painted reports whether the selected row is on screen and drawn selected: other than it is
+	// drawn with nothing selected.
+	painted := func() bool {
+		selected := e.m.render()
+		zs, ok := e.m.zones[codeZone(codeRow(row), e.m.text.anchor.side)]
+		if !ok {
+			return false
+		}
+		selected = strings.Split(selected, "\n")[zs[0].Y]
+		text := e.m.text
+		e.m.text = nil
+		plain := strings.Split(e.m.render(), "\n")[zs[0].Y]
+		e.m.text = text
+		return selected != plain
+	}
+	type seen struct {
+		Selected bool
+		Lines    bool
+	}
+	see := func() seen { return seen{Selected: e.m.textActive() && painted(), Lines: e.m.main.anchor >= 0} }
+	got := []seen{see()}
+	// Up, so the selected line goes out of view below, then back down to it.
+	for range 10 {
+		e.m.Update(tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelUp})
+	}
+	got = append(got, seen{Selected: e.m.textActive(), Lines: e.m.main.anchor >= 0})
+	if painted() {
+		t.Error("scrolled up, the selected line is still on screen; the test does not scroll it away")
+	}
+	// Down until it is back in view: the scroll up stopped at the top.
+	for range 30 {
+		e.m.render()
+		if _, ok := e.m.zones[codeZone(codeRow(row), e.m.text.anchor.side)]; ok {
+			break
+		}
+		e.m.Update(tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
+	}
+	got = append(got, see())
+	e.press("j")
+	got = append(got, seen{Selected: e.m.textActive(), Lines: e.m.main.anchor >= 0})
+	want := []seen{{true, true}, {true, true}, {true, true}, {false, false}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("selected, scrolled away, back, then j (-want +got):\n%s", diff)
 	}
 }

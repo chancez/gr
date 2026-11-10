@@ -32,13 +32,19 @@ type roles struct {
 	// onSolid is text on a solid background, such as the focused pane's title.
 	onSolid color.Color
 
-	headingBg       color.Color
-	hunkBg          color.Color
-	addedBg         color.Color
-	deletedBg       color.Color
-	cursorBg        color.Color
-	dimCursorBg     color.Color
-	selectedBg      color.Color
+	headingBg   color.Color
+	hunkBg      color.Color
+	addedBg     color.Color
+	deletedBg   color.Color
+	cursorBg    color.Color
+	dimCursorBg color.Color
+	selectedBg  color.Color
+	// textSelectedBg is text selected with the mouse, which has to stand out on any line: yellow,
+	// apart from the cursor's blue and the diff's green and red, stronger than the pale yellow of
+	// selected lines, and lighter than a search match.
+	textSelectedBg color.Color
+	// onTextSelected is the text on it, dark in either theme, as the yellow is light in both.
+	onTextSelected  color.Color
 	paneUnfocusedBg color.Color
 	controlBg       color.Color
 	commentedBg     color.Color
@@ -78,6 +84,8 @@ func newRoles(isDark bool, theme string) roles {
 		cursorBg:        ld(skyBlue, steelBlue),
 		dimCursorBg:     ld(lightGray, graphite),
 		selectedBg:      ld(paleYellow, indigoGray),
+		textSelectedBg:  ld(sunflower, lemon),
+		onTextSelected:  ld(ink, night),
 		paneUnfocusedBg: ld(lightGray, darkGray),
 		controlBg:       ld(paleGray, charcoal),
 		commentedBg:     ld(sand, darkOlive),
@@ -201,6 +209,8 @@ const (
 	Status
 	StatusError
 	SearchMatch
+	// TextSelected is text selected with the mouse, in a diff or the comment box.
+	TextSelected
 	// Control is a control's own background, a chip on whatever it sits on, as GitHub's buttons.
 	Control
 	// ControlSolid is a one-cell control that has to stand out on any line, as the + that comments,
@@ -226,6 +236,7 @@ var surfaceNames = [numSurfaces]string{
 	Status:        "surface.status",
 	StatusError:   "surface.status-error",
 	SearchMatch:   "surface.search-match",
+	TextSelected:  "surface.text-selected",
 	Control:       "surface.control",
 	ControlSolid:  "surface.control-solid",
 	Commented:     "surface.commented",
@@ -306,6 +317,7 @@ func New(isDark bool, name string) *Theme {
 		Status:        {bg: p.success, solid: true, fg: p.onSolid, bold: true},
 		StatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
 		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
+		TextSelected:  {bg: p.textSelectedBg, solid: true, fg: p.onTextSelected},
 		Control:       {bg: p.controlBg},
 		ControlSolid:  {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
 		Commented:     {bg: p.commentedBg},

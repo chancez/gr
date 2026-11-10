@@ -99,7 +99,11 @@ func (t *Theme) Render(s Surface, spans ...Span) string {
 	var b strings.Builder
 	for _, x := range spans {
 		if x.styled != nil {
-			b.WriteString(x.styled(t.surfaces[s].bg))
+			out := x.styled(t.surfaces[s].bg)
+			if x.zone != "" {
+				out = markZone(x.zone, out)
+			}
+			b.WriteString(out)
 			continue
 		}
 		text := t.text(x)
@@ -170,6 +174,9 @@ func (t *Theme) StyleHelp(h *help.Model) {
 }
 
 // EditorStyles are a text area's styles in the theme: text, and muted placeholder and prompt.
+// SelectionStyle is how text selected with the mouse is drawn, over what it was drawn as.
+func (t *Theme) SelectionStyle() lipgloss.Style { return t.style(elText, 0, TextSelected) }
+
 func (t *Theme) EditorStyles() textarea.Styles {
 	styles := textarea.DefaultStyles(t.isDark)
 	text, muted := t.style(elText, 0, Plain), t.style(elMuted, 0, Plain)
@@ -179,7 +186,7 @@ func (t *Theme) EditorStyles() textarea.Styles {
 		state.CursorLine = text
 		state.EndOfBuffer = muted
 		state.Prompt = muted
-		state.Selection = t.style(elText, 0, Selected)
+		state.Selection = t.SelectionStyle()
 	}
 	return styles
 }

@@ -63,6 +63,9 @@ type rowState struct {
 	below []look.Span
 	// trail are drawn at the end of an open thread's header line in the overview.
 	trail []look.Span
+	// code names a diff line's code, for the mouse to find on screen: its zone is code, then the
+	// side, as codeZone has it.
+	code string
 }
 
 // hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
@@ -259,7 +262,21 @@ func (r *renderer) code(f git.FileDiff, l git.Line) look.Span {
 func (r *renderer) renderUnified(f git.FileDiff, l git.Line, width int, state rowState, tint, focused bool) string {
 	return r.th.Draw(lineSurface(l.Kind, state, true, tint, focused), width,
 		append(append([]look.Span{gutter(gutterWidth(f), tint, l.OldLine, l.NewLine)}, lineSign(l.Kind, state.controls)...),
-			look.Default(" "), r.code(f, l))...)
+			look.Default(" "), r.markCode(state, sideUnified, r.code(f, l)))...)
+}
+
+// sideUnified is a unified diff line's code, as against one side of a split diff's.
+const sideUnified = "unified"
+
+// codeZone is the zone a diff line's code on side is drawn in, under the row's name.
+func codeZone(row, side string) string { return row + ":" + side }
+
+// markCode marks a line's code as the row's, on side, for the mouse to find.
+func (r *renderer) markCode(state rowState, side string, code look.Span) look.Span {
+	if state.code == "" {
+		return code
+	}
+	return look.Mark(codeZone(state.code, side), code)[0]
 }
 
 // commented reports whether threads that are not resolved are on a line, which tints its line
@@ -308,7 +325,7 @@ func (r *renderer) renderSplit(f git.FileDiff, rw row, width int, state rowState
 		}
 		return r.th.Draw(lineSurface(l.Kind, state, state.side == side, commented(covers), focused), w,
 			append(append([]look.Span{gutter(gw, commented(covers), n)}, lineSign(l.Kind, controls)...), look.Default(" "),
-				r.code(f, *l))...)
+				r.markCode(state, string(side), r.code(f, *l)))...)
 	}
 	return cell(left, anchor.SideOld, half) + r.th.Render(look.Plain, look.Border("|", false)) + cell(right, anchor.SideNew, width-half-1)
 }
