@@ -848,3 +848,41 @@ func TestSelectedTextScrollsAndGoes(t *testing.T) {
 		t.Errorf("selected, scrolled away, back, then j (-want +got):\n%s", diff)
 	}
 }
+
+// The + on a line of text selected with the mouse comments on all the lines the text is on, not
+// only the + line's; off the selection, it comments on its own line.
+func TestCommentOnSelectedText(t *testing.T) {
+	titles := func(onSelection bool) string {
+		e := newTUIEnv(t)
+		e.openNav("say hello")
+		e.pressRun("l")
+		var x, y int
+		for i, l := range strings.Split(e.m.render(), "\n") {
+			if j := strings.Index(ansi.Strip(l), "main() {"); j >= 0 {
+				x, y = ansi.StringWidth(ansi.Strip(l)[:j]), i
+			}
+		}
+		// From main on func's line to the end of the added line, two lines down.
+		e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: x + 30, Y: y + 2, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseReleaseMsg{X: x + 30, Y: y + 2, Button: tea.MouseLeft})
+		i := e.m.text.head.row
+		if !onSelection {
+			i = e.m.text.anchor.row - 1
+		}
+		e.hoverRow(i)
+		e.click("row"+strconv.Itoa(i)+":", actCommentOnLine.Title)
+		if e.m.mode != modeCompose {
+			t.Fatalf("the + opened no comment box:\n%s", e.screen())
+		}
+		return e.m.compose.title
+	}
+	got := []string{titles(true), titles(false)}
+	for i := range got {
+		got[i], _, _ = strings.Cut(got[i], " in commit")
+	}
+	want := []string{"Comment on main.go:3-4", "Comment on main.go:2"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("+ on a selected line, then off the selection (-want +got):\n%s", diff)
+	}
+}

@@ -157,12 +157,22 @@ func (m *model) textPress(x, y int) {
 	}
 }
 
-// textDrag moves the selection's head to where the mouse is, along the code of the line it is on,
-// on the side the selection began on.
+// textDragTo moves the selection's head to where the mouse is, along the code of the line it is
+// on, on the side the selection began on, and in its file, as a comment on its lines can be.
 func (m *model) textDragTo(x, y int) {
-	if pos, ok := m.codeOnLine(x, y, m.text.anchor.side); ok {
+	pos, ok := m.codeOnLine(x, y, m.text.anchor.side)
+	if ok && m.main.rows[pos.row].file == m.main.rows[m.text.anchor.row].file {
 		m.text.head = pos
 	}
+}
+
+// textLines are the first and last rows text selected with the mouse is on, while it is.
+func (m *model) textLines() (lo, hi int, ok bool) {
+	if !m.textActive() {
+		return 0, 0, false
+	}
+	from, to := m.text.span()
+	return from.row, to.row, true
 }
 
 // textRelease ends the drag: a selection is copied, and its lines selected, for c to comment on.

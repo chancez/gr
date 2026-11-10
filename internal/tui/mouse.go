@@ -189,9 +189,18 @@ func (m *model) selectFrom(x, y int, run interact.Bound[*model]) {
 		return
 	}
 	m.setFocus(focusMain)
-	m.main.cursor, m.main.anchor = i, i
-	if m.split {
-		m.main.side = m.sideAt(x)
+	if lo, hi, ok := m.textLines(); ok && i >= lo && i <= hi {
+		// On a line of text selected with the mouse, the + comments on all the lines it is on, on
+		// its side.
+		m.main.anchor, m.main.cursor = lo, hi
+		if m.split {
+			m.main.side = anchor.Side(m.text.anchor.side)
+		}
+	} else {
+		m.main.cursor, m.main.anchor = i, i
+		if m.split {
+			m.main.side = m.sideAt(x)
+		}
 	}
 	m.selecting = &selecting{run: run}
 	m.syncNav()
