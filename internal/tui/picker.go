@@ -54,6 +54,8 @@ type pickerItem struct {
 	heading bool
 	// run is what picking the entry does, for menus of actions.
 	run func(*model) tea.Cmd
+	// key names what the entry stands for, as a change's id, for drop to find it by.
+	key string
 }
 
 // text is how the entry shows: in full while filtering, when the headings are hidden.
@@ -163,6 +165,46 @@ func pickerRows(height int) int {
 }
 
 // move moves the selection n entries, past headings.
+// drop removes the entries whose key is in keys, as changes found closed after the picker opened,
+// and any heading left with nothing under it. The entry chosen stays chosen while it is there.
+func (p *picker) drop(keys map[string]bool) {
+	chosen := -1
+	if p.pos < len(p.shown) {
+		chosen = p.shown[p.pos]
+	}
+	keep := make([]bool, len(p.items))
+	for i, it := range p.items {
+		keep[i] = it.key == "" || !keys[it.key]
+	}
+	for i, it := range p.items {
+		if !it.heading {
+			continue
+		}
+		keep[i] = false
+		for j := i + 1; j < len(p.items) && !p.items[j].heading; j++ {
+			if keep[j] {
+				keep[i] = true
+				break
+			}
+		}
+	}
+	var items []pickerItem
+	at := -1
+	for i, it := range p.items {
+		if keep[i] {
+			if i == chosen {
+				at = len(items)
+			}
+			items = append(items, it)
+		}
+	}
+	p.items = items
+	p.refilter()
+	if k := slices.Index(p.shown, at); at >= 0 && k >= 0 {
+		p.move(k - p.pos)
+	}
+}
+
 func (p *picker) move(n int) {
 	if len(p.shown) == 0 {
 		return

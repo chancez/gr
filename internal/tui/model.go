@@ -387,6 +387,12 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case viewLoadedMsg:
 		m.applyView(msg)
 		return m, nil
+	case landedMsg:
+		// Only into the picker it was looked up for, while it is open.
+		if m.mode == modePicker && m.picker == msg.picker && len(msg.landed) > 0 {
+			m.picker.drop(msg.landed)
+		}
+		return m, nil
 	case openedMsg:
 		if msg.err != nil {
 			m.setError(msg.err)

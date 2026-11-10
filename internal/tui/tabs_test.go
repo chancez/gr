@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/gittest"
@@ -315,5 +316,84 @@ func TestPathCompletion(t *testing.T) {
 	tab.Update(keyMsg("tab"))
 	if v := tab.picker.filter.Value(); v != root+"/alphabet/" {
 		t.Errorf("tab completed to %q, want %q", v, root+"/alphabet/")
+	}
+}
+
+// Other repositories' changes that landed since gr last looked go from the new tab picker once
+// their git is read, in the background; one gr cannot open stays as listed.
+func TestTabPickerSeesOtherReposLanded(t *testing.T) {
+	e := newTabsEnv(t)
+	open := func(ctx context.Context, dir string) (*review.Service, error) {
+		g, err := git.Open(ctx, dir)
+		if err != nil {
+			return nil, err
+		}
+		return review.Open(ctx, e.store, g, e.svc.Author())
+	}
+	repo := func(branches ...string) *gittest.Repo {
+		r := gittest.New(t)
+		// A root of its own: gr knows a repository by its root commit.
+		r.Write("x.txt", branches[0]+"\n")
+		r.Commit("root")
+		svc, err := open(t.Context(), r.Dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, b := range branches {
+			r.Git("checkout", "-q", "-b", b, "main")
+			r.Write(b+".txt", b+"\n")
+			r.Commit("add " + b)
+			target, err := svc.ParseTarget(t.Context(), b, "main")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := svc.EnsureChange(t.Context(), target); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return r
+	}
+	other := repo("landed", "kept")
+	other.Git("checkout", "-q", "main")
+	other.Git("merge", "-q", "--ff-only", "landed")
+	gone := repo("lost")
+	if err := os.RemoveAll(gone.Dir); err != nil {
+		t.Fatal(err)
+	}
+
+	tab := e.a.tabs[0]
+	tab.openRepo = open
+	cmd := tab.pickTab()
+	names := func() []string {
+		var out []string
+		for _, it := range tab.picker.items {
+			if it.key != "" {
+				out = append(out, it.full)
+			}
+		}
+		return out
+	}
+	otherName, goneName := filepath.Base(other.Dir), filepath.Base(gone.Dir)
+	before := []string{goneName + ": #1 lost onto main", otherName + ": #2 kept onto main", otherName + ": #1 landed onto main"}
+	slices.Sort(before)
+	got := names()
+	slices.Sort(got)
+	if diff := cmp.Diff(before, got); diff != "" {
+		t.Fatalf("as opened (-want +got):\n%s", diff)
+	}
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(landedMsg); ok {
+			tab.Update(msg)
+		}
+	}
+	after := []string{goneName + ": #1 lost onto main", otherName + ": #2 kept onto main"}
+	slices.Sort(after)
+	got = names()
+	slices.Sort(got)
+	if diff := cmp.Diff(after, got); diff != "" {
+		t.Errorf("after the check (-want +got):\n%s", diff)
 	}
 }

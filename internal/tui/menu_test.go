@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
@@ -418,5 +419,24 @@ func TestRightClickInSplitTakesItsSide(t *testing.T) {
 	e.pressRun("enter")
 	if want := "Comment on main.go:4 (old) in commit b194130"; e.m.mode != modeCompose || e.m.compose.title != want {
 		t.Errorf("comment from the old side: mode %d, title %q, want %q", e.m.mode, e.m.compose.title, want)
+	}
+}
+
+// drop takes out entries by key, and headings left empty, keeping the chosen entry chosen.
+func TestPickerDrop(t *testing.T) {
+	p := newPicker("t", []pickerItem{
+		{value: "A", heading: true}, {value: "a1", key: "x"}, {value: "a2", key: "y"},
+		{value: "B", heading: true}, {value: "b1", key: "z"}, {value: "b2"},
+	}, nil)
+	p.layout(80, 20)
+	p.move(3)
+	p.drop(map[string]bool{"x": true, "y": true, "z": true})
+	var got []string
+	for _, i := range p.shown {
+		got = append(got, p.items[i].value)
+	}
+	chosen, _ := p.chosen()
+	if diff := cmp.Diff([]string{"B", "b2", "chosen b2"}, append(got, "chosen "+chosen.value)); diff != "" {
+		t.Errorf("after drop (-want +got):\n%s", diff)
 	}
 }

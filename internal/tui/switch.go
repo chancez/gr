@@ -3,6 +3,7 @@ package tui
 import (
 	"cmp"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"slices"
@@ -47,18 +48,20 @@ func (m *model) pickTab() tea.Cmd {
 		m.setError(err)
 		return nil
 	}
+	var others []review.RepoChanges
 	if m.openRepo != nil {
 		repos, err := m.svc.OtherRepos(m.ctx)
 		if err != nil {
 			m.setError(err)
 			return nil
 		}
+		others = repos
 		for _, r := range repos {
 			dir := r.Repo.LastPath
 			name := m.repoName(dir)
 			items = append(items, repoHeading(name, dir))
 			for _, c := range r.Changes {
-				items = append(items, pickerItem{value: changeLabel(c), full: name + ": " + changeLabel(c),
+				items = append(items, pickerItem{value: changeLabel(c), full: name + ": " + changeLabel(c), key: c.ID,
 					run: func(m *model) tea.Cmd {
 						svc, err := m.openRepo(m.ctx, dir)
 						if err != nil {
@@ -72,7 +75,46 @@ func (m *model) pickTab() tea.Cmd {
 		items = append(items, pickerItem{value: "Elsewhere", heading: true},
 			pickerItem{value: "Open a repository by its path", run: (*model).pickRepoPath})
 	}
-	return m.openPicker(newPicker("Open in a new tab", items, runItem(m)))
+	p := newPicker("Open in a new tab", items, runItem(m))
+	return tea.Batch(m.openPicker(p), m.checkOtherRepos(p, others))
+}
+
+// landedMsg is the changes of other repositories found landed after picker p opened listing them.
+type landedMsg struct {
+	picker *picker
+	landed map[string]bool
+}
+
+// checkOtherRepos looks, in the background, for which of the other repositories' changes have
+// landed since gr last looked, as this repository's own are when listed: their git has to be
+// opened for it, which the picker does not wait on. A repository gr cannot open, as a worktree
+// since removed, is left as listed.
+func (m *model) checkOtherRepos(p *picker, repos []review.RepoChanges) tea.Cmd {
+	if len(repos) == 0 {
+		return nil
+	}
+	ctx, openRepo := m.ctx, m.openRepo
+	return func() tea.Msg {
+		landed := map[string]bool{}
+		for _, r := range repos {
+			svc, err := openRepo(ctx, r.Repo.LastPath)
+			if err != nil {
+				slog.Debug("cannot open a repository to check its changes", "dir", r.Repo.LastPath, "err", err)
+				continue
+			}
+			changes, err := svc.MarkLanded(ctx, r.Changes)
+			if err != nil {
+				slog.Debug("cannot check a repository's changes", "dir", r.Repo.LastPath, "err", err)
+				continue
+			}
+			for _, c := range changes {
+				if c.State != store.ChangeOpen {
+					landed[c.ID] = true
+				}
+			}
+		}
+		return landedMsg{picker: p, landed: landed}
+	}
 }
 
 // pickRepoPath asks for the path to a repository, and then which of its changes or branches to
