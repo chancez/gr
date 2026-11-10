@@ -4,10 +4,8 @@ In priority order.
 
 ## Tracking changes
 
-1. Detect merges more widely: against the default branch as well as the base, with `git cherry`
-   to count commits that landed by patch id (cherry-picks, rebases) and show a partly merged change
-   as "N of M commits landed", by content for squash merges, and from the last recorded head once
-   the branch is deleted.
+1. Detect merges more widely: against the default branch as well as the base, show a partly merged
+   change as "N of M commits landed", and find squash merges of several commits by content.
 
 ## Agents
 

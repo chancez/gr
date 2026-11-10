@@ -5,8 +5,9 @@
 #   fixture.sh <dir> fix
 #
 # Creates <dir>/repo, a branch "feature" of two commits on main, and <dir>/env.sh, which points gr,
-# git, and the shell at <dir> alone, and gives the shell fix, which runs this with fix. With fix, commits the fix an agent makes for the review. Dates
-# are fixed, so every run makes the same commits.
+# git, and the shell at <dir> alone, and gives the shell fix, which runs this with fix. With fix,
+# commits the fix an agent makes for the review. Dates are fixed, so every run makes the same
+# commits.
 set -eu
 
 dir=${1:?dir}
