@@ -449,6 +449,10 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.mouseMotion(msg)
 	case tea.MouseReleaseMsg:
 		m.dragging, m.draggingSplit = false, false
+		if m.mode == modeCompose && m.compose.dragging {
+			m.composeRelease()
+			return m, nil
+		}
 		if m.selecting != nil {
 			return m, m.selected()
 		}

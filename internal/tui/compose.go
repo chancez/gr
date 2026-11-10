@@ -31,8 +31,10 @@ type composer struct {
 	kind  composeKind
 	title string
 	// warn shows the title as a warning.
-	warn      bool
-	area      textarea.Model
+	warn bool
+	area textarea.Model
+	// dragging is set while the mouse, pressed in the text, selects.
+	dragging  bool
 	thread    review.NewThread
 	threadID  string
 	commentID string
@@ -369,33 +371,96 @@ func (m *model) composeCursor() *tea.Cursor {
 		return nil
 	}
 	c := m.compose.area.Cursor()
+	x, y, ok := m.composeOrigin()
+	if c == nil || !ok {
+		return nil
+	}
 	p := &m.main
-	if c == nil || !p.attaching(p.attach) {
+	if y += c.Y; y < m.mainTop() || y >= m.mainTop()+p.height {
 		return nil
 	}
-	nw, _, _ := m.layoutSizes()
-	left := 0
-	if nw > 0 {
-		left = nw + 1
-	}
-	// The box's top border and title are above its text, inside the indent, border, and padding.
-	end := p.starts[p.attach] + p.rowHeight(p.attach)
-	top := end - len(p.attached(p.width)) + 2
-	y := m.mainTop() + top - p.offset + c.Y
-	if y < m.mainTop() || y >= m.mainTop()+p.height {
-		return nil
-	}
-	c.X += left + m.composeIndent() + 2
-	if p.reader {
-		// The overview draws its rows after a margin, the selected item's marker's.
-		c.X++
-	}
+	c.X += x
 	c.Y = y
 	c.Shape = tea.CursorBlock
 	if m.compose.vim.Mode() == vimbubble.Insert {
 		c.Shape = tea.CursorBar
 	}
 	return c
+}
+
+// composeOrigin is where the comment box's text area starts on screen, its top left cell, prompt
+// included: what the text area's own coordinates, as its cursor's, count from. It may be above or
+// below the pane, as the box scrolls.
+func (m *model) composeOrigin() (x, y int, ok bool) {
+	p := &m.main
+	if m.mode != modeCompose || !p.attaching(p.attach) {
+		return 0, 0, false
+	}
+	nw, _, _ := m.layoutSizes()
+	if nw > 0 {
+		x = nw + 1
+	}
+	// The box's top border and title are above its text, inside the indent, border, and padding.
+	end := p.starts[p.attach] + p.rowHeight(p.attach)
+	top := end - len(p.attached(p.width)) + 2
+	x += m.composeIndent() + 2
+	if p.reader {
+		// The overview draws its rows after a margin, the selected item's marker's.
+		x++
+	}
+	return x, m.mainTop() + top - p.offset, true
+}
+
+// composeAt is where x, y on screen is in the comment box's text area, in its own coordinates,
+// if it is on the text area.
+func (m *model) composeAt(x, y int) (int, int, bool) {
+	ox, oy, ok := m.composeOrigin()
+	a := &m.compose.area
+	// Its width is the text's, after the prompt.
+	if !ok || x < ox || x >= ox+a.Width()+2 || y < oy || y >= oy+a.Height() ||
+		y < m.mainTop() || y >= m.mainTop()+m.main.height {
+		return 0, 0, false
+	}
+	return x - ox, y - oy, true
+}
+
+// composePress starts a selection, or places the cursor, where x, y lands in the comment box's
+// text: a press with no drag places the cursor, and a drag selects, in vim's normal mode as a
+// visual selection.
+func (m *model) composePress(x, y int) bool {
+	ax, ay, ok := m.composeAt(x, y)
+	if !ok {
+		return false
+	}
+	if v := m.compose.vim; v != nil && v.Mode() == vimbubble.Visual {
+		v.SetMode(vimbubble.Normal)
+	}
+	m.compose.area.BeginSelection(ax, ay)
+	m.compose.dragging = true
+	return true
+}
+
+// composeDrag extends the selection the press started to x, y, which may be past the text, as
+// the text area clamps it.
+func (m *model) composeDrag(x, y int) {
+	ox, oy, ok := m.composeOrigin()
+	if !ok {
+		return
+	}
+	if v := m.compose.vim; v != nil && v.Mode() == vimbubble.Normal {
+		// Vim selects in visual mode, from where the press put the cursor.
+		v.SetMode(vimbubble.Visual)
+	}
+	m.compose.area.ExtendSelection(x-ox, y-oy)
+}
+
+// composeRelease ends the drag. In vim's visual mode the selection stays open for vim's motions
+// to go on with; otherwise it is kept, and a press with no drag leaves only the cursor.
+func (m *model) composeRelease() {
+	m.compose.dragging = false
+	if v := m.compose.vim; v == nil || v.Mode() != vimbubble.Visual {
+		m.compose.area.EndSelection()
+	}
 }
 
 // composeLines draws the comment box, width wide, as it hangs under its row.

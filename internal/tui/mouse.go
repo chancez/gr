@@ -52,6 +52,10 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return m, c.run.Run(m)
 		}
 	}
+	// In the comment box's text, a press places the cursor, and a drag from it selects.
+	if m.mode == modeCompose && msg.Button == tea.MouseLeft && !m.compose.closing && m.composePress(msg.X, msg.Y) {
+		return m, nil
+	}
 	// A left click moves the cursor to what it lands on, as keys would. A right click opens the
 	// menu of what is there, and moves nothing.
 	right := msg.Button == tea.MouseRight
@@ -214,6 +218,10 @@ func (m *model) selected() tea.Cmd {
 }
 
 func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
+	if m.mode == modeCompose && m.compose.dragging {
+		m.composeDrag(msg.X, msg.Y)
+		return m, nil
+	}
 	if m.selecting != nil {
 		m.selectTo(msg.Y)
 		return m, nil

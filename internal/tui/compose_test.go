@@ -362,3 +362,71 @@ func TestComposeCursorAfterTheText(t *testing.T) {
 		}
 	}
 }
+
+// The mouse in the comment box: a click places the cursor where it lands, and a drag selects,
+// with vim as a visual selection that vim's d deletes.
+func TestMouseInTheCommentBox(t *testing.T) {
+	// at is where on screen the text s starts, in the box drawn now.
+	at := func(e *tuiEnv, s string) (int, int) {
+		e.t.Helper()
+		for y, l := range strings.Split(e.m.render(), "\n") {
+			if i := strings.Index(ansi.Strip(l), s); i >= 0 {
+				return ansi.StringWidth(ansi.Strip(l)[:i]), y
+			}
+		}
+		e.t.Fatalf("%q not on screen:\n%s", s, e.screen())
+		return 0, 0
+	}
+	press := func(e *tuiEnv, x, y int) { e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}) }
+	drag := func(e *tuiEnv, x, y int) { e.m.Update(tea.MouseMotionMsg{X: x, Y: y, Button: tea.MouseLeft}) }
+	release := func(e *tuiEnv, x, y int) { e.m.Update(tea.MouseReleaseMsg{X: x, Y: y, Button: tea.MouseLeft}) }
+
+	type result struct {
+		Line, Column int
+		Selected     string
+		Value        string
+	}
+	var got []result
+	for _, vim := range []bool{false, true} {
+		e := newTUIEnv(t)
+		e.m.vim = vim
+		e.openNav("say hello")
+		e.cursorTo(func(r row) bool { return addedLine(r) && r.file == 1 })
+		e.press("c")
+		e.typeText("alpha beta")
+		if vim {
+			e.press("esc")
+		}
+		// Only in the box: the diff above says hello too.
+		x, y := at(e, "alpha beta")
+		x += len("alpha ")
+		press(e, x, y)
+		release(e, x, y)
+		a := &e.m.compose.area
+		got = append(got, result{Line: a.Line(), Column: a.Column(), Selected: a.SelectedText(), Value: a.Value()})
+
+		hx, hy := at(e, "alpha beta")
+		press(e, hx, hy)
+		drag(e, hx+4, hy)
+		release(e, hx+4, hy)
+		got = append(got, result{Line: a.Line(), Column: a.Column(), Selected: a.SelectedText(), Value: a.Value()})
+		if vim {
+			if mode := e.m.compose.vim.Mode(); mode != vimbubble.Visual {
+				t.Errorf("after a drag, vim is in %s, want visual", mode)
+			}
+			e.press("d")
+			got = append(got, result{Line: a.Line(), Column: a.Column(), Selected: a.SelectedText(), Value: a.Value()})
+		}
+	}
+	want := []result{
+		{Column: 6, Value: "alpha beta"},
+		{Column: 4, Selected: "alph", Value: "alpha beta"},
+		{Column: 6, Value: "alpha beta"},
+		{Column: 4, Selected: "alph", Value: "alpha beta"},
+		// What the drag covered, as it is highlighted, not the character under the cursor too.
+		{Column: 0, Value: "a beta"},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("click, then drag, without vim then with (-want +got):\n%s", diff)
+	}
+}
