@@ -175,6 +175,12 @@ var (
 		Help:  "comment on the change",
 		Run:   cmd[changeSubject](func(m *model) tea.Cmd { return m.commentOnChange() }),
 	}
+	actOpenNewWork = &interact.Action[*model, changeSubject]{
+		Title:   "new change",
+		Help:    "open a change for the branch's commits since this one closed",
+		Applies: func(m *model, _ changeSubject) bool { return m.data != nil && m.data.newWork > 0 },
+		Run:     func(m *model, _ changeSubject) tea.Cmd { return m.openNewWork() },
+	}
 	actSubmit = &interact.Action[*model, changeSubject]{
 		Title: "submit",
 		Help:  "submit your review: then a, r, or c for a verdict",
@@ -638,7 +644,7 @@ func init() {
 	commitKind = interact.NewKind(func(s commitSubject) string { return "Commit " + shortSHA(s.view.commit.SHA) },
 		actMarkCommitReviewed, actCommentOnCommit)
 	changeKind = interact.NewKind(func(changeSubject) string { return "Change" },
-		actCommentOnChange, actSubmit, actDiscardDraft)
+		actCommentOnChange, actSubmit, actDiscardDraft, actOpenNewWork)
 
 	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
 

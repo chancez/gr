@@ -134,6 +134,7 @@ var (
 	reopenButton    control
 	addressedButton control
 	unaddressButton control
+	newWorkButton   control
 	editButton      control
 	deleteButton    control
 	deleteReview    control
@@ -161,6 +162,8 @@ func init() {
 	reopenButton = link(actResolveThread, look.GlyphReopen, "Reopen")
 	addressedButton = link(actAddressThread, look.GlyphAddressed, "Addressed")
 	unaddressButton = link(actAddressThread, look.GlyphReopen, "Reopen")
+	// A button, not a quiet link: it is what to do next, alone on its line.
+	newWorkButton = button(actOpenNewWork, look.GlyphNew, "New change")
 	editButton = link(actEditComment, look.GlyphEdit, "Edit")
 	deleteButton = link(actDeleteComment, look.GlyphDelete, "Delete")
 	deleteReview = link(actDeleteReview, look.GlyphDelete, "Delete")

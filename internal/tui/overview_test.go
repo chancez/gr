@@ -211,3 +211,46 @@ func TestNewWorkAfterMerge(t *testing.T) {
 		t.Errorf("after y (-want +got):\n%s", diff)
 	}
 }
+
+// A question about new work that is dismissed, or that came while a picker was open, leaves the
+// overview saying so, with a button that opens the new change; the waiting one is asked once the
+// picker closes.
+func TestNewWorkStaysOffered(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	e.repo.Git("checkout", "-q", "feature")
+	e.tick()
+	e.repo.Write("next.go", "package main\n")
+	e.repo.Commit("next")
+
+	// The work turns up while the picker is open: not asked over it, and asked once it closes.
+	e.press("w")
+	e.tick()
+	asked := []bool{e.m.mode == modeConfirm}
+	e.pressRun("esc")
+	e.tick()
+	asked = append(asked, e.m.mode == modeConfirm)
+	if diff := cmp.Diff([]bool{false, true}, asked); diff != "" {
+		t.Errorf("asked over the picker, then after it (-want +got):\n%s", diff)
+	}
+
+	// Dismissed, it stays in the overview's details, with its button.
+	e.press("j")
+	e.tick()
+	e.openNav("Overview")
+	line := ""
+	for _, l := range strings.Split(e.screen(), "\n") {
+		if strings.Contains(l, "new commit since") {
+			_, line, _ = strings.Cut(l, "| ")
+			line = strings.TrimSpace(line)
+		}
+	}
+	if want := "#1 merged into main; feature has 1 new commit since   + New change"; line != want {
+		t.Errorf("details line = %q, want %q", line, want)
+	}
+	e.click("pinned", actOpenNewWork.Title)
+	if c := e.m.data.change; c.Seq != 2 || c.State != store.ChangeOpen {
+		t.Errorf("after its button: change #%d %s, want #2 open", c.Seq, c.State)
+	}
+}

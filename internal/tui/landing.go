@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 // A change ends when its branch lands. gr sees that itself when the branch's commits are on its
@@ -21,7 +22,8 @@ type openedMsg struct {
 
 // askAboutLanding asks what the change shown has come to, when its data says there is something to
 // ask: whether an emptied change merged, or whether to open a change for a closed one's new work.
-// Each is asked once for what it is about, and not over anything else open.
+// Each is asked once for what it is about, and not over anything else open: until then it is
+// asked again, as the TUI ticks.
 func (m *model) askAboutLanding() {
 	d := m.data
 	if d == nil || m.mode != modeNormal {
@@ -56,13 +58,41 @@ func (m *model) askAboutLanding() {
 			commits = "commit"
 		}
 		m.ask(fmt.Sprintf("%s has %d new %s since #%d %s. Open a new change for them?", c.Branch, d.newWork, commits, c.Seq, c.State),
-			func() tea.Msg {
-				t, err := svc.ParseTarget(ctx, c.Branch, "")
-				if err != nil {
-					return openedMsg{err: err}
-				}
-				next, _, err := svc.EnsureChange(ctx, t)
-				return openedMsg{change: next, status: fmt.Sprintf("change #%d for %s's new work", next.Seq, c.Branch), err: err}
-			})
+			m.openNewWork())
 	}
+}
+
+// openNewWork opens the change for the commits the shown change's branch has had since it closed,
+// making it, in place of the closed one.
+func (m *model) openNewWork() func() tea.Msg {
+	svc, ctx, c := m.svc, m.ctx, m.data.change
+	return func() tea.Msg {
+		t, err := svc.ParseTarget(ctx, c.Branch, "")
+		if err != nil {
+			return openedMsg{err: err}
+		}
+		next, _, err := svc.EnsureChange(ctx, t)
+		return openedMsg{change: next, status: fmt.Sprintf("change #%d for %s's new work", next.Seq, c.Branch), err: err}
+	}
+}
+
+// newWorkLine says, in the overview's details, that the closed change's branch has moved on, with
+// the button that opens a change for it: there for as long as that is so, where the question is
+// asked once.
+func (m *model) newWorkLine() []look.Span {
+	d := m.data
+	if d == nil || d.newWork == 0 {
+		return nil
+	}
+	c := d.change
+	what := string(c.State)
+	if c.State == store.ChangeMerged {
+		what = "merged into " + c.BaseBranch
+	}
+	commits := "commits"
+	if d.newWork == 1 {
+		commits = "commit"
+	}
+	line := []look.Span{look.Warning(fmt.Sprintf("#%d %s; %s has %d new %s since", c.Seq, what, c.Branch, d.newWork, commits)), look.Default("  ")}
+	return append(line, m.controls("pinned", modeNormal, theChange.Target(changeSubject{}), newWorkButton)...)
 }

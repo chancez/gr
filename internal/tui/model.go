@@ -425,6 +425,8 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refreshCmd(), tick())
 	case refreshMsg:
 		m.version = msg.version
+		// A question about the change that waited on something else open, as each tick looks.
+		m.askAboutLanding()
 		switch {
 		case msg.headMoved:
 			return m, m.loadCmd()
@@ -505,7 +507,12 @@ func (m *model) pinned() [][]look.Span {
 	if m.data == nil || m.current >= len(m.views) || m.views[m.current].kind != viewOverview {
 		return nil
 	}
-	return overviewDetails(m.data)
+	details := overviewDetails(m.data)
+	if line := m.newWorkLine(); line != nil {
+		// Before the blank line that ends them.
+		details = append(details[:len(details)-1:len(details)-1], line, details[len(details)-1])
+	}
+	return details
 }
 
 // mainTop is the screen line the main pane's rows start on, under its title bar and what is
