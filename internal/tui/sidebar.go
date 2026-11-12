@@ -35,13 +35,29 @@ type navItem struct {
 
 // truncateLeft keeps the end of s, marking the cut with "...".
 func truncateLeft(s string, width int) string {
-	if ansi.StringWidth(s) <= width {
+	return cutBack(s, width, 0)
+}
+
+// cutBack keeps width columns of s, ending shift columns before its end, marking each cut with
+// "...".
+func cutBack(s string, width, shift int) string {
+	n := ansi.StringWidth(s)
+	if n <= width {
 		return s
 	}
 	if width <= 3 {
 		return ansi.Truncate(s, width, "")
 	}
-	return "..." + ansi.TruncateLeft(s, ansi.StringWidth(s)-(width-3), "")
+	start := max(n-width-shift, 0)
+	switch {
+	case start == 0:
+		return ansi.Truncate(s, width, "...")
+	case start == n-width:
+		return "..." + ansi.TruncateLeft(s, n-(width-3), "")
+	case width <= 6:
+		return ansi.Cut(s, start, start+width)
+	}
+	return "..." + ansi.Cut(s, start+3, start+width-3) + "..."
 }
 
 // navList is a scrolling list in the sidebar.
@@ -51,6 +67,17 @@ type navList struct {
 	top   int
 	// summary, when set, is a line under the header, as the files' count and size.
 	summary []look.Span
+	// shift is how many columns the labels cut at the front are scrolled back toward their start.
+	shift int
+}
+
+// sideStep is how many columns a sideways scroll of the sidebar's names moves them.
+const sideStep = 4
+
+// scrollSide scrolls the labels cut at the front n columns back toward their start, or toward their
+// end when n is negative.
+func (l *navList) scrollSide(n int) {
+	l.shift = max(l.shift+n, 0)
 }
 
 // move moves the selection by n, reporting whether it changed.
@@ -128,6 +155,14 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 	}
 	rows := height - l.head()
 	l.scrollTo(rows)
+	// No further back than the longest label has to go to show its start.
+	most := 0
+	for _, it := range l.items {
+		if it.prefix != "" {
+			most = max(most, ansi.StringWidth(it.label)-it.labelRoom(th, width))
+		}
+	}
+	l.shift = min(l.shift, most)
 	out := []string{paneTitle(th, " "+title, width, focused)}
 	if len(l.summary) > 0 && height > 1 {
 		out = append(out, th.DrawCut(look.HeadingBar, width, l.summary...))
@@ -143,7 +178,7 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 		case last && y == rows-1:
 			out = append(out, th.Draw(look.Plain, width, look.More(false, len(l.items)-i)...))
 		default:
-			out = append(out, l.items[i].render(th, width, i == l.pos, focused))
+			out = append(out, l.items[i].render(th, width, l.shift, i == l.pos, focused))
 		}
 	}
 	for len(out) < height {
@@ -164,20 +199,29 @@ func (it navItem) width(th *look.Theme) int {
 	return w
 }
 
-// render draws one entry at width: the label, truncated so the badge always shows at the right.
-func (it navItem) render(th *look.Theme, width int, selected, focused bool) string {
-	room := width
-	badge := th.TextOf(it.badge...)
-	if badge != "" {
-		room -= ansi.StringWidth(badge) + 1
+// room is the width left of the badge at width, and labelRoom the width of that for the label.
+func (it navItem) room(th *look.Theme, width int) int {
+	if badge := th.TextOf(it.badge...); badge != "" {
+		return width - ansi.StringWidth(badge) - 1
 	}
-	lead := 0
+	return width
+}
+
+func (it navItem) labelRoom(th *look.Theme, width int) int {
+	room := it.room(th, width) - ansi.StringWidth(it.prefix)
 	if it.sha != "" {
-		lead = ansi.StringWidth(th.TextOf(look.SHA(it.sha).Short())) + 1
+		room -= ansi.StringWidth(th.TextOf(look.SHA(it.sha).Short())) + 1
 	}
-	label := ansi.Truncate(it.label, room-lead, "...")
+	return room
+}
+
+// render draws one entry at width: the label, truncated so the badge always shows at the right.
+// A label cut at the front shows shift columns back from its end.
+func (it navItem) render(th *look.Theme, width, shift int, selected, focused bool) string {
+	room := it.room(th, width)
+	label := ansi.Truncate(it.label, it.labelRoom(th, width), "...")
 	if it.prefix != "" {
-		label = it.prefix + truncateLeft(it.label, room-ansi.StringWidth(it.prefix))
+		label = it.prefix + cutBack(it.label, it.labelRoom(th, width), shift)
 	}
 	surf, text := look.Plain, look.Default
 	var p []look.Prop
@@ -196,7 +240,7 @@ func (it navItem) render(th *look.Theme, width int, selected, focused bool) stri
 		spans = append(spans, look.SHA(it.sha).Short().With(p...), text(" ").With(p...))
 	}
 	out := th.Draw(surf, room, append(spans, text(label).With(p...))...)
-	if badge == "" {
+	if room == width {
 		return out
 	}
 	return out + th.Draw(surf, width-room, append([]look.Span{text(" ")}, it.badge...)...)
@@ -575,7 +619,7 @@ func (m *model) navPeek(width int) (string, bool) {
 		return "", false
 	}
 	// Lit as the cursor is, so it stands apart from the diff it covers.
-	return it.render(m.r.th, w, true, i == l.pos && m.focus == f), true
+	return it.render(m.r.th, w, 0, true, i == l.pos && m.focus == f), true
 }
 
 // showFile shows file s in the main pane, in its view.

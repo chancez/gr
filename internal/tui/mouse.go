@@ -12,15 +12,26 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	nw, _, _ := m.layoutSizes()
+	if msg.X < nw {
+		l, _, _ := m.sidebarAt(msg.Y)
+		// Sideways, or shifted as terminals without a sideways wheel send it, scrolls the names.
+		shifted := msg.Mod&tea.ModShift != 0
+		switch {
+		case msg.Button == tea.MouseWheelLeft || shifted && msg.Button == tea.MouseWheelUp:
+			l.scrollSide(sideStep)
+		case msg.Button == tea.MouseWheelRight || shifted && msg.Button == tea.MouseWheelDown:
+			l.scrollSide(-sideStep)
+		case msg.Button == tea.MouseWheelUp:
+			l.top = max(l.top-3, 0)
+		case msg.Button == tea.MouseWheelDown:
+			l.top += 3
+		}
+		return m, nil
+	}
 	delta := 3
 	if msg.Button == tea.MouseWheelUp {
 		delta = -3
 	} else if msg.Button != tea.MouseWheelDown {
-		return m, nil
-	}
-	if msg.X < nw {
-		l, _, _ := m.sidebarAt(msg.Y)
-		l.top = max(l.top+delta, 0)
 		return m, nil
 	}
 	if m.main.reader {

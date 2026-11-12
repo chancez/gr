@@ -830,7 +830,7 @@ func TestSidebarMarks(t *testing.T) {
 
 	// A badge survives truncation.
 	it := navItem{label: "a very long commit subject", badge: look.Badge(2, true, true)}
-	if got := ansi.Strip(it.render(look.New(true, ThemeDefault), 20, false, false)); got != "a very lon... (2) *x" {
+	if got := ansi.Strip(it.render(look.New(true, ThemeDefault), 20, 0, false, false)); got != "a very lon... (2) *x" {
 		t.Errorf("rendered = %q", got)
 	}
 }
@@ -1351,7 +1351,7 @@ func TestReviewedEntriesAndHeadersAreStyled(t *testing.T) {
 	done := navItem{label: "M a.go", badge: look.Badge(2, true, true), done: true}
 	want := th.Draw(look.Plain, 23, look.Default("M a.go").With(look.Dim)) +
 		th.Render(look.Plain, append([]look.Span{look.Default(" ")}, look.Badge(2, true, true)...)...)
-	if got := done.render(th, 30, false, false); !reflect.DeepEqual(cells.Parse(got), cells.Parse(want)) {
+	if got := done.render(th, 30, 0, false, false); !reflect.DeepEqual(cells.Parse(got), cells.Parse(want)) {
 		t.Errorf("reviewed entry = %q, want it dimmed with a colored badge: %q", got, want)
 	}
 
@@ -2352,21 +2352,9 @@ func TestFilesSummary(t *testing.T) {
 // Hovering a file whose name is cut shows it whole on its line, drawn over the diff beside it, so
 // nothing else on the screen moves. Off the sidebar, the line is cut again.
 func TestSidebarPeek(t *testing.T) {
-	e := newTUIEnv(t)
-	long := "internal/some/deeply/nested/package/with_a_long_name.go"
-	e.repo.Write(long, gittest.Lines("package nested"))
-	e.repo.Commit("add nested")
-	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
-		t.Fatal(err)
-	}
-	e.pressRun("R")
-	e.openNav("All changes")
+	e, long, y := longNameEnv(t)
 	nw, _, _ := e.m.layoutSizes()
 	before := strings.Split(e.screen(), "\n")
-	y := slices.IndexFunc(before, func(l string) bool { return strings.Contains(l[:nw], "g_name.go") })
-	if y < 0 {
-		t.Fatalf("no entry for %s:\n%s", long, e.screen())
-	}
 	e.m.Update(tea.MouseMotionMsg{X: 1, Y: y})
 	after := strings.Split(e.screen(), "\n")
 	for i := range before {
@@ -2382,5 +2370,67 @@ func TestSidebarPeek(t *testing.T) {
 	e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: y})
 	if got := strings.Split(e.screen(), "\n")[y]; got != before[y] {
 		t.Errorf("line off the sidebar = %q, want %q", got, before[y])
+	}
+}
+
+// longNameEnv is a change with a file whose name the sidebar cuts, showing the whole diff, and the
+// screen line of the file's entry.
+func longNameEnv(t *testing.T) (*tuiEnv, string, int) {
+	t.Helper()
+	e := newTUIEnv(t)
+	long := "internal/some/deeply/nested/package/with_a_long_name.go"
+	e.repo.Write(long, gittest.Lines("package nested"))
+	e.repo.Commit("add nested")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	e.pressRun("R")
+	e.openNav("All changes")
+	nw, _, _ := e.m.layoutSizes()
+	y := slices.IndexFunc(strings.Split(e.screen(), "\n"), func(l string) bool { return strings.Contains(l[:nw], "g_name.go") })
+	if y < 0 {
+		t.Fatalf("no entry for %s:\n%s", long, e.screen())
+	}
+	return e, long, y
+}
+
+// The file list's names scroll sideways, by shift and the arrows or by the wheel, from the end of a
+// name cut at the front back to its start, and no further.
+func TestSidebarScrollNames(t *testing.T) {
+	e, _, y := longNameEnv(t)
+	nw, _, _ := e.m.layoutSizes()
+	e.press("h")
+	shiftKey := func(code rune, n int) {
+		for range n {
+			e.m.Update(tea.KeyPressMsg{Code: code, Mod: tea.ModShift})
+		}
+	}
+	wheel := func(b tea.MouseButton, mod tea.KeyMod) {
+		e.m.Update(tea.MouseWheelMsg{X: 1, Y: y, Button: b, Mod: mod})
+	}
+	entry := func() string { return strings.Split(e.screen(), "\n")[y][:nw] }
+	var got []string
+	got = append(got, entry())
+	shiftKey(tea.KeyLeft, 1)
+	got = append(got, entry())
+	shiftKey(tea.KeyLeft, 20)
+	got = append(got, entry())
+	shiftKey(tea.KeyRight, 1)
+	got = append(got, entry())
+	wheel(tea.MouseWheelRight, 0)
+	wheel(tea.MouseWheelDown, tea.ModShift)
+	got = append(got, entry())
+	wheel(tea.MouseWheelLeft, 0)
+	got = append(got, entry())
+	want := []string{
+		"A ...g_name.go +1 -0",
+		"A ..._long_... +1 -0",
+		"A internal/... +1 -0",
+		"A ...l/some... +1 -0",
+		"A ...eeply/... +1 -0",
+		"A ...me/dee... +1 -0",
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("entries = %q, want %q", got, want)
 	}
 }

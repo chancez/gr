@@ -227,6 +227,15 @@ var (
 		Title: "open",
 		Run:   func(m *model, s fileSubject) tea.Cmd { m.showFile(s); m.setFocus(focusMain); return nil },
 	}
+	// The file list's names scroll sideways, the start of a long one cut at the front into view.
+	actScrollNamesBack = &interact.Action[*model, fileSubject]{
+		Title: "scroll names left",
+		Run:   func(m *model, _ fileSubject) tea.Cmd { m.filesNav.scrollSide(sideStep); return nil },
+	}
+	actScrollNamesOn = &interact.Action[*model, fileSubject]{
+		Title: "scroll names right",
+		Run:   func(m *model, _ fileSubject) tea.Cmd { m.filesNav.scrollSide(-sideStep); return nil },
+	}
 	actFoldFile = &interact.Action[*model, fileSubject]{
 		Title: "fold",
 		Help:  "collapse or expand the file",
@@ -955,6 +964,8 @@ func sidebarView[S any](k *interact.Kind[*model, S], show, open *interact.Action
 func sidebarFiles(k *interact.Kind[*model, fileSubject]) *interact.Place[*model, fileSubject] {
 	p := interact.List(k, interact.OnCursor(actShowFile))
 	p.Bind(actOpenFile, "enter/l", "open", "enter", "l", "right")
+	p.Bind(actScrollNamesBack, "shift+left/right", "scroll long names", "shift+left")
+	p.Bind(actScrollNamesOn, "", "", "shift+right")
 	return p
 }
 

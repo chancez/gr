@@ -24,12 +24,12 @@
 [1;38;2;68;147;248mE[m    [38;2;230;237;243mopen in $EDITOR, read-only, as it is here[m        [1;38;2;68;147;248mzo[m  [38;2;230;237;243mopen the fold[m                     [1;38;2;68;147;248mq[m                   [38;2;230;237;243mquit[m    
                                                       [1;38;2;68;147;248mzc[m  [38;2;230;237;243mclose the fold[m                    [1;38;2;68;147;248malt+1..9[m            [38;2;230;237;243mgo to a [m
 [1;38;2;230;237;243mSidebar[m                                               [1;38;2;68;147;248mza[m  [38;2;230;237;243mtoggle the fold[m                                               
-[1;38;2;68;147;248menter/l[m  [38;2;230;237;243mopen[m                                         [1;38;2;68;147;248mzO[m  [38;2;230;237;243mopen all under it[m                 [1;38;2;230;237;243mSubmitting[m                  
-                                                      [1;38;2;68;147;248mzC[m  [38;2;230;237;243mclose all under it[m                [1;38;2;68;147;248ma[m      [38;2;230;237;243mapprove[m              
-[1;38;2;230;237;243mCommit[m                                                [1;38;2;68;147;248mzR[m  [38;2;230;237;243mopen every fold[m                   [1;38;2;68;147;248mr[m      [38;2;230;237;243mrequest changes[m      
-[1;38;2;68;147;248mc/C[m  [38;2;230;237;243mcomment on the commit[m                            [1;38;2;68;147;248mzM[m  [38;2;230;237;243mclose every fold[m                  [1;38;2;68;147;248mc[m      [38;2;230;237;243mcomment[m              
-[1;38;2;68;147;248mm/M[m  [38;2;230;237;243mmark the commit reviewed[m                                                               [1;38;2;68;147;248mA R C[m  [38;2;230;237;243mskip the summary[m     
-                                                                                            [1;38;2;68;147;248mesc[m    [38;2;230;237;243mcancel[m               
+[1;38;2;68;147;248menter/l[m           [38;2;230;237;243mopen[m                                [1;38;2;68;147;248mzO[m  [38;2;230;237;243mopen all under it[m                 [1;38;2;230;237;243mSubmitting[m                  
+[1;38;2;68;147;248mshift+left/right[m  [38;2;230;237;243mscroll long names[m                   [1;38;2;68;147;248mzC[m  [38;2;230;237;243mclose all under it[m                [1;38;2;68;147;248ma[m      [38;2;230;237;243mapprove[m              
+                                                      [1;38;2;68;147;248mzR[m  [38;2;230;237;243mopen every fold[m                   [1;38;2;68;147;248mr[m      [38;2;230;237;243mrequest changes[m      
+[1;38;2;230;237;243mCommit[m                                                [1;38;2;68;147;248mzM[m  [38;2;230;237;243mclose every fold[m                  [1;38;2;68;147;248mc[m      [38;2;230;237;243mcomment[m              
+[1;38;2;68;147;248mc/C[m  [38;2;230;237;243mcomment on the commit[m                                                                  [1;38;2;68;147;248mA R C[m  [38;2;230;237;243mskip the summary[m     
+[1;38;2;68;147;248mm/M[m  [38;2;230;237;243mmark the commit reviewed[m                                                               [1;38;2;68;147;248mesc[m    [38;2;230;237;243mcancel[m               
                                                                                                                         
                                                                                             [1;38;2;230;237;243mConfirming[m                  
                                                                                             [1;38;2;68;147;248my[m    [38;2;230;237;243myes[m                    

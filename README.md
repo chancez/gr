@@ -77,6 +77,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | --- | --- |
 | `j` `k` `d` `u` `g` `G` | move |
 | `h` `l`, `tab` | sidebar and diff; `ctrl+j` `ctrl+k` between sidebar lists |
+| `shift+left` `shift+right` | in the file list, scroll long names; the wheel sideways or with shift does too, and hovering one shows it whole |
 | `}` `{`, `]` `[`, `J` `K`, `)` `(` | next or previous commit, file, hunk, change |
 | `H`, `A` | overview, all changes; again to go back |
 | `/`, `n` `N` | search, next or previous match; a match in a reviewed file expands it |
