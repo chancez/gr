@@ -152,6 +152,18 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 	return out
 }
 
+// width is the entry's width with nothing truncated.
+func (it navItem) width(th *look.Theme) int {
+	w := ansi.StringWidth(it.prefix + it.label)
+	if it.sha != "" {
+		w += ansi.StringWidth(th.TextOf(look.SHA(it.sha).Short())) + 1
+	}
+	if badge := th.TextOf(it.badge...); badge != "" {
+		w += ansi.StringWidth(badge) + 1
+	}
+	return w
+}
+
 // render draws one entry at width: the label, truncated so the badge always shows at the right.
 func (it navItem) render(th *look.Theme, width int, selected, focused bool) string {
 	room := width
@@ -530,13 +542,40 @@ func paneSurface(focused bool) look.Surface {
 
 // sidebarAt maps a sidebar line to a list and its item index.
 func (m *model) sidebarAt(y int) (*navList, focus, int) {
+	l, f, line, _ := m.sidebarLine(y)
+	return l, f, l.at(line)
+}
+
+// sidebarLine maps sidebar line y to a list, the line within its entries, and how many lines its
+// entries have.
+func (m *model) sidebarLine(y int) (l *navList, f focus, line, rows int) {
 	_, _, bh := m.layoutSizes()
-	vh, _ := m.sidebarHeights(bh)
+	vh, fh := m.sidebarHeights(bh)
 	if y < vh {
-		return &m.viewsNav, focusViews, m.viewsNav.at(y - m.viewsNav.head())
+		return &m.viewsNav, focusViews, y - m.viewsNav.head(), vh - m.viewsNav.head()
 	}
 	// Past the divider and the files header.
-	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - sidebarGap - m.filesNav.head())
+	return &m.filesNav, focusFiles, y - vh - sidebarGap - m.filesNav.head(), fh - m.filesNav.head()
+}
+
+// navPeek draws the sidebar entry under the mouse in full, when it is truncated at width, for the
+// frame to draw over what is beside it. Nothing moves to make room for it.
+func (m *model) navPeek(width int) (string, bool) {
+	if !m.navHovering || width == 0 {
+		return "", false
+	}
+	l, f, line, rows := m.sidebarLine(m.navHover)
+	i := l.at(line)
+	if i < 0 || l.indicatorAt(line, rows) != 0 {
+		return "", false
+	}
+	it := l.items[i]
+	w := min(it.width(m.r.th), m.width)
+	if w <= width {
+		return "", false
+	}
+	// Lit as the cursor is, so it stands apart from the diff it covers.
+	return it.render(m.r.th, w, true, i == l.pos && m.focus == f), true
 }
 
 // showFile shows file s in the main pane, in its view.

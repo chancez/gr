@@ -2348,3 +2348,39 @@ func TestFilesSummary(t *testing.T) {
 		t.Errorf("summary and clicks (-want +got):\n%s", diff)
 	}
 }
+
+// Hovering a file whose name is cut shows it whole on its line, drawn over the diff beside it, so
+// nothing else on the screen moves. Off the sidebar, the line is cut again.
+func TestSidebarPeek(t *testing.T) {
+	e := newTUIEnv(t)
+	long := "internal/some/deeply/nested/package/with_a_long_name.go"
+	e.repo.Write(long, gittest.Lines("package nested"))
+	e.repo.Commit("add nested")
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	e.pressRun("R")
+	e.openNav("All changes")
+	nw, _, _ := e.m.layoutSizes()
+	before := strings.Split(e.screen(), "\n")
+	y := slices.IndexFunc(before, func(l string) bool { return strings.Contains(l[:nw], "g_name.go") })
+	if y < 0 {
+		t.Fatalf("no entry for %s:\n%s", long, e.screen())
+	}
+	e.m.Update(tea.MouseMotionMsg{X: 1, Y: y})
+	after := strings.Split(e.screen(), "\n")
+	for i := range before {
+		if i != y && after[i] != before[i] {
+			t.Errorf("line %d changed: %q, was %q", i, after[i], before[i])
+		}
+	}
+	// The entry covers the start of the line beside it, and leaves the rest.
+	peek := "A " + long + " +1 -0"
+	if want := peek + before[y][len(peek):]; after[y] != want {
+		t.Errorf("hovered line = %q, want %q", after[y], want)
+	}
+	e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: y})
+	if got := strings.Split(e.screen(), "\n")[y]; got != before[y] {
+		t.Errorf("line off the sidebar = %q, want %q", got, before[y])
+	}
+}

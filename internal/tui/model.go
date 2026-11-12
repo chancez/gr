@@ -147,6 +147,10 @@ type model struct {
 	// navWidth is the sidebar width once dragged or set in the config, or 0 for the default.
 	navWidth int
 	dragging bool
+	// navHovering is set while the mouse is over line navHover of the sidebar, whose entry there
+	// is drawn in full when truncated.
+	navHovering bool
+	navHover    int
 	// search is the last search pattern, and searchInput the prompt while typing one. searchPos
 	// and searchHits are the current match's position among the matches.
 	search      string
@@ -719,6 +723,9 @@ func (m *model) frame() string {
 		}
 		line.WriteString(look.Fit(ml, mw))
 		screen[y] = line.String()
+	}
+	if line, ok := m.navPeek(nw); ok {
+		screen = overlay(screen, []string{line}, 0, m.navHover)
 	}
 	if m.mode == modePicker {
 		m.picker.layout(m.width, bh)

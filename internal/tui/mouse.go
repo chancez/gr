@@ -96,12 +96,8 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.X < nw {
-		l, f, i := m.sidebarAt(msg.Y)
-		vh, fh := m.sidebarHeights(bh)
-		rows, y := vh-l.head(), msg.Y-l.head()
-		if f == focusFiles {
-			rows, y = fh-l.head(), msg.Y-vh-sidebarGap-l.head()
-		}
+		l, f, y, rows := m.sidebarLine(msg.Y)
+		i := l.at(y)
 		if dir := l.indicatorAt(y, rows); dir != 0 {
 			if right {
 				return m, nil
@@ -270,6 +266,7 @@ func (m *model) hoverAt(x, y int) {
 	p := &m.main
 	nw, _, bh := m.layoutSizes()
 	p.hovering = false
+	m.navHovering, m.navHover = m.data != nil && x < nw && y < bh, y
 	if m.data == nil || x <= nw || y < m.mainTop() || y >= bh {
 		return
 	}
