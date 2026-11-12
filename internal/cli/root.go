@@ -467,12 +467,13 @@ func tuiOptions() (tui.Options, error) {
 		return tui.Options{}, err
 	}
 	opts := tui.Options{
-		Theme:        c.UI.Theme,
-		Glyphs:       c.UI.Glyphs,
-		Scrolloff:    c.UI.Scrolloff,
-		SidebarWidth: c.UI.SidebarWidth,
-		AutoAdvance:  c.UI.AutoAdvance,
-		Vim:          c.Editor.Vim,
+		Theme:            c.UI.Theme,
+		Glyphs:           c.UI.Glyphs,
+		Scrolloff:        c.UI.Scrolloff,
+		SidebarWidth:     c.UI.SidebarWidth,
+		AutoAdvance:      c.UI.AutoAdvance,
+		IgnoreWhitespace: c.Diff.IgnoreWhitespace,
+		Vim:              c.Editor.Vim,
 	}
 	if v := os.Getenv("GR_THEME"); v != "" {
 		opts.Theme = v

@@ -92,6 +92,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `F` | filter the overview's threads by state |
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |
+| `W` | hide/show whitespace changes |
 | `B` | pick another base branch for the change, as for a stacked branch: type to filter, click or enter to pick |
 | `w`, `ctrl+t` | switch to another change of this repository, or open any repository's in a new tab |
 | `ctrl+w`, `ctrl+pgdn` `ctrl+pgup`, `alt+1`..`9` | close the tab, next or previous tab, go to a tab |
@@ -124,6 +125,9 @@ glyphs = "nerd"        # "ascii", "unicode", or "nerd"; unset picks from the ter
 scrolloff = 5          # lines kept between the cursor and the diff's edges
 sidebar_width = 30     # columns, until the divider is dragged
 auto_advance = true    # move on to the next unreviewed file after marking one reviewed
+
+[diff]
+ignore_whitespace = true  # hide whitespace-only changes, as git diff -w; W toggles it
 
 [editor]
 vim = true             # vim's modes in the comment box: esc to normal mode, esc again to close

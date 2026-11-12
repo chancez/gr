@@ -59,7 +59,7 @@ func (m *model) applyView(msg viewLoadedMsg) {
 		m.setError(msg.err)
 		return
 	}
-	if m.data == nil || msg.head != m.data.revision.HeadSHA {
+	if m.data == nil || msg.head != m.data.revision.HeadSHA || msg.opts != m.data.opts {
 		return
 	}
 	m.closeStaleMenus()
@@ -94,14 +94,14 @@ func (m *model) applyView(msg viewLoadedMsg) {
 }
 
 func (m *model) loadCmd() tea.Cmd {
-	ctx, svc, id, old := m.ctx, m.svc, m.changeID, m.data
+	ctx, svc, id, old, opts := m.ctx, m.svc, m.changeID, m.data, m.diffOptions()
 	current := ""
 	if m.data != nil && m.current < len(m.views) {
 		current = m.views[m.current].key()
 	}
 	return func() tea.Msg {
 		start := time.Now()
-		d, err := load(ctx, svc, id)
+		d, err := load(ctx, svc, id, opts)
 		if err == nil {
 			// Keep what is still valid, and load the view on screen, before showing anything.
 			d.carryLoaded(old)
@@ -156,6 +156,10 @@ func (m *model) applyData(d *changeData) {
 	prevY := m.main.cursorY()
 	prevSeg := m.main.itemSegment()
 	m.closeStaleMenus()
+	if !first && d.opts != m.data.opts {
+		// The options changed while it loaded: what it loaded is shown until loaded again with them.
+		d.opts, d.loaded = m.data.opts, map[string]bool{}
+	}
 	if !first && m.data.change.State == store.ChangeOpen && d.change.State == store.ChangeMerged {
 		m.setStatus("change #%d merged into %s", d.change.Seq, d.change.BaseBranch)
 	}

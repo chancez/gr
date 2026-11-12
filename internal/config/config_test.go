@@ -26,6 +26,9 @@ scrolloff = 0
 sidebar_width = 30
 auto_advance = true
 
+[diff]
+ignore_whitespace = true
+
 [editor]
 vim = true
 `))
@@ -34,6 +37,7 @@ vim = true
 	}
 	want := Config{
 		UI:     UI{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(0), SidebarWidth: 30, AutoAdvance: true},
+		Diff:   Diff{IgnoreWhitespace: true},
 		Editor: Editor{Vim: true},
 	}
 	if !reflect.DeepEqual(got, want) {

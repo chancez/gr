@@ -637,9 +637,9 @@ func (m *model) showFile(s fileSubject) {
 }
 
 // diffSize is how many lines file f adds and deletes, unless it has no lines to count: a binary
-// file, or the commit message, which is not a file in git.
+// file, one whose changes are hidden whitespace, or the commit message, which is not a file in git.
 func diffSize(f git.FileDiff) ([]look.Span, bool) {
-	if f.Binary || f.Path() == review.CommitMsgPath {
+	if f.Binary || f.OnlyWhitespace || f.Path() == review.CommitMsgPath {
 		return nil, false
 	}
 	return look.DiffSize(f.Added, f.Deleted), true

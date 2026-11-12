@@ -15,7 +15,14 @@ import (
 // Config is the config file's settings. What the file leaves out is zero, for gr's defaults.
 type Config struct {
 	UI     UI     `toml:"ui"`
+	Diff   Diff   `toml:"diff"`
 	Editor Editor `toml:"editor"`
+}
+
+// Diff is how the TUI's diffs start out; each tab can change them for the session.
+type Diff struct {
+	// IgnoreWhitespace hides changes that are only whitespace, as git diff -w.
+	IgnoreWhitespace bool `toml:"ignore_whitespace"`
 }
 
 // Editor is how comments are written in the TUI's comment box.

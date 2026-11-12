@@ -86,6 +86,9 @@ func (m *model) renderStatus() string {
 	if m.autoAdvance {
 		left = append(left, look.Mode(" auto-advance"))
 	}
+	if d.opts.ignoreSpace {
+		left = append(left, look.Mode(" whitespace hidden"))
+	}
 	if m.split {
 		left = append(left, look.Text(" split"))
 	}

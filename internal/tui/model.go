@@ -46,6 +46,8 @@ type Options struct {
 	SidebarWidth int
 	// AutoAdvance starts with moving on to the next unreviewed file after marking one reviewed.
 	AutoAdvance bool
+	// IgnoreWhitespace starts with diffs ignoring whitespace, as git diff -w.
+	IgnoreWhitespace bool
 	// Vim edits comments with vim's modes.
 	Vim bool
 	// OpenRepo opens a service for the repository at dir, for its changes to open in tabs. Nil
@@ -92,7 +94,7 @@ func newTab(ctx context.Context, svc *review.Service, change store.Change, opts 
 	if opts.Scrolloff != nil {
 		m.main.scrolloff = *opts.Scrolloff
 	}
-	m.navWidth, m.autoAdvance, m.vim = opts.SidebarWidth, opts.AutoAdvance, opts.Vim
+	m.navWidth, m.autoAdvance, m.vim, m.ignoreSpace = opts.SidebarWidth, opts.AutoAdvance, opts.Vim, opts.IgnoreWhitespace
 	m.openRepo, m.opened = opts.OpenRepo, change
 	if p, ok := m.readPlace(change); ok {
 		m.savedPlace = &p
@@ -194,6 +196,9 @@ type model struct {
 	// autoAdvance moves on to the next unreviewed file or commit after marking one reviewed. It is
 	// off by default and toggled for the session.
 	autoAdvance bool
+	// ignoreSpace is whether diffs start ignoring whitespace, until the change's data has options
+	// of its own.
+	ignoreSpace bool
 	// confirm is the action waiting on a y/n prompt.
 	confirm confirmation
 	// filter selects the threads the overview shows.
@@ -752,6 +757,37 @@ func (m *model) clearTransient() {
 	m.main.anchor = -1
 	m.status = ""
 	m.search, m.searchPos, m.searchHits = "", 0, 0
+}
+
+// diffOptions are how the change's diffs are shown.
+func (m *model) diffOptions() *diffOptions {
+	if m.data != nil {
+		return m.data.opts
+	}
+	return &diffOptions{ignoreSpace: m.ignoreSpace}
+}
+
+// setDiffOptions shows the change's diffs with opts, loading the view on screen again. What is
+// shown stays until it loads.
+func (m *model) setDiffOptions(opts *diffOptions) {
+	if m.data == nil {
+		return
+	}
+	d := *m.data
+	d.opts, d.loaded = opts, map[string]bool{}
+	m.data = &d
+	m.requestLoad()
+}
+
+// toggleIgnoreSpace ignores whitespace in every file of the change, or in none.
+func (m *model) toggleIgnoreSpace() {
+	on := !m.diffOptions().ignoreSpace
+	m.setDiffOptions(&diffOptions{ignoreSpace: on})
+	if on {
+		m.setStatus("hiding whitespace changes")
+	} else {
+		m.setStatus("showing whitespace changes")
+	}
 }
 
 func (m *model) toggleAutoAdvance() {

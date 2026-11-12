@@ -575,6 +575,7 @@ var (
 	actPrevList    = appAction("changes list", func(m *model) tea.Cmd { m.focusSection(-1); return nil })
 	actReload      = appAction("reload", func(m *model) tea.Cmd { m.setStatus("reloading"); return m.loadCmd() })
 	actSplitView   = appAction("split or unified", func(m *model) tea.Cmd { m.split = !m.split; m.rebuildMain(); return nil })
+	actIgnoreSpace = loadedApp("hide or show whitespace changes", func(m *model) tea.Cmd { m.toggleIgnoreSpace(); return nil })
 	actAutoAdvance = appAction("toggle auto-advance after marking", func(m *model) tea.Cmd { m.toggleAutoAdvance(); return nil })
 	actSearch      = loadedApp("search", func(m *model) tea.Cmd { return m.openSearch() })
 	actPickBase    = loadedApp("change the base branch", func(m *model) tea.Cmd { return m.openBase() })
@@ -736,7 +737,7 @@ func init() {
 		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actNextUnresolved, actPrevUnresolved, actFoldPrefix)...)
 	appKind = interact.NewKind(func(appSubject) string { return "gr" }, append([]*interact.Action[*model, appSubject]{
 		actQuit, actShowHelp, actCancel, actNextPane, actPrevPane, actNextList, actPrevList, actReload, actSplitView,
-		actAutoAdvance, actSearch, actPickBase, actCompare, actSwitch, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
+		actAutoAdvance, actIgnoreSpace, actSearch, actPickBase, actCompare, actSwitch, actSearchNext, actSearchPrev, actJumpBack, actJumpForward,
 		actAllChanges, actOverview, actNextCommit, actPrevCommit, actNextUnseen, actPrevUnseen, actPalette,
 		actNewTab, actCloseTab, actNextTab, actPrevTab, actTabRight, actTabLeft}, actGoTab[:]...)...)
 
@@ -858,6 +859,7 @@ func init() {
 		{actCancel, "esc", "clear search, selection", []string{"esc"}},
 		{actAutoAdvance, "+", "auto-advance after marking", []string{"+"}},
 		{actSplitView, "s", "split/unified", []string{"s"}},
+		{actIgnoreSpace, "W", "hide/show whitespace changes", []string{"W"}},
 		{actPickBase, "B", "change the base branch", []string{"B"}},
 		{actCompare, "p", "pick two revisions to compare", []string{"p"}},
 		{actSwitch, "w", "switch to another change or branch", []string{"w"}},

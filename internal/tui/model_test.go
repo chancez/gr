@@ -2461,3 +2461,53 @@ func TestPrefixHintsFit(t *testing.T) {
 		t.Errorf("after the next key the hints stay: %q", hints)
 	}
 }
+
+// W hides whitespace changes in every file of the change: a file with only those says so in place
+// of its lines, and W again shows them.
+func TestHideWhitespace(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "    println(\"hello\")", "}"),
+		"new.go", gittest.Lines("package main"))
+	e.repo.Commit("reindent")
+	e.drain(e.m.loadCmd())
+	e.openNav("reindent")
+	if screen := e.screen(); !strings.Contains(screen, `    println("hello")`) || strings.Contains(screen, "whitespace only") {
+		t.Fatalf("before W, the reindented line should show:\n%s", screen)
+	}
+	e.press("W")
+	screen := e.screen()
+	if strings.Contains(screen, `println("hello")`) || !strings.Contains(screen, "whitespace only") ||
+		!strings.Contains(screen, "new.go") || !strings.Contains(screen, "whitespace hidden") {
+		t.Fatalf("W should hide the reindented line and say main.go is whitespace only:\n%s", screen)
+	}
+	e.press("W")
+	if screen := e.screen(); !strings.Contains(screen, `    println("hello")`) || strings.Contains(screen, "whitespace only") ||
+		strings.Contains(screen, "whitespace hidden") {
+		t.Fatalf("W again should show the reindented line:\n%s", screen)
+	}
+}
+
+// A view loaded with options since changed is not shown: W pressed twice while the first load is
+// out leaves the whitespace changes showing.
+func TestStaleWhitespaceLoadIsDropped(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "    println(\"hello\")", "}"))
+	e.repo.Commit("reindent")
+	e.drain(e.m.loadCmd())
+	e.m.syncLoads = false
+	e.openNav("reindent")
+	runViewLoads(e, e.m.loadViewCmd(e.m.pendingLoads[0]))
+	e.m.pendingLoads = nil
+
+	e.press("W")
+	hiding := e.m.loadViewCmd(e.m.current)
+	e.m.pendingLoads = nil
+	e.press("W")
+	showing := e.m.loadViewCmd(e.m.current)
+	e.m.pendingLoads = nil
+	runViewLoads(e, showing)
+	runViewLoads(e, hiding)
+	if screen := e.screen(); !strings.Contains(screen, `    println("hello")`) || strings.Contains(screen, "whitespace only") {
+		t.Fatalf("the load from before the second W replaced the one after it:\n%s", screen)
+	}
+}
