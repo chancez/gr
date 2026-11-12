@@ -38,7 +38,13 @@ type roles struct {
 	deletedBg   color.Color
 	cursorBg    color.Color
 	dimCursorBg color.Color
-	selectedBg  color.Color
+	// The cursor on an added or deleted line is a stronger shade of the line's color, so the line
+	// still says what it is; dim, a shade between.
+	addedCursorBg      color.Color
+	deletedCursorBg    color.Color
+	dimAddedCursorBg   color.Color
+	dimDeletedCursorBg color.Color
+	selectedBg         color.Color
 	// textSelectedBg is text selected with the mouse, which has to stand out on any line: yellow,
 	// apart from the cursor's blue and the diff's green and red, stronger than the pale yellow of
 	// selected lines, and lighter than a search match.
@@ -66,29 +72,33 @@ var Themes = []string{ThemeDefault, ThemeColorblind}
 func newRoles(isDark bool, theme string) roles {
 	ld := lipgloss.LightDark(isDark)
 	r := roles{
-		text:            ld(ink, snow),
-		muted:           ld(slate, ash),
-		accent:          ld(blue, lightBlue),
-		success:         ld(green, lightGreen),
-		danger:          ld(red, lightRed),
-		attention:       ld(amber, gold),
-		done:            ld(purple, lavender),
-		added:           ld(green, lightGreen),
-		deleted:         ld(red, lightRed),
-		border:          ld(paleGray, charcoal),
-		onSolid:         ld(white, night),
-		headingBg:       ld(offWhite, nearNight),
-		hunkBg:          ld(paleBlue, navy),
-		addedBg:         ld(paleGreen, darkGreen),
-		deletedBg:       ld(palePink, darkMaroon),
-		cursorBg:        ld(skyBlue, steelBlue),
-		dimCursorBg:     ld(lightGray, graphite),
-		selectedBg:      ld(paleYellow, indigoGray),
-		textSelectedBg:  ld(sunflower, lemon),
-		onTextSelected:  ld(ink, night),
-		paneUnfocusedBg: ld(lightGray, darkGray),
-		controlBg:       ld(paleGray, charcoal),
-		commentedBg:     ld(sand, darkOlive),
+		text:               ld(ink, snow),
+		muted:              ld(slate, ash),
+		accent:             ld(blue, lightBlue),
+		success:            ld(green, lightGreen),
+		danger:             ld(red, lightRed),
+		attention:          ld(amber, gold),
+		done:               ld(purple, lavender),
+		added:              ld(green, lightGreen),
+		deleted:            ld(red, lightRed),
+		border:             ld(paleGray, charcoal),
+		onSolid:            ld(white, night),
+		headingBg:          ld(offWhite, nearNight),
+		hunkBg:             ld(paleBlue, navy),
+		addedBg:            ld(paleGreen, darkGreen),
+		deletedBg:          ld(palePink, darkMaroon),
+		cursorBg:           ld(skyBlue, steelBlue),
+		dimCursorBg:        ld(lightGray, graphite),
+		addedCursorBg:      ld(mint, forest),
+		deletedCursorBg:    ld(rose, brick),
+		dimAddedCursorBg:   ld(paleMint, moss),
+		dimDeletedCursorBg: ld(blush, wine),
+		selectedBg:         ld(paleYellow, indigoGray),
+		textSelectedBg:     ld(sunflower, lemon),
+		onTextSelected:     ld(ink, night),
+		paneUnfocusedBg:    ld(lightGray, darkGray),
+		controlBg:          ld(paleGray, charcoal),
+		commentedBg:        ld(sand, darkOlive),
 	}
 	if theme == ThemeColorblind {
 		r.success, r.added = r.accent, r.accent
@@ -96,6 +106,8 @@ func newRoles(isDark bool, theme string) roles {
 		r.deleted = r.danger
 		r.addedBg = ld(paleSky, deepNavy)
 		r.deletedBg = ld(paleOrange, darkBrown)
+		r.addedCursorBg, r.dimAddedCursorBg = ld(babyBlue, cobalt), ld(iceBlue, midnight)
+		r.deletedCursorBg, r.dimDeletedCursorBg = ld(peach, rust), ld(cream, umber)
 	}
 	return r
 }
@@ -200,6 +212,12 @@ const (
 	HunkBar
 	Cursor
 	CursorDim
+	// CursorAdded and CursorDeleted are the cursor on an added or deleted line, and their Dim
+	// forms the same when the main pane does not have focus.
+	CursorAdded
+	CursorDeleted
+	CursorAddedDim
+	CursorDeletedDim
 	Selected
 	AddedLine
 	DeletedLine
@@ -222,24 +240,28 @@ const (
 )
 
 var surfaceNames = [numSurfaces]string{
-	Plain:         "surface.plain",
-	HeadingBar:    "surface.heading",
-	HunkBar:       "surface.hunk",
-	Cursor:        "surface.cursor",
-	CursorDim:     "surface.cursor-dim",
-	Selected:      "surface.selected",
-	AddedLine:     "surface.added",
-	DeletedLine:   "surface.deleted",
-	ActiveHunk:    "surface.active-hunk",
-	PaneFocused:   "surface.pane-focused",
-	PaneUnfocused: "surface.pane-unfocused",
-	Status:        "surface.status",
-	StatusError:   "surface.status-error",
-	SearchMatch:   "surface.search-match",
-	TextSelected:  "surface.text-selected",
-	Control:       "surface.control",
-	ControlSolid:  "surface.control-solid",
-	Commented:     "surface.commented",
+	Plain:            "surface.plain",
+	HeadingBar:       "surface.heading",
+	HunkBar:          "surface.hunk",
+	Cursor:           "surface.cursor",
+	CursorDim:        "surface.cursor-dim",
+	CursorAdded:      "surface.cursor-added",
+	CursorDeleted:    "surface.cursor-deleted",
+	CursorAddedDim:   "surface.cursor-added-dim",
+	CursorDeletedDim: "surface.cursor-deleted-dim",
+	Selected:         "surface.selected",
+	AddedLine:        "surface.added",
+	DeletedLine:      "surface.deleted",
+	ActiveHunk:       "surface.active-hunk",
+	PaneFocused:      "surface.pane-focused",
+	PaneUnfocused:    "surface.pane-unfocused",
+	Status:           "surface.status",
+	StatusError:      "surface.status-error",
+	SearchMatch:      "surface.search-match",
+	TextSelected:     "surface.text-selected",
+	Control:          "surface.control",
+	ControlSolid:     "surface.control-solid",
+	Commented:        "surface.commented",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -303,24 +325,28 @@ func New(isDark bool, name string) *Theme {
 		elFill:                  lipgloss.NewStyle(),
 	}
 	t.surfaces = [numSurfaces]surfaceStyle{
-		Plain:         {},
-		HeadingBar:    {bg: p.headingBg},
-		HunkBar:       {bg: p.hunkBg},
-		Cursor:        {bg: p.cursorBg},
-		CursorDim:     {bg: p.dimCursorBg},
-		Selected:      {bg: p.selectedBg},
-		AddedLine:     {bg: p.addedBg},
-		DeletedLine:   {bg: p.deletedBg},
-		ActiveHunk:    {bg: p.accent, solid: true, fg: p.onSolid},
-		PaneFocused:   {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
-		PaneUnfocused: {bg: p.paneUnfocusedBg, solid: true, fg: p.muted, bold: true},
-		Status:        {bg: p.success, solid: true, fg: p.onSolid, bold: true},
-		StatusError:   {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
-		SearchMatch:   {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
-		TextSelected:  {bg: p.textSelectedBg, solid: true, fg: p.onTextSelected},
-		Control:       {bg: p.controlBg},
-		ControlSolid:  {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
-		Commented:     {bg: p.commentedBg},
+		Plain:            {},
+		HeadingBar:       {bg: p.headingBg},
+		HunkBar:          {bg: p.hunkBg},
+		Cursor:           {bg: p.cursorBg},
+		CursorDim:        {bg: p.dimCursorBg},
+		CursorAdded:      {bg: p.addedCursorBg},
+		CursorDeleted:    {bg: p.deletedCursorBg},
+		CursorAddedDim:   {bg: p.dimAddedCursorBg},
+		CursorDeletedDim: {bg: p.dimDeletedCursorBg},
+		Selected:         {bg: p.selectedBg},
+		AddedLine:        {bg: p.addedBg},
+		DeletedLine:      {bg: p.deletedBg},
+		ActiveHunk:       {bg: p.accent, solid: true, fg: p.onSolid},
+		PaneFocused:      {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
+		PaneUnfocused:    {bg: p.paneUnfocusedBg, solid: true, fg: p.muted, bold: true},
+		Status:           {bg: p.success, solid: true, fg: p.onSolid, bold: true},
+		StatusError:      {bg: p.danger, solid: true, fg: p.onSolid, bold: true},
+		SearchMatch:      {bg: p.attention, solid: true, fg: p.onSolid, bold: true},
+		TextSelected:     {bg: p.textSelectedBg, solid: true, fg: p.onTextSelected},
+		Control:          {bg: p.controlBg},
+		ControlSolid:     {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
+		Commented:        {bg: p.commentedBg},
 	}
 	return t
 }

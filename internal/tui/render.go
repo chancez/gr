@@ -236,12 +236,28 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	return nil
 }
 
+// lineCursorSurface is the cursor's surface on a diff line: a shade of an added or deleted line's
+// own color.
+func lineCursorSurface(kind git.LineKind, state rowState) look.Surface {
+	switch {
+	case kind == git.LineAdded && state.dim:
+		return look.CursorAddedDim
+	case kind == git.LineAdded:
+		return look.CursorAdded
+	case kind == git.LineDeleted && state.dim:
+		return look.CursorDeletedDim
+	case kind == git.LineDeleted:
+		return look.CursorDeleted
+	}
+	return cursorSurface(state)
+}
+
 // lineSurface is where a diff line sits: the cursor or selection on the cursor's side, or its
 // added or deleted color.
 func lineSurface(kind git.LineKind, state rowState, cursorSide, commented, focused bool) look.Surface {
 	switch {
 	case state.cursor && cursorSide:
-		return cursorSurface(state)
+		return lineCursorSurface(kind, state)
 	case state.selected && cursorSide, focused:
 		return look.Selected
 	case commented:

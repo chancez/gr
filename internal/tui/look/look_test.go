@@ -36,6 +36,8 @@ func TestColorblindTheme(t *testing.T) {
 		want.success, want.added = want.accent, want.accent
 		want.danger, want.deleted = ld(orange, lightOrange), ld(orange, lightOrange)
 		want.addedBg, want.deletedBg = ld(paleSky, deepNavy), ld(paleOrange, darkBrown)
+		want.addedCursorBg, want.dimAddedCursorBg = ld(babyBlue, cobalt), ld(iceBlue, midnight)
+		want.deletedCursorBg, want.dimDeletedCursorBg = ld(peach, rust), ld(cream, umber)
 		if got := newRoles(dark, ThemeColorblind); !reflect.DeepEqual(got, want) {
 			t.Errorf("dark %v: colorblind roles = %+v, want %+v", dark, got, want)
 		}

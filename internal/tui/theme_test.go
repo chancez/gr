@@ -12,6 +12,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/tui/look"
@@ -96,6 +97,29 @@ func TestFinishedReviewsDim(t *testing.T) {
 		e.openNav("Overview")
 		if !strings.Contains(e.m.render(), tc.want) {
 			t.Errorf("thread %s: review header is not %q:\n%s", tc.state, tc.want, e.screen())
+		}
+	}
+}
+
+// The cursor on an added or deleted line is a shade of the line's color, focused or not, so the
+// line still says what it is.
+func TestCursorKeepsLineColor(t *testing.T) {
+	cursor := rowState{cursor: true}
+	dim := rowState{cursor: true, dim: true}
+	for _, tc := range []struct {
+		kind  git.LineKind
+		state rowState
+		want  look.Surface
+	}{
+		{kind: git.LineAdded, state: cursor, want: look.CursorAdded},
+		{kind: git.LineDeleted, state: cursor, want: look.CursorDeleted},
+		{kind: git.LineContext, state: cursor, want: look.Cursor},
+		{kind: git.LineAdded, state: dim, want: look.CursorAddedDim},
+		{kind: git.LineDeleted, state: dim, want: look.CursorDeletedDim},
+		{kind: git.LineContext, state: dim, want: look.CursorDim},
+	} {
+		if got := lineSurface(tc.kind, tc.state, true, false, false); got != tc.want {
+			t.Errorf("lineSurface(%v, dim %v) = %v, want %v", tc.kind, tc.state.dim, got, tc.want)
 		}
 	}
 }
