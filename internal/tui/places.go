@@ -13,15 +13,18 @@ import (
 // screen it was, and how the change was folded and split. It is saved when gr quits, so opening the
 // change again goes back there.
 type place struct {
-	View        string          `json:"view"`
-	Row         string          `json:"row"`
-	Segment     int             `json:"segment,omitzero"`
-	Y           int             `json:"y,omitzero"`
-	Split       bool            `json:"split,omitzero"`
-	Focus       focus           `json:"focus,omitzero"`
-	Expanded    map[string]bool `json:"expanded,omitempty"`
-	OpenGaps    map[string]bool `json:"open_gaps,omitempty"`
-	ThreadFolds map[string]bool `json:"thread_folds,omitempty"`
+	View     string          `json:"view"`
+	Row      string          `json:"row"`
+	Segment  int             `json:"segment,omitzero"`
+	Y        int             `json:"y,omitzero"`
+	Split    bool            `json:"split,omitzero"`
+	Focus    focus           `json:"focus,omitzero"`
+	Expanded map[string]bool `json:"expanded,omitempty"`
+	// OpenGaps is what folds were open before they opened by parts, which Gaps says now: read, and
+	// opened whole.
+	OpenGaps    map[string]bool     `json:"open_gaps,omitempty"`
+	Gaps        map[string]gapShown `json:"gaps,omitempty"`
+	ThreadFolds map[string]bool     `json:"thread_folds,omitempty"`
 }
 
 // readPlace reads where you were in a change. None, or one gr cannot read, is no place: opening
@@ -50,7 +53,7 @@ func (m *model) placeHere() place {
 		Split:       m.split,
 		Focus:       m.focus,
 		Expanded:    maps.Clone(m.expanded),
-		OpenGaps:    maps.Clone(m.openGaps),
+		Gaps:        maps.Clone(m.openGaps),
 		ThreadFolds: maps.Clone(m.threadFolds),
 	}
 }
@@ -60,7 +63,12 @@ func (m *model) placeHere() place {
 // gr opens anyway.
 func (m *model) goTo(p place) {
 	maps.Copy(m.expanded, p.Expanded)
-	maps.Copy(m.openGaps, p.OpenGaps)
+	for k, open := range p.OpenGaps {
+		if open {
+			m.openGaps[k] = gapShown{All: true}
+		}
+	}
+	maps.Copy(m.openGaps, p.Gaps)
 	maps.Copy(m.threadFolds, p.ThreadFolds)
 	m.split = p.Split
 	m.rebuildMain()

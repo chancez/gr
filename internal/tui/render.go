@@ -177,7 +177,11 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if state.cursor {
 			surf = cursorSurface(state)
 		}
-		return []string{r.hunkMarker(state) + r.th.Draw(surf, width-1, look.Hunk(*rw.hunk))}
+		h := rw.hunk
+		if rw.header != nil {
+			h = rw.header
+		}
+		return []string{r.hunkMarker(state) + r.th.Draw(surf, width-1, look.Hunk(*h))}
 	case rowLine:
 		f := v.files[rw.file]
 		if isMessage(f) {
@@ -225,7 +229,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		}
 		spans := []look.Span{look.Default("   "), look.Muted(gapLabel(*rw.gap))}
 		if len(state.controls) > 0 {
-			spans = append(spans[:1], state.controls...)
+			spans = append(append(spans, look.Default("   ")), state.controls...)
 		}
 		return []string{" " + r.th.Draw(surf, width-1, spans...)}
 	}

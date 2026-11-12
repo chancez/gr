@@ -228,8 +228,9 @@ type model struct {
 	// threadFolds overrides whether a thread is collapsed, by thread id. Resolved threads are
 	// collapsed by default.
 	threadFolds map[string]bool
-	// openGaps holds the open folds of unchanged lines, keyed by gapKey.
-	openGaps map[string]bool
+	// openGaps holds how much of each fold of unchanged lines is open, keyed by gapKey. A closed
+	// one has none.
+	openGaps map[string]gapShown
 	// contents caches files' lines by revision and path, for open folds.
 	contents map[string][]string
 	// pending is the first key of a two-key command, such as z in zo.
@@ -301,7 +302,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 			scrolloff: defaultScrolloff,
 		},
 		expanded:    map[string]bool{},
-		openGaps:    map[string]bool{},
+		openGaps:    map[string]gapShown{},
 		threadFolds: map[string]bool{},
 		contents:    map[string][]string{},
 		returns:     map[viewKind]jumpPoint{},

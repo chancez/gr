@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -160,8 +161,8 @@ func TestControls(t *testing.T) {
 	}
 }
 
-// A file header's Viewed box, a fold's Expand, the + on the cursor's line, and the hints run what
-// their keys do.
+// A file header's Viewed box, a fold's Expand all, the + on the cursor's line, and the hints run
+// what their keys do.
 func TestRowControls(t *testing.T) {
 	e := newTUIEnv(t)
 	lines := gittest.Numbered(30)
@@ -183,8 +184,9 @@ func TestRowControls(t *testing.T) {
 		return n
 	}
 
+	// The fold between the hunks hides 19 lines, a step or less, so it opens all at once.
 	before := gaps()
-	e.click("row", "expand")
+	e.click("row", "expand all")
 	if got := gaps(); got != before-1 {
 		t.Errorf("expanding a fold left %d of %d", got, before)
 	}
@@ -982,5 +984,122 @@ func TestSearchForSelectedText(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("search for the selection (-want +got):\n%s", diff)
+	}
+}
+
+// A fold opens a step at a time from either side, the hunk headers widening over what it shows,
+// all at once from its menu, which joins the hunks under one header, and folds back again, from its
+// Collapse, or zc on a line it showed.
+func TestFoldsOpenByParts(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(100)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	lines[4], lines[89] = "changed 5", "changed 90"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("edit far apart")
+	e.drain(e.m.loadCmd())
+	e.openNav("edit far apart")
+	e.pressRun("l")
+
+	// seen is the file's folds and hunk headers in order, and how many lines show.
+	seen := func() []string {
+		var out []string
+		shown := 0
+		for _, r := range e.m.main.rows {
+			if r.file < 0 || e.m.views[e.m.current].files[r.file].Path() != "long.txt" {
+				continue
+			}
+			switch r.kind {
+			case rowGap:
+				out = append(out, gapLabel(*r.gap))
+			case rowHunk:
+				h := r.hunk
+				if r.header != nil {
+					h = r.header
+				}
+				out = append(out, strings.TrimSpace(e.m.r.th.TextOf(look.Hunk(*h))))
+			case rowLine:
+				shown++
+			}
+		}
+		return append(out, fmt.Sprintf("%d lines", shown))
+	}
+	middle := func() int {
+		for i, r := range e.m.main.rows {
+			if r.kind == rowGap && r.gap.index == 1 {
+				return i
+			}
+		}
+		t.Fatalf("no fold between the hunks:\n%s", e.screen())
+		return 0
+	}
+	var got [][]string
+	got = append(got, seen())
+	e.cursorTo(func(r row) bool { return r.kind == rowGap && r.gap.index == 1 })
+	e.pressRun("enter")
+	got = append(got, seen())
+	// The lines it showed are the hunk below's, under its header: just after the fold.
+	if i := middle(); e.m.main.rows[i+1].kind != rowHunk || e.m.main.rows[i+2].line == nil || e.m.main.rows[i+2].line.NewLine != 67 {
+		t.Errorf("after the fold: %v then line %v, want the header, then line 67", e.m.main.rows[i+1].kind, e.m.main.rows[i+2].line)
+	}
+	e.click("row"+strconv.Itoa(middle())+":", actExpandDown.Title)
+	got = append(got, seen())
+	e.click("row"+strconv.Itoa(middle())+":", actCollapseGap.Title)
+	got = append(got, seen())
+	e.cursorTo(func(r row) bool { return r.kind == rowGap && r.gap.index == 1 })
+	e.pressRun("enter")
+	actExpandAll.Run(e.m, rowSubject{index: middle()})
+	got = append(got, seen())
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.NewLine == 50 })
+	e.press("z", "c")
+	got = append(got, seen())
+
+	// A line before the first hunk is a fold too; each hunk has its seven lines and the deleted one.
+	closed := []string{"... 1 unchanged line", "@@ -2,7 +2,7 @@ line 1", "... 78 unchanged lines",
+		"@@ -87,7 +87,7 @@ line 86", "... rest of file", "16 lines"}
+	want := [][]string{
+		closed,
+		// enter: 20 above the hunk below, which its header takes in.
+		{"... 1 unchanged line", "@@ -2,7 +2,7 @@ line 1", "... 58 unchanged lines",
+			"@@ -67,27 +67,27 @@ line 86", "... rest of file", "36 lines"},
+		// Down 20: below the hunk above.
+		{"... 1 unchanged line", "@@ -2,27 +2,27 @@ line 1", "... 38 unchanged lines",
+			"@@ -67,27 +67,27 @@ line 86", "... rest of file", "56 lines"},
+		closed,
+		// All of it: one hunk, under one header.
+		{"... 1 unchanged line", "@@ -2,92 +2,92 @@ line 1", "... rest of file", "94 lines"},
+		closed,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("closed, enter, down, collapse, all, zc (-want +got):\n%s", diff)
+	}
+}
+
+// A place saved when folds only opened whole still opens them, and a line a fold showed offers to
+// fold it back from its menu.
+func TestOpenFoldsFromBefore(t *testing.T) {
+	e := newTUIEnv(t)
+	lines := gittest.Numbered(100)
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("add long file")
+	lines[4], lines[89] = "changed 5", "changed 90"
+	e.repo.Write("long.txt", gittest.Lines(lines...))
+	e.repo.Commit("edit far apart")
+	e.drain(e.m.loadCmd())
+	e.openNav("edit far apart")
+	v := e.m.views[e.m.current]
+	key := gapKey(v, "long.txt", 1)
+	e.m.goTo(place{View: v.key(), OpenGaps: map[string]bool{key: true}})
+	if got := e.m.openGaps[key]; got != (gapShown{All: true}) {
+		t.Fatalf("a fold open in an old place = %+v, want all of it", got)
+	}
+	if got := e.m.placeHere(); !reflect.DeepEqual(got.Gaps, map[string]gapShown{key: {All: true}}) || got.OpenGaps != nil {
+		t.Errorf("saved again: gaps %v, open gaps %v; want it in gaps only", got.Gaps, got.OpenGaps)
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.NewLine == 50 })
+	tgt, _ := e.m.cursorTarget()
+	if got := menuTitles(e.m, tgt); !slices.Contains(got, actCollapseGap.Title) {
+		t.Errorf("menu on a line a fold showed = %q, want it to offer %q", got, actCollapseGap.Title)
 	}
 }

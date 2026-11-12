@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/chancez/gr/internal/tui/interact"
 	"github.com/chancez/gr/internal/tui/look"
 )
@@ -128,6 +130,10 @@ var (
 	threadFold      control
 	reviewFold      control
 	expandFold      control
+	expandUp        control
+	expandDown      control
+	expandAll       control
+	collapseGap     control
 	commentHere     control
 	replyButton     control
 	resolveButton   control
@@ -155,6 +161,10 @@ func init() {
 	threadFold = chevron(actToggleThread)
 	reviewFold = chevron(actToggleReview)
 	expandFold = link(actExpandFold, look.GlyphNone, "")
+	expandUp = link(actExpandUp, look.GlyphMoreAbove, fmt.Sprintf("Up %d", gapStep))
+	expandDown = link(actExpandDown, look.GlyphMoreBelow, fmt.Sprintf("Down %d", gapStep))
+	expandAll = link(actExpandAll, look.GlyphNone, "Expand all")
+	collapseGap = link(actCollapseGap, look.GlyphNone, "Collapse")
 	commentHere = icon(actCommentOnLine, look.GlyphComment)
 	commentHere.selects = true
 	replyButton = link(actReplyToThread, look.GlyphReply, "Reply")

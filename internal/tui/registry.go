@@ -2,6 +2,7 @@ package tui
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -306,11 +307,58 @@ var (
 	}
 	actExpandFold = &interact.Action[*model, rowSubject]{
 		Title: "expand",
-		Help:  "show the unchanged lines",
-		Run:   func(m *model, s rowSubject) tea.Cmd { m.foldRow(s.index, foldOpen); return nil },
+		Help:  "show more of the unchanged lines, above the hunk below",
+		Run: func(m *model, s rowSubject) tea.Cmd {
+			// Toward the hunk below, the context most often wanted; after the last hunk, down.
+			r := m.main.rows[s.index]
+			m.widenGap(r, r.gap.end == 0)
+			return nil
+		},
+	}
+	actExpandUp = &interact.Action[*model, rowSubject]{
+		Title:   "expand up",
+		Help:    fmt.Sprintf("show %d more unchanged lines, above the hunk below", gapStep),
+		Applies: func(m *model, s rowSubject) bool { return gapWidens(m.main.rows[s.index], false) },
+		Run:     func(m *model, s rowSubject) tea.Cmd { m.widenGap(m.main.rows[s.index], false); return nil },
+	}
+	actExpandDown = &interact.Action[*model, rowSubject]{
+		Title:   "expand down",
+		Help:    fmt.Sprintf("show %d more unchanged lines, below the hunk above", gapStep),
+		Applies: func(m *model, s rowSubject) bool { return gapWidens(m.main.rows[s.index], true) },
+		Run:     func(m *model, s rowSubject) tea.Cmd { m.widenGap(m.main.rows[s.index], true); return nil },
+	}
+	actExpandAll = &interact.Action[*model, rowSubject]{
+		Title: "expand all",
+		Help:  "show all the unchanged lines",
+		Run:   func(m *model, s rowSubject) tea.Cmd { m.setGap(m.main.rows[s.index], gapShown{All: true}); return nil },
+	}
+	actCollapseGap = &interact.Action[*model, rowSubject]{
+		Title: "collapse",
+		Help:  "hide the unchanged lines again",
+		Applies: func(m *model, s rowSubject) bool {
+			r := m.main.rows[s.index]
+			return r.gap != nil && m.openGaps[gapKey(m.views[m.current], m.views[m.current].files[r.file].Path(), r.gap.index)] != (gapShown{})
+		},
+		Run: func(m *model, s rowSubject) tea.Cmd { m.setGap(m.main.rows[s.index], gapShown{}); return nil },
 	}
 	actNoCommentOnFold = refuse[rowSubject]("unchanged lines outside the diff cannot be commented on yet")
 )
+
+// gapWidens reports whether fold row r opens a step more from its top, when down, or its bottom: a
+// gap has no hunk above to open down from before the first, nor one below after the last, and one
+// with a step or less hidden opens all at once instead.
+func gapWidens(r row, down bool) bool {
+	if r.kind != rowGap {
+		return false
+	}
+	if r.gap.count > 0 && r.gap.count <= gapStep || r.gap.end != 0 && r.gap.end-r.gap.start+1 <= gapStep {
+		return false
+	}
+	if down {
+		return r.gap.index > 0
+	}
+	return r.gap.end != 0
+}
 
 // ownsComment applies to threads with a comment of yours.
 func ownsComment(m *model, s threadSubject) bool {
@@ -667,10 +715,12 @@ func init() {
 
 	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
 
-	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor)
+	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor,
+		actCollapseGap)
 	messageLineKind = interact.NewKind(func(rowSubject) string { return "Message line" }, actCommentOnLine, actSelectLine, actSearchText)
 	hunkKind = interact.NewKind(func(rowSubject) string { return "Hunk" }, actSelectLine, actOpenRowInEditor)
-	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" }, actExpandFold, actOpenRowInEditor)
+	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" },
+		actExpandFold, actExpandUp, actExpandDown, actExpandAll, actCollapseGap, actOpenRowInEditor)
 
 	diffThreadKind = interact.NewKind(threadLabel, threadActions()...)
 	overviewThreadKind = interact.NewKind(threadLabel, append(threadActions(), actOpenThreadInDiff, actOpenThreadInCommit)...)

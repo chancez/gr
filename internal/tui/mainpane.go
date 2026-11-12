@@ -59,7 +59,7 @@ func (m *model) rowOptions(v view) rowOptions {
 		split:     m.split,
 		collapsed: func(f int) bool { return m.collapsed(v, f) },
 		reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
-		gapOpen:   func(f, g int) bool { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
+		gapShown:  func(f, g int) gapShown { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
 		content:   func(f int) []string { return m.fileContent(v, f) },
 	}
 }
@@ -151,7 +151,13 @@ func (m *model) rowControls(i int, state *rowState) {
 	case rowLine:
 		state.controls = controls(t, commentHere)
 	case rowGap:
-		state.controls = controls(t, expandFold.labeled(gapLabel(*r.gap)))
+		// A step each way where there is more than a step to show, and the rest at once where not;
+		// the menu has all of them.
+		cs := []control{expandDown, expandUp}
+		if !gapWidens(r, false) && !gapWidens(r, true) {
+			cs = []control{expandAll}
+		}
+		state.controls = controls(t, append(cs, collapseGap)...)
 	case rowCommit:
 		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
 	case rowThread:

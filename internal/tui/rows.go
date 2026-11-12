@@ -88,8 +88,11 @@ type row struct {
 	// reviewed and collapsed describe a rowFile.
 	reviewed  bool
 	collapsed bool
-	// gap is set on a rowGap, and on the lines of an open gap.
+	// gap is set on a rowGap, and on the lines of an open gap. A rowGap's is what it still hides.
 	gap *gap
+	// header is a rowHunk's range as shown, widened over the lines opened around its hunk, and over
+	// the hunks after it that open gaps join it to. Nil is the hunk's own.
+	header *git.Hunk
 	// excerpt is the diff shown above a thread in the overview.
 	excerpt *review.Excerpt
 	// review is set on a rowReview. Its summary thread, if any, is thread.
@@ -172,10 +175,55 @@ type rowOptions struct {
 	collapsed func(file int) bool
 	// reviewed reports whether a file is marked reviewed.
 	reviewed func(file int) bool
-	// gapOpen reports whether a fold of unchanged lines is open.
-	gapOpen func(file, gap int) bool
+	// gapShown is how much of a fold of unchanged lines is open.
+	gapShown func(file, gap int) gapShown
 	// content returns a file's new-side lines, for open folds.
 	content func(file int) []string
+}
+
+// shownHeader is hunk hi's range as shown, with what is open around it: the lines opened at the
+// bottom of the gap before it, all of it when it is open, and so on over the hunks after it that
+// open gaps join to it, to the lines opened at the top of the gap after the last. shown says, for
+// the gap before hunk i, how many of its lines show at its top and bottom, and whether all, which
+// size gives the number of. It is nil when nothing around the hunk is open.
+func shownHeader(hunks []git.Hunk, hi int, shown func(i int) (top, bottom int, all bool), size func(i int) int) *git.Hunk {
+	last := hi
+	for last+1 < len(hunks) {
+		if _, _, all := shown(last + 1); !all {
+			break
+		}
+		last++
+	}
+	_, before, allBefore := shown(hi)
+	if allBefore {
+		before = size(hi)
+	}
+	after, _, allAfter := shown(last + 1)
+	if allAfter {
+		after = size(last + 1)
+	}
+	if before == 0 && after == 0 && last == hi {
+		return nil
+	}
+	h, l := hunks[hi], hunks[last]
+	firstOld, _ := hunkBounds(h.OldStart, h.OldLines)
+	firstNew, _ := hunkBounds(h.NewStart, h.NewLines)
+	_, lastOld := hunkBounds(l.OldStart, l.OldLines)
+	_, lastNew := hunkBounds(l.NewStart, l.NewLines)
+	firstOld, firstNew = firstOld-before, firstNew-before
+	lastOld, lastNew = lastOld+after, lastNew+after
+	start := func(first, last int) int {
+		// A side with no lines starts at the line before, as git numbers it.
+		if last < first {
+			return first - 1
+		}
+		return first
+	}
+	return &git.Hunk{
+		OldStart: start(firstOld, lastOld), OldLines: max(lastOld-firstOld+1, 0),
+		NewStart: start(firstNew, lastNew), NewLines: max(lastNew-firstNew+1, 0),
+		Section: h.Section,
+	}
 }
 
 // buildRows lays out a file view, placing each thread after the line it ends on.
@@ -262,29 +310,85 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 			threadRows(fi, ts)
 		}
 		fileGaps := gaps(*f)
-		gapRows := func(before int) {
-			for gi := range fileGaps {
-				g := &fileGaps[gi]
-				if g.index != before {
-					continue
-				}
-				if opts.gapOpen == nil || !opts.gapOpen(fi, g.index) || opts.content == nil {
-					rows = append(rows, row{kind: rowGap, file: fi, gap: g})
-					continue
-				}
-				for _, l := range gapLines(*g, opts.content(fi)) {
-					if split {
-						rows = append(rows, row{kind: rowLine, file: fi, left: &l, right: &l, gap: g})
-					} else {
-						rows = append(rows, row{kind: rowLine, file: fi, line: &l, gap: g})
-					}
+		// opened is how the gap before hunk i is shown: its lines at the top and at the bottom that
+		// show, and whether it is all open, with what it still hides. A gap that is not, between
+		// hunks git keeps apart, shows nothing.
+		type opened struct {
+			g      *gap
+			lines  []git.Line
+			top    int
+			bottom int
+			all    bool
+		}
+		open := make([]opened, len(f.Hunks)+1)
+		for gi := range fileGaps {
+			g := &fileGaps[gi]
+			o := opened{g: g}
+			var st gapShown
+			if opts.gapShown != nil {
+				st = opts.gapShown(fi, g.index)
+			}
+			if st != (gapShown{}) && opts.content != nil {
+				o.lines = gapLines(*g, opts.content(fi))
+				o.top, o.bottom, o.all = st.split(len(o.lines))
+			}
+			open[g.index] = o
+		}
+		lineRows := func(g *gap, lines []git.Line) {
+			for _, l := range lines {
+				if split {
+					rows = append(rows, row{kind: rowLine, file: fi, left: &l, right: &l, gap: g})
+				} else {
+					rows = append(rows, row{kind: rowLine, file: fi, line: &l, gap: g})
 				}
 			}
+		}
+		// header is hunk hi's header, which heads what of the gap before it shows at its bottom.
+		header := func(hi int) {
+			rows = append(rows, row{kind: rowHunk, file: fi, hunk: &f.Hunks[hi], header: shownHeader(f.Hunks, hi, func(i int) (int, int, bool) {
+				o := open[i]
+				return o.top, o.bottom, o.all && o.g != nil
+			}, func(i int) int { return len(open[i].lines) })})
+		}
+		// gapRows draws the gap before hunk before, and the hunk's header where it goes: the lines
+		// shown at the gap's top go on from the hunk above, and those at its bottom are the hunk
+		// below's, under its header. A gap open all the way joins the two, with no header between,
+		// but for the gap before the first hunk, which its header heads.
+		gapRows := func(before int) {
+			o := open[before]
+			hunk := before < len(f.Hunks)
+			if o.g == nil {
+				if hunk {
+					header(before)
+				}
+				return
+			}
+			if o.all {
+				if hunk && before == 0 {
+					header(before)
+				}
+				lineRows(o.g, o.lines)
+				return
+			}
+			lineRows(o.g, o.lines[:o.top])
+			// What is still hidden, between the lines opened at its top and its bottom.
+			hidden := *o.g
+			hidden.start += o.top
+			if o.g.end != 0 {
+				hidden.end -= o.bottom
+			}
+			if o.lines != nil {
+				hidden.count = len(o.lines) - o.top - o.bottom
+			}
+			rows = append(rows, row{kind: rowGap, file: fi, gap: &hidden})
+			if hunk {
+				header(before)
+			}
+			lineRows(o.g, o.lines[len(o.lines)-o.bottom:])
 		}
 		for hi := range f.Hunks {
 			h := &f.Hunks[hi]
 			gapRows(hi)
-			rows = append(rows, row{kind: rowHunk, file: fi, hunk: h})
 			if split {
 				for _, p := range pairLines(h.Lines) {
 					rows = append(rows, row{kind: rowLine, file: fi, hunk: h, left: p[0], right: p[1]})

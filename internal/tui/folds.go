@@ -16,6 +16,29 @@ type gap struct {
 	start, end int
 	// offset turns a new-side line number into the old side's.
 	offset int
+	// count, on a fold row for a gap partly open, is how many of its lines it still hides, where
+	// that is known. 0 is not known, as for the rest of a file not read yet.
+	count int
+}
+
+// gapStep is how many lines a fold shows more of at a time, as GitHub's.
+const gapStep = 20
+
+// gapShown is how much of a gap is open: its first lines, after the hunk above, its last, before
+// the hunk below, or all of it. The zero value is closed.
+type gapShown struct {
+	Top    int  `json:"top,omitzero"`
+	Bottom int  `json:"bottom,omitzero"`
+	All    bool `json:"all,omitzero"`
+}
+
+// split is how many of a gap's n lines show at its top and at its bottom, and whether that is all
+// of them.
+func (s gapShown) split(n int) (top, bottom int, all bool) {
+	if s.All || s.Top+s.Bottom >= n {
+		return n, 0, true
+	}
+	return s.Top, s.Bottom, false
 }
 
 // hunkBounds returns the first and last line a hunk covers on one side. A side with no lines sits
@@ -68,12 +91,15 @@ func gapKey(v view, path string, g int) string {
 	return v.key() + "\x00" + path + "\x00" + strconv.Itoa(g)
 }
 
-// gapLabel describes a closed fold.
+// gapLabel describes a closed fold, or what a partly open one still hides.
 func gapLabel(g gap) string {
-	if g.end == 0 {
-		return "... rest of file"
-	}
 	n := g.end - g.start + 1
+	if g.end == 0 {
+		if g.count == 0 {
+			return "... rest of file"
+		}
+		n = g.count
+	}
 	if n == 1 {
 		return "... 1 unchanged line"
 	}

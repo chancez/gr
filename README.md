@@ -83,6 +83,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `/`, `n` `N` | search, next or previous match; a match in a reviewed file expands it |
 | `t` `T` | next or previous thread |
 | `zo` `zc` `za` `zR` `zM` | open, close, toggle folds; open or close all |
+| `enter` on unchanged lines | show 20 more, above the hunk below; their buttons go up or down, and the menu shows all |
 | `c` | comment on the line, selection, file, or change |
 | `v` | start or end a line selection |
 | `C` | comment on the whole file or commit |

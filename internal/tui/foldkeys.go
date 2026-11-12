@@ -74,8 +74,9 @@ func (m *model) foldRow(i int, op foldOp) {
 		return
 	}
 	if r.gap != nil {
+		// A fold opens whole and closes whole; it opens by parts from its buttons.
 		k := gapKey(v, v.files[r.file].Path(), r.gap.index)
-		open := m.openGaps[k]
+		open := m.openGaps[k] != (gapShown{})
 		switch op {
 		case foldOpen:
 			open = true
@@ -84,12 +85,7 @@ func (m *model) foldRow(i int, op foldOp) {
 		case foldToggle:
 			open = !open
 		}
-		if open {
-			m.openGaps[k] = true
-		} else {
-			delete(m.openGaps, k)
-		}
-		m.rebuildKeeping(p.rows[p.cursor])
+		m.setGap(r, gapShown{All: open})
 		return
 	}
 	if r.file < 0 {
@@ -125,7 +121,7 @@ func (m *model) foldAll(open bool) {
 		for _, g := range gaps(file) {
 			k := gapKey(v, file.Path(), g.index)
 			if open {
-				m.openGaps[k] = true
+				m.openGaps[k] = gapShown{All: true}
 			} else {
 				delete(m.openGaps, k)
 			}
@@ -176,15 +172,45 @@ func (m *model) rebuildKeeping(r row) {
 	y := m.main.cursorY()
 	seg := m.main.itemSegment()
 	m.rebuildMain()
+	// The row itself, or else the first of its gap's, as when a fold opens all the way.
+	at := -1
 	for i, nr := range m.main.rows {
-		same := nr.key(files) == r.key(files)
-		if r.gap != nil && nr.gap != nil && nr.file == r.file && nr.gap.index == r.gap.index {
-			same = true
+		if nr.key(files) == r.key(files) {
+			at = i
+			break
 		}
-		if same {
-			m.main.placeAt(i, seg, y)
-			return
+		if at < 0 && r.gap != nil && nr.gap != nil && nr.file == r.file && nr.gap.index == r.gap.index {
+			at = i
 		}
 	}
+	if at >= 0 {
+		m.main.placeAt(at, seg, y)
+		return
+	}
 	m.main.clamp()
+}
+
+// setGap opens as much of row r's gap as st says, closing it at none, and keeps the cursor's row
+// where it is on screen.
+func (m *model) setGap(r row, st gapShown) {
+	k := gapKey(m.views[m.current], m.views[m.current].files[r.file].Path(), r.gap.index)
+	if st == (gapShown{}) {
+		delete(m.openGaps, k)
+	} else {
+		m.openGaps[k] = st
+	}
+	m.rebuildKeeping(m.main.rows[m.main.cursor])
+}
+
+// widenGap opens gapStep more of row r's gap, at its top when down, after the hunk above, and at
+// its bottom otherwise, before the hunk below.
+func (m *model) widenGap(r row, down bool) {
+	k := gapKey(m.views[m.current], m.views[m.current].files[r.file].Path(), r.gap.index)
+	st := m.openGaps[k]
+	if down {
+		st.Top += gapStep
+	} else {
+		st.Bottom += gapStep
+	}
+	m.setGap(r, st)
 }
