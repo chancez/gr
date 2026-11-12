@@ -369,6 +369,25 @@ func TestFilteringAMenuNamesSubjects(t *testing.T) {
 	}
 }
 
+func TestPasteIntoPickerFilters(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.press("l")
+	nw, _, _ := e.m.layoutSizes()
+	y := strings.Count(e.screen()[:strings.Index(e.screen(), "+     println")], "\n")
+	_, cmd := e.m.Update(tea.MouseClickMsg{X: nw + 10, Y: y, Button: tea.MouseRight})
+	e.drain(cmd)
+	e.m.Update(tea.PasteMsg{Content: "comment"})
+	e.m.render()
+	var got []string
+	for _, line := range e.m.picker.render(e.m.r.th)[3:6] {
+		got = append(got, strings.Trim(ansi.Strip(line), " |"))
+	}
+	if want := []string{"Line: comment  c", "File main.go: comment  C", "Commit b194130: comment"}; !slices.Equal(got, want) {
+		t.Errorf("menu filtered by a paste shows %q, want %q", got, want)
+	}
+}
+
 // A right click on a divider or an indicator of more entries moves and drags nothing.
 func TestRightClickOnDividersAndIndicators(t *testing.T) {
 	e := newTUIEnv(t)

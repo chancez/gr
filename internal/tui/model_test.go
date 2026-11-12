@@ -677,6 +677,20 @@ func TestSearch(t *testing.T) {
 	}
 }
 
+func TestSearchPaste(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.press("/")
+	e.m.Update(tea.PasteMsg{Content: "println"})
+	e.press("enter")
+	if e.m.search != "println" {
+		t.Fatalf("search after paste = %q, want println", e.m.search)
+	}
+	if r := e.m.main.rows[e.m.main.cursor]; r.line == nil || !strings.Contains(r.line.Text, "println") {
+		t.Errorf("cursor after pasted search on %+v", r)
+	}
+}
+
 func TestGaps(t *testing.T) {
 	f := git.FileDiff{OldPath: "f", NewPath: "f", Hunks: []git.Hunk{
 		{OldStart: 5, OldLines: 3, NewStart: 5, NewLines: 4},

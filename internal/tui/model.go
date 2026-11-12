@@ -488,10 +488,17 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return model, cmd
 	}
-	if m.mode == modeCompose {
+	switch m.mode {
+	case modeCompose:
 		var cmd tea.Cmd
 		m.compose.area, cmd = m.compose.area.Update(msg)
 		return m, cmd
+	case modeSearch:
+		var cmd tea.Cmd
+		m.searchInput, cmd = m.searchInput.Update(msg)
+		return m, cmd
+	case modePicker:
+		return m, m.picker.edit(msg)
 	}
 	return m, nil
 }

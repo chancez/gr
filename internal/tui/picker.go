@@ -393,13 +393,18 @@ func (m *model) pickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		p.move(pickerRows(p.height))
 		return m, nil
 	}
+	return m, p.edit(msg)
+}
+
+// edit gives msg, a key or a paste, to the filter, and filters again when it changed.
+func (p *picker) edit(msg tea.Msg) tea.Cmd {
 	before := p.filter.Value()
 	var cmd tea.Cmd
 	p.filter, cmd = p.filter.Update(msg)
 	if p.filter.Value() != before {
 		p.refilter()
 	}
-	return m, cmd
+	return cmd
 }
 
 func (m *model) pickerWheel(msg tea.MouseWheelMsg) {
