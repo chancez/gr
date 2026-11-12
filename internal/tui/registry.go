@@ -256,6 +256,33 @@ var (
 	}
 )
 
+// Hiding whitespace changes in a file, or in every file, from the file's menu. Each is offered only
+// where it changes something, so a menu says what a click does.
+var (
+	actHideFileSpace = &interact.Action[*model, fileSubject]{
+		Title:   "hide whitespace",
+		Help:    "hide whitespace changes in the file",
+		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && !m.ignoresSpace(s.diff) },
+		Run:     func(m *model, s fileSubject) tea.Cmd { m.flipFileSpace(s.diff); return nil },
+	}
+	actShowFileSpace = &interact.Action[*model, fileSubject]{
+		Title:   "show whitespace",
+		Help:    "show whitespace changes in the file",
+		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && m.ignoresSpace(s.diff) },
+		Run:     func(m *model, s fileSubject) tea.Cmd { m.flipFileSpace(s.diff); return nil },
+	}
+	actHideAllSpace = &interact.Action[*model, fileSubject]{
+		Title:   "hide whitespace in all files",
+		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && !m.diffOptions().ignoreSpace },
+		Run:     func(m *model, _ fileSubject) tea.Cmd { m.toggleIgnoreSpace(); return nil },
+	}
+	actShowAllSpace = &interact.Action[*model, fileSubject]{
+		Title:   "show whitespace in all files",
+		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && m.diffOptions().ignoreSpace },
+		Run:     func(m *model, _ fileSubject) tea.Cmd { m.toggleIgnoreSpace(); return nil },
+	}
+)
+
 // Opening what the cursor is on in $EDITOR, as it is in the view.
 var (
 	actOpenFileInEditor = &interact.Action[*model, fileSubject]{
@@ -714,7 +741,8 @@ func init() {
 	changeKind = interact.NewKind(func(changeSubject) string { return "Change" },
 		actCommentOnChange, actSubmit, actDiscardDraft, actOpenNewWork)
 
-	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
+	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor,
+		actHideFileSpace, actShowFileSpace, actHideAllSpace, actShowAllSpace)
 
 	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor,
 		actCollapseGap)
@@ -784,6 +812,8 @@ func init() {
 	writable(fileKind, actCommentOnFile, "c/C", "comment on the file", "c", "C")
 	writable(fileKind, actMarkFileReviewed, "m", "mark the file reviewed", "m")
 	fileKind.Bind(actOpenFileInEditor, "E", "open in $EDITOR, read-only, as it is here", "E")
+	fileKind.Bind(actHideAllSpace, "W", "hide/show whitespace changes", "W")
+	fileKind.Bind(actShowAllSpace, "", "", "W")
 
 	writable(lineKind, actCommentOnLine, "c", "comment on the line or selection", "c")
 	messageLineKind.Bind(actCommentOnLine, "c", "comment on the message's line or selection", "c")

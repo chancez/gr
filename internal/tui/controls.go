@@ -125,6 +125,8 @@ func (c control) spans(key string) []look.Span {
 // rows.
 var (
 	viewedBox       control
+	hideSpaceBox    control
+	showSpaceBox    control
 	commitViewedBox control
 	fileFold        control
 	threadFold      control
@@ -156,6 +158,9 @@ var (
 func init() {
 	// Inside the diff and the overview, controls are quiet; the + under the mouse is the exception.
 	viewedBox = quietCheckbox(actMarkFileReviewed, "Viewed")
+	// A file's whitespace box, checked while it hides them, unchecked while it shows them.
+	hideSpaceBox = quietCheckbox(actHideFileSpace, "Hide whitespace")
+	showSpaceBox = quietCheckbox(actShowFileSpace, "Hide whitespace").checked(true)
 	commitViewedBox = quietCheckbox(actMarkCommitReviewed, "Viewed")
 	fileFold = chevron(actFoldFile)
 	threadFold = chevron(actToggleThread)

@@ -185,7 +185,16 @@ func (m *model) rowControls(i int, state *rowState) {
 		state.controls = controls(t, deleteReview)
 	case rowFile:
 		state.lead = controls(t, fileFold.checked(!r.collapsed).heading(look.File(m.views[m.current].files[r.file])))
-		state.controls = controls(t, viewedBox.checked(r.reviewed))
+		boxes := []control{viewedBox.checked(r.reviewed)}
+		if f := m.views[m.current].files[r.file]; m.diffOptions().flipped[f.Path()] {
+			// A file shown otherwise than the change says so, and turns back from its box.
+			box := hideSpaceBox
+			if m.ignoresSpace(f) {
+				box = showSpaceBox
+			}
+			boxes = append([]control{box}, boxes...)
+		}
+		state.controls = controls(t, boxes...)
 		if len(state.controls) == 0 && r.reviewed {
 			// Where it cannot be marked, as in the interdiff, the file still says it is reviewed.
 			state.controls = []look.Span{look.Reviewed()}

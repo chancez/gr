@@ -2511,3 +2511,45 @@ func TestStaleWhitespaceLoadIsDropped(t *testing.T) {
 		t.Fatalf("the load from before the second W replaced the one after it:\n%s", screen)
 	}
 }
+
+// A file's menu hides its whitespace changes alone; its header then has a box to turn it back, and
+// hiding them in every file starts every file over.
+func TestHideWhitespaceInAFile(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("other.go", gittest.Lines("package main", "var x = 1"))
+	e.repo.Commit("add other")
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "    println(\"hello\")", "}"),
+		"other.go", gittest.Lines("package main", "  var x = 1"))
+	e.repo.Commit("reindent")
+	e.drain(e.m.loadCmd())
+	e.openNav("reindent")
+	run := func(full string) {
+		t.Helper()
+		e.cursorTo(func(r row) bool { return r.kind == rowFile && e.m.views[e.m.current].files[r.file].Path() == "main.go" })
+		e.pressRun("ctrl+p")
+		for _, it := range e.m.picker.items {
+			if it.full == full {
+				e.m.closePicker()
+				e.drain(it.run(e.m))
+				return
+			}
+		}
+		t.Fatalf("no %q among %+v", full, shownItems(e.m.picker.items))
+	}
+	run("File main.go: hide whitespace")
+	screen := e.screen()
+	if !strings.Contains(screen, "M main.go  whitespace only  [x] Hide whitespace   [ ] Viewed") ||
+		!strings.Contains(screen, "  var x = 1") || strings.Contains(screen, "whitespace hidden") {
+		t.Fatalf("main.go alone should hide its whitespace changes:\n%s", screen)
+	}
+	e.click("row", "show whitespace")
+	if screen := e.screen(); !strings.Contains(screen, `    println("hello")`) || strings.Contains(screen, "Hide whitespace") {
+		t.Fatalf("its box should show main.go's whitespace changes again:\n%s", screen)
+	}
+	run("File main.go: hide whitespace")
+	run("File main.go: hide whitespace in all files")
+	if screen := e.screen(); strings.Contains(screen, "Hide whitespace") || strings.Contains(screen, "  var x = 1") ||
+		!strings.Contains(screen, "whitespace hidden") {
+		t.Fatalf("every file should hide whitespace changes, none set apart:\n%s", screen)
+	}
+}

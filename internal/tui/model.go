@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
+	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/termtext"
@@ -787,6 +789,30 @@ func (m *model) toggleIgnoreSpace() {
 		m.setStatus("hiding whitespace changes")
 	} else {
 		m.setStatus("showing whitespace changes")
+	}
+}
+
+// ignoresSpace reports whether file f is shown with whitespace changes hidden.
+func (m *model) ignoresSpace(f git.FileDiff) bool {
+	return m.diffOptions().forFile(f.Path()).IgnoreAllSpace
+}
+
+// flipFileSpace shows file f's whitespace changes the other way from now on.
+func (m *model) flipFileSpace(f git.FileDiff) {
+	o := m.diffOptions()
+	flipped := map[string]bool{}
+	maps.Copy(flipped, o.flipped)
+	if flipped[f.Path()] {
+		delete(flipped, f.Path())
+	} else {
+		flipped[f.Path()] = true
+	}
+	hide := !m.ignoresSpace(f)
+	m.setDiffOptions(&diffOptions{ignoreSpace: o.ignoreSpace, flipped: flipped})
+	if hide {
+		m.setStatus("hiding whitespace changes in %s", f.Path())
+	} else {
+		m.setStatus("showing whitespace changes in %s", f.Path())
 	}
 }
 
