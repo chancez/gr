@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-
+	"slices"
 	"strings"
 	"unicode"
 
@@ -63,17 +63,28 @@ func (m *model) searchText() {
 	m.searchStep(1)
 }
 
-// searchStep moves to the next match in direction dir, wrapping at the ends of the view.
+// searchStep moves to the next match in direction dir, wrapping at the ends of the view. Files
+// collapsed as reviewed are searched too, and the one a match is in is expanded.
 func (m *model) searchStep(dir int) {
 	if m.search == "" {
 		m.setError(fmt.Errorf("no search; / to search"))
 		return
 	}
 	p := &m.main
-	files := m.views[m.current].files
+	v := m.views[m.current]
+	files := v.files
+	// The rows searched: in a file view, every file's, collapsed or not.
+	rows, cursor := p.rows, p.cursor
+	if v.kind != viewOverview && cursor < len(rows) {
+		opts := m.rowOptions(v)
+		opts.collapsed = nil
+		rows = buildRows(m.data, v, opts)
+		at := p.rows[p.cursor].key(files)
+		cursor = slices.IndexFunc(rows, func(r row) bool { return r.key(files) == at })
+	}
 	match := matcher(m.search)
 	var hits []int
-	for i, r := range p.rows {
+	for i, r := range rows {
 		if r.selectable() && match(r.searchText(files)) {
 			hits = append(hits, i)
 		}
@@ -85,11 +96,11 @@ func (m *model) searchStep(dir int) {
 	}
 	next, wrapped := -1, false
 	for k, i := range hits {
-		if dir > 0 && i > p.cursor {
+		if dir > 0 && i > cursor {
 			next = k
 			break
 		}
-		if dir < 0 && i < p.cursor {
+		if dir < 0 && i < cursor {
 			next = k
 		}
 	}
@@ -100,7 +111,18 @@ func (m *model) searchStep(dir int) {
 			next = len(hits) - 1
 		}
 	}
-	m.jump(func() { p.jump(hits[next]) })
+	hit := rows[hits[next]]
+	key := hit.key(files)
+	shown := func() int { return slices.IndexFunc(p.rows, func(r row) bool { return r.key(files) == key }) }
+	m.jump(func() {
+		i := shown()
+		if i < 0 {
+			// In a file collapsed as reviewed.
+			m.toggleCollapsed(v, hit.file)
+			i = shown()
+		}
+		p.jump(i)
+	})
 	m.syncNav()
 	m.searchPos, m.searchHits = next+1, len(hits)
 	if wrapped {

@@ -26,13 +26,7 @@ func (m *model) rebuildMain() {
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
-		m.main.rows = buildRows(m.data, v, rowOptions{
-			split:     m.split,
-			collapsed: func(f int) bool { return m.collapsed(v, f) },
-			reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
-			gapOpen:   func(f, g int) bool { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
-			content:   func(f int) []string { return m.fileContent(v, f) },
-		})
+		m.main.rows = buildRows(m.data, v, m.rowOptions(v))
 	}
 	for i := range m.main.rows {
 		if t := m.main.rows[i].thread; t != nil && (m.main.rows[i].kind == rowThread || m.main.rows[i].kind == rowReview) {
@@ -57,6 +51,17 @@ func (m *model) rebuildMain() {
 		}
 	}
 	m.main.layout(m.renderMainRow)
+}
+
+// rowOptions lay out file view v as it is shown.
+func (m *model) rowOptions(v view) rowOptions {
+	return rowOptions{
+		split:     m.split,
+		collapsed: func(f int) bool { return m.collapsed(v, f) },
+		reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
+		gapOpen:   func(f, g int) bool { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
+		content:   func(f int) []string { return m.fileContent(v, f) },
+	}
 }
 
 // stickyFile is the header row of the file the top of the diff is in, once that header has

@@ -79,7 +79,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `h` `l`, `tab` | sidebar and diff; `ctrl+j` `ctrl+k` between sidebar lists |
 | `}` `{`, `]` `[`, `J` `K`, `)` `(` | next or previous commit, file, hunk, change |
 | `H`, `A` | overview, all changes; again to go back |
-| `/`, `n` `N` | search, next or previous match |
+| `/`, `n` `N` | search, next or previous match; a match in a reviewed file expands it |
 | `t` `T` | next or previous thread |
 | `zo` `zc` `za` `zR` `zM` | open, close, toggle folds; open or close all |
 | `c` | comment on the line, selection, file, or change |

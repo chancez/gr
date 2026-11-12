@@ -691,6 +691,35 @@ func TestSearchPaste(t *testing.T) {
 	}
 }
 
+// A search finds matches in a file collapsed as reviewed, and expands it to show the one it goes to.
+func TestSearchInReviewedFile(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	e.pressRun("m")
+	e.press("/")
+	e.typeText("println")
+	e.press("enter")
+	v := e.m.views[e.m.current]
+	type result struct {
+		Collapsed bool
+		Cursor    string
+		Status    string
+	}
+	got := result{
+		Collapsed: e.m.collapsed(v, 0),
+		Cursor:    e.m.main.rows[e.m.main.cursor].line.Text,
+		Status:    ansi.Strip(e.m.searchLabel()),
+	}
+	want := result{
+		Cursor: "\tprintln(\"hi\")",
+		Status: "/println 1/2",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("search in a reviewed file (-want +got):\n%s", diff)
+	}
+}
+
 func TestGaps(t *testing.T) {
 	f := git.FileDiff{OldPath: "f", NewPath: "f", Hunks: []git.Hunk{
 		{OldStart: 5, OldLines: 3, NewStart: 5, NewLines: 4},
