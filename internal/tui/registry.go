@@ -531,8 +531,8 @@ var (
 
 	actSelectLines = paneAction("select lines", func(m *model) tea.Cmd { m.toggleSelection(); return nil })
 	actFoldPrefix  = paneAction("folds", func(m *model) tea.Cmd {
+		// What the next key does shows in a box of its own, as prefixHints draws it.
 		m.pending = "z"
-		m.setStatus("z: o open, c close, a toggle, O open all under it, C close all under it, R open all, M close all")
 		return nil
 	})
 )

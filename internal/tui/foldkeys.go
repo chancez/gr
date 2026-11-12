@@ -2,10 +2,13 @@ package tui
 
 import (
 	"errors"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/review"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 type foldOp int
@@ -106,6 +109,32 @@ func (m *model) foldRow(i int, op foldOp) {
 		m.toggleCollapsed(v, r.file)
 		m.focusFile(r.file)
 	}
+}
+
+// prefixHints is the box that says, while a prefix as z waits for its next key, what each key does
+// with it, a line each, as wide and as tall as that takes: nil with none waiting.
+func (m *model) prefixHints() []string {
+	if m.pending == "" || m.mode != modeNormal {
+		return nil
+	}
+	th := m.r.th
+	var spans [][]look.Span
+	width := 0
+	for _, b := range foldPrefixKind.Bindings() {
+		if b.Help().Desc == "" {
+			continue
+		}
+		line := look.Hint(b.Help().Key, b.Help().Desc)
+		spans = append(spans, line)
+		width = max(width, ansi.StringWidth(th.TextOf(line...)))
+	}
+	title := []look.Span{look.Heading(m.pending + " ...")}
+	width = max(width, ansi.StringWidth(th.TextOf(title...)))
+	lines := []string{th.Draw(look.Plain, width, title...)}
+	for _, l := range spans {
+		lines = append(lines, th.Draw(look.Plain, width, l...))
+	}
+	return strings.Split(th.Box(width+4, false).Render(strings.Join(lines, "\n")), "\n")
 }
 
 // foldAll opens or closes every fold in the view: in the overview its threads, and in a diff its

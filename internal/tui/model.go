@@ -11,6 +11,7 @@ import (
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/review"
@@ -731,6 +732,11 @@ func (m *model) frame() string {
 	if m.mode == modePicker {
 		m.picker.layout(m.width, bh)
 		screen = overlay(screen, m.picker.render(m.r.th), m.picker.x, m.picker.y)
+	}
+	if hints := m.prefixHints(); len(hints) > 0 {
+		// At the bottom right, over the main pane, clear of the status bar.
+		w := ansi.StringWidth(hints[0])
+		screen = overlay(screen, hints, max(m.width-w-1, 0), max(bh-len(hints), 0))
 	}
 	var b strings.Builder
 	for _, line := range screen {

@@ -2434,3 +2434,30 @@ func TestSidebarScrollNames(t *testing.T) {
 		t.Errorf("entries = %q, want %q", got, want)
 	}
 }
+
+// After z, a box lists what each next key does, a line each, so none is cut short; it goes with
+// the next key.
+func TestPrefixHintsFit(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.press("z")
+	var got []string
+	for _, l := range e.m.prefixHints() {
+		l = strings.TrimSpace(strings.Trim(strings.TrimSpace(ansi.Strip(l)), "|"))
+		if l != "" && !strings.HasPrefix(l, "+-") {
+			got = append(got, l)
+		}
+	}
+	want := []string{"z ...", "zo open the fold", "zc close the fold", "za toggle the fold", "zO open all under it",
+		"zC close all under it", "zR open every fold", "zM close every fold"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("hints after z (-want +got):\n%s", diff)
+	}
+	if !strings.Contains(e.screen(), "zC close all under it") {
+		t.Errorf("the hints are not on screen whole:\n%s", e.screen())
+	}
+	e.press("o")
+	if hints := e.m.prefixHints(); hints != nil || strings.Contains(e.screen(), "zo open the fold") {
+		t.Errorf("after the next key the hints stay: %q", hints)
+	}
+}
