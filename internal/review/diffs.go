@@ -31,7 +31,7 @@ func parent(c git.Commit) string {
 
 // commitDiff is a commit's diff against its first parent.
 func (s *Service) commitDiff(ctx context.Context, c git.Commit, paths ...string) ([]git.FileDiff, error) {
-	return s.diffs.Diff(ctx, parent(c), c.SHA, paths...)
+	return s.diffs.Diff(ctx, parent(c), c.SHA, git.DiffOptions{}, paths...)
 }
 
 // CommitFile is one file's diff in a commit, for when only that file is needed, as for a thread's
@@ -63,12 +63,12 @@ func (s *Service) RevisionFileList(ctx context.Context, rev store.Revision) ([]g
 
 // RevisionFile is one file's diff in a revision's whole diff.
 func (s *Service) RevisionFile(ctx context.Context, rev store.Revision, path string) ([]git.FileDiff, error) {
-	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA, path)
+	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA, git.DiffOptions{}, path)
 }
 
 // RevisionFiles returns a revision's whole diff.
 func (s *Service) RevisionFiles(ctx context.Context, rev store.Revision) ([]git.FileDiff, error) {
-	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA)
+	return s.diffs.Diff(ctx, rev.BaseSHA, rev.HeadSHA, git.DiffOptions{})
 }
 
 // Interdiff returns what changed between two revisions of a change, excluding changes that came only
@@ -79,7 +79,7 @@ func (s *Service) RevisionFiles(ctx context.Context, rev store.Revision) ([]git.
 // are compared directly, which includes the base's changes.
 func (s *Service) Interdiff(ctx context.Context, from, to store.Revision) (files []git.FileDiff, exact bool, err error) {
 	if from.BaseSHA == to.BaseSHA || from.BaseSHA == "" || to.BaseSHA == "" {
-		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA)
+		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA, git.DiffOptions{})
 		return files, true, err
 	}
 	tree, clean, err := s.git.MergeTree(ctx, from.BaseSHA, to.BaseSHA, from.HeadSHA)
@@ -87,10 +87,10 @@ func (s *Service) Interdiff(ctx context.Context, from, to store.Revision) (files
 		return nil, false, err
 	}
 	if !clean {
-		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA)
+		files, err = s.diffs.Diff(ctx, from.HeadSHA, to.HeadSHA, git.DiffOptions{})
 		return files, false, err
 	}
-	files, err = s.diffs.Diff(ctx, tree, to.HeadSHA)
+	files, err = s.diffs.Diff(ctx, tree, to.HeadSHA, git.DiffOptions{})
 	return files, true, err
 }
 

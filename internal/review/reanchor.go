@@ -119,7 +119,7 @@ func (r *reanchorer) wholeDiff(ctx context.Context) ([]git.FileDiff, error) {
 	if r.rangeLoaded {
 		return r.rangeFiles, nil
 	}
-	files, err := r.s.diffs.Diff(ctx, r.base, r.head)
+	files, err := r.s.diffs.Diff(ctx, r.base, r.head, git.DiffOptions{})
 	if err != nil {
 		return nil, err
 	}

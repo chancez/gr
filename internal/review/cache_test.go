@@ -42,7 +42,7 @@ func TestDiffCacheEvictsByWeight(t *testing.T) {
 // countingDiffs counts the reads that reach it.
 type countingDiffs struct{ diffs, lists, logs int }
 
-func (c *countingDiffs) Diff(context.Context, string, string, ...string) ([]git.FileDiff, error) {
+func (c *countingDiffs) Diff(context.Context, string, string, git.DiffOptions, ...string) ([]git.FileDiff, error) {
 	c.diffs++
 	return lines(3), nil
 }
@@ -62,7 +62,7 @@ func TestCachedDiffsReadOnce(t *testing.T) {
 	d := NewCachedDiffs(next, 100)
 	ctx := t.Context()
 	for range 3 {
-		if _, err := d.Diff(ctx, "a", "b", "f"); err != nil {
+		if _, err := d.Diff(ctx, "a", "b", git.DiffOptions{}, "f"); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := d.DiffFiles(ctx, "a", "b"); err != nil {
@@ -73,10 +73,14 @@ func TestCachedDiffsReadOnce(t *testing.T) {
 		}
 	}
 	// Another path is another diff.
-	if _, err := d.Diff(ctx, "a", "b", "g"); err != nil {
+	if _, err := d.Diff(ctx, "a", "b", git.DiffOptions{}, "g"); err != nil {
 		t.Fatal(err)
 	}
-	if *next != (countingDiffs{diffs: 2, lists: 1, logs: 1}) {
+	// So is the same path with other options.
+	if _, err := d.Diff(ctx, "a", "b", git.DiffOptions{IgnoreAllSpace: true}, "f"); err != nil {
+		t.Fatal(err)
+	}
+	if *next != (countingDiffs{diffs: 3, lists: 1, logs: 1}) {
 		t.Errorf("reads that reached git = %+v, want each read once", *next)
 	}
 }

@@ -516,3 +516,35 @@ func TestBranchOrigins(t *testing.T) {
 		t.Error("origins of a missing branch: no error")
 	}
 }
+
+// TestDiffIgnoreAllSpace checks that -w turns lines that differ only in whitespace into context and
+// leaves out a file whose changes are all whitespace.
+func TestDiffIgnoreAllSpace(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("code.txt", gittest.Lines("if x {", "y()", "}"), "spaces.txt", gittest.Lines("a b"))
+	base := r.Commit("base")
+	r.Write("code.txt", gittest.Lines("if x {", "\ty()", "\tz()", "}"), "spaces.txt", gittest.Lines("a  b "))
+	head := r.Commit("head")
+	repo := open(t, r.Dir)
+
+	got, err := repo.Diff(t.Context(), base, head, git.DiffOptions{IgnoreAllSpace: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []git.FileDiff{{
+		OldPath: "code.txt", NewPath: "code.txt", Status: git.StatusModified, OldMode: "100644", NewMode: "100644",
+		OldBlob: r.Git("rev-parse", base+":code.txt"), NewBlob: r.Git("rev-parse", head+":code.txt"), Added: 1,
+		Hunks: []git.Hunk{{
+			OldStart: 1, OldLines: 3, NewStart: 1, NewLines: 4,
+			Lines: []git.Line{
+				{Kind: git.LineContext, Text: "if x {", OldLine: 1, NewLine: 1},
+				{Kind: git.LineContext, Text: "\ty()", OldLine: 2, NewLine: 2},
+				{Kind: git.LineAdded, Text: "\tz()", NewLine: 3},
+				{Kind: git.LineContext, Text: "}", OldLine: 3, NewLine: 4},
+			},
+		}},
+	}}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("Diff -w mismatch (-want +got):\n%s", diff)
+	}
+}

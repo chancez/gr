@@ -3,6 +3,7 @@ package review
 import (
 	"container/list"
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 
@@ -78,14 +79,14 @@ func (c *diffCache) put(key string, files []git.FileDiff) {
 	}
 }
 
-func cacheKey(from, to string, paths []string) string {
-	return from + "\x00" + to + "\x00" + strings.Join(paths, "\x00")
+func cacheKey(from, to string, opts git.DiffOptions, paths []string) string {
+	return from + "\x00" + to + "\x00" + fmt.Sprintf("%+v", opts) + "\x00" + strings.Join(paths, "\x00")
 }
 
 // Diffs is where the service reads diffs and file lists. A *git.Repo is one, and NewCachedDiffs
 // wraps one in caches, so the code using it reads the same way whether or not it is cached.
 type Diffs interface {
-	Diff(ctx context.Context, from, to string, paths ...string) ([]git.FileDiff, error)
+	Diff(ctx context.Context, from, to string, opts git.DiffOptions, paths ...string) ([]git.FileDiff, error)
 	DiffFiles(ctx context.Context, from, to string) ([]git.FileDiff, error)
 	CommitFiles(ctx context.Context, base, head string) (map[string][]git.FileDiff, error)
 }
@@ -102,12 +103,12 @@ type cachedDiffs struct {
 	lists fileLists
 }
 
-func (c *cachedDiffs) Diff(ctx context.Context, from, to string, paths ...string) ([]git.FileDiff, error) {
-	key := cacheKey(from, to, paths)
+func (c *cachedDiffs) Diff(ctx context.Context, from, to string, opts git.DiffOptions, paths ...string) ([]git.FileDiff, error) {
+	key := cacheKey(from, to, opts, paths)
 	if files, ok := c.cache.get(key); ok {
 		return files, nil
 	}
-	files, err := c.next.Diff(ctx, from, to, paths...)
+	files, err := c.next.Diff(ctx, from, to, opts, paths...)
 	if err != nil {
 		return nil, err
 	}

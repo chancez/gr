@@ -67,7 +67,7 @@ func TestFileListsMatchDiffs(t *testing.T) {
 		t.Errorf("file lists for %d commits, want 2", len(lists))
 	}
 
-	full, err := repo.Diff(ctx, base, two)
+	full, err := repo.Diff(ctx, base, two, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -566,17 +566,32 @@ func (r *Repo) BlobID(ctx context.Context, rev, path string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// Diff returns the diff from one revision to another, limited to paths if any are given. An empty
-// from diffs against the empty tree.
-func (r *Repo) Diff(ctx context.Context, from, to string, paths ...string) ([]FileDiff, error) {
+// DiffOptions change how a diff is computed. The zero value is git's plain diff.
+type DiffOptions struct {
+	// IgnoreAllSpace ignores whitespace when comparing lines, as git diff -w. A file whose changes
+	// are all whitespace is left out of the diff.
+	IgnoreAllSpace bool
+}
+
+func (o DiffOptions) args() []string {
+	var args []string
+	if o.IgnoreAllSpace {
+		args = append(args, "--ignore-all-space")
+	}
+	return args
+}
+
+// Diff returns the diff from one revision to another, with opts, limited to paths if any are given.
+// An empty from diffs against the empty tree.
+func (r *Repo) Diff(ctx context.Context, from, to string, opts DiffOptions, paths ...string) ([]FileDiff, error) {
 	if from == "" {
 		var err error
 		if from, err = r.EmptyTree(ctx); err != nil {
 			return nil, err
 		}
 	}
-	args := append([]string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-relative",
-		"--full-index", "--src-prefix=a/", "--dst-prefix=b/", "-M", from, to, "--"}, paths...)
+	args := slices.Concat([]string{"diff", "--no-ext-diff", "--no-textconv", "--no-color", "--no-relative",
+		"--full-index", "--src-prefix=a/", "--dst-prefix=b/", "-M"}, opts.args(), []string{from, to, "--"}, paths)
 	out, err := r.run(ctx, args...)
 	if err != nil {
 		return nil, err
@@ -590,7 +605,7 @@ func (r *Repo) CommitDiff(ctx context.Context, c Commit) ([]FileDiff, error) {
 	if len(c.Parents) > 0 {
 		parent = c.Parents[0]
 	}
-	return r.Diff(ctx, parent, c.SHA)
+	return r.Diff(ctx, parent, c.SHA, DiffOptions{})
 }
 
 // MergeTree merges theirs into ours with an explicit merge base, without touching the index or the

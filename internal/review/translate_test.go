@@ -25,7 +25,7 @@ func TestMapLine(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := g.Diff(t.Context(), from, to, "f")
+	files, err := g.Diff(t.Context(), from, to, git.DiffOptions{}, "f")
 	if err != nil {
 		t.Fatal(err)
 	}

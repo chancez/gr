@@ -80,7 +80,7 @@ func mapLineEnd(f *git.FileDiff, line int) int {
 // translateRange maps lines start to end of path at rev from to what is in their place at rev to,
 // with all of what replaced them.
 func (s *Service) translateRange(ctx context.Context, from, to, path string, start, end int) (int, int, error) {
-	files, err := s.diffs.Diff(ctx, from, to, path)
+	files, err := s.diffs.Diff(ctx, from, to, git.DiffOptions{}, path)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -99,7 +99,7 @@ func (s *Service) TranslateLines(ctx context.Context, from, to, path string, sta
 	if from == to {
 		return start, end, nil
 	}
-	files, err := s.diffs.Diff(ctx, from, to, path)
+	files, err := s.diffs.Diff(ctx, from, to, git.DiffOptions{}, path)
 	if err != nil {
 		return 0, 0, err
 	}
