@@ -323,6 +323,43 @@ func TestDragTheCommentPlus(t *testing.T) {
 	}
 }
 
+// Closing the comment box a + drag opened lets its lines go, so a click after selects nothing.
+func TestClosingTheCommentPlusBoxDropsItsLines(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("Add a greeting helper")
+	e.pressRun("l")
+	e.cursorTo(func(r row) bool { return addedLine(r) && r.line.NewLine == 2 })
+	start := e.m.main.cursor
+	e.hoverRow(start)
+	var plus look.Zone
+	for _, c := range e.onScreen("row" + strconv.Itoa(start) + ":") {
+		if c.title == "comment" {
+			plus = c.zone
+		}
+	}
+	if plus.W == 0 {
+		t.Fatalf("no + on the line under the mouse:\n%s", e.screen())
+	}
+	y := func(i int) int { return e.m.main.starts[i] - e.m.main.offset + e.m.mainTop() }
+	e.m.Update(tea.MouseClickMsg{X: plus.X, Y: plus.Y, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: plus.X, Y: y(start + 2), Button: tea.MouseLeft})
+	_, cmd := e.m.Update(tea.MouseReleaseMsg{X: plus.X, Y: y(start + 2), Button: tea.MouseLeft})
+	e.drain(cmd)
+	e.press("esc")
+	e.m.Update(tea.MouseClickMsg{X: plus.X + 20, Y: y(start + 4), Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: plus.X + 20, Y: y(start + 4), Button: tea.MouseLeft})
+	type state struct {
+		Mode   mode
+		Anchor int
+		Cursor int
+	}
+	got := state{Mode: e.m.mode, Anchor: e.m.main.anchor, Cursor: e.m.main.cursor}
+	want := state{Mode: modeNormal, Anchor: -1, Cursor: start + 4}
+	if got != want {
+		t.Errorf("after closing the box and clicking a line, state = %+v, want %+v", got, want)
+	}
+}
+
 // Lighting quiet controls, as the mouse reaches them, shows their keys in room kept for them, so
 // nothing moves under the mouse.
 func TestLitControlsStayPut(t *testing.T) {

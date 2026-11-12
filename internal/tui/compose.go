@@ -47,6 +47,9 @@ type composer struct {
 	at string
 	// vim, when set, edits the text with vim's modes.
 	vim *vimbubble.Modal
+	// mouseLines is set when the box comments on lines selected with the mouse, which go when it
+	// closes, as GitHub's do.
+	mouseLines bool
 }
 
 // commentOnRow opens the comment box on row i of the main pane: its line, on side in split mode, or
@@ -497,6 +500,9 @@ func (m *model) composeStyles() textarea.Styles {
 }
 
 func (m *model) closeComposer() {
+	if m.compose.mouseLines {
+		m.main.anchor, m.text = -1, nil
+	}
 	m.mode = modeNormal
 	m.compose = composer{}
 	m.main.attach, m.main.attached = -1, nil

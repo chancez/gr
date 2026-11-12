@@ -229,7 +229,9 @@ func (m *model) selected() tea.Cmd {
 	for _, g := range t.Groups(m) {
 		for _, b := range g.Actions {
 			if b.Same(s.run) {
-				return b.Run(m)
+				cmd := b.Run(m)
+				m.compose.mouseLines = m.mode == modeCompose
+				return cmd
 			}
 		}
 	}
