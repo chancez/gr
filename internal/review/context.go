@@ -126,13 +126,13 @@ func (s *Service) locationFiles(ctx context.Context, loc store.Location) ([]git.
 		if err != nil {
 			return nil, err
 		}
-		return s.CommitFiles(ctx, c)
+		return s.CommitFiles(ctx, c, git.DiffOptions{})
 	case store.ScopeDiff:
 		rev, err := s.store.GetRevision(ctx, loc.RevisionID)
 		if err != nil {
 			return nil, err
 		}
-		return s.RevisionFiles(ctx, rev)
+		return s.RevisionFiles(ctx, rev, git.DiffOptions{})
 	}
 	return nil, nil
 }

@@ -151,7 +151,7 @@ func (s *Service) locationFor(ctx context.Context, rev store.Revision, nt NewThr
 			loc.Anchor = a
 			return loc, nil
 		}
-		if files, err = s.commitDiff(ctx, c); err != nil {
+		if files, err = s.commitDiff(ctx, c, git.DiffOptions{}); err != nil {
 			return store.Location{}, err
 		}
 		if len(c.Parents) > 0 {
@@ -169,7 +169,7 @@ func (s *Service) locationFor(ctx context.Context, rev store.Revision, nt NewThr
 			return store.Location{}, errors.New("commit messages are commented on per commit")
 		}
 		var err error
-		if files, err = s.RevisionFiles(ctx, rev); err != nil {
+		if files, err = s.RevisionFiles(ctx, rev, git.DiffOptions{}); err != nil {
 			return store.Location{}, err
 		}
 		oldRev, newRev = rev.BaseSHA, rev.HeadSHA

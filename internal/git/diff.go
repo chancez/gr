@@ -37,6 +37,9 @@ type FileDiff struct {
 	Added   int
 	Deleted int
 	Hunks   []Hunk
+	// OnlyWhitespace is set on a file in a diff that ignores whitespace when all of its changes are
+	// whitespace. It has no hunks.
+	OnlyWhitespace bool
 }
 
 // Path is the file's path on the new side, or the old side for a deleted file.

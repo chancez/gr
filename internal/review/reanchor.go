@@ -107,7 +107,7 @@ func (r *reanchorer) files(ctx context.Context, c git.Commit) ([]git.FileDiff, e
 	if files, ok := r.commitFiles[c.SHA]; ok {
 		return files, nil
 	}
-	files, err := r.s.commitDiff(ctx, c)
+	files, err := r.s.commitDiff(ctx, c, git.DiffOptions{})
 	if err != nil {
 		return nil, err
 	}

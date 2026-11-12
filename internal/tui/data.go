@@ -191,11 +191,11 @@ func loadDB(ctx context.Context, svc *review.Service, d *changeData) error {
 			if !ok {
 				continue
 			}
-			if files, err = svc.CommitFile(ctx, c, loc.Path); err != nil {
+			if files, err = svc.CommitFile(ctx, c, loc.Path, git.DiffOptions{}); err != nil {
 				return err
 			}
 		case loc.Scope == store.ScopeDiff && loc.RevisionID == d.revision.ID:
-			if files, err = svc.RevisionFile(ctx, d.revision, loc.Path); err != nil {
+			if files, err = svc.RevisionFile(ctx, d.revision, loc.Path, git.DiffOptions{}); err != nil {
 				return err
 			}
 		}
@@ -219,13 +219,13 @@ func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) v
 	msg := viewLoadedMsg{key: v.key(), head: d.revision.HeadSHA}
 	switch v.kind {
 	case viewCommit:
-		msg.files, msg.err = svc.CommitFiles(ctx, v.commit)
+		msg.files, msg.err = svc.CommitFiles(ctx, v.commit, git.DiffOptions{})
 	case viewDiff:
-		if msg.files, msg.err = svc.RevisionFiles(ctx, d.revision); msg.err == nil {
+		if msg.files, msg.err = svc.RevisionFiles(ctx, d.revision, git.DiffOptions{}); msg.err == nil {
 			msg.placements, msg.err = placeInDiff(ctx, svc, d, msg.files)
 		}
 	case viewInterdiff:
-		msg.files, msg.exact, msg.err = svc.Interdiff(ctx, d.interdiffFrom, d.interdiffTo)
+		msg.files, msg.exact, msg.err = svc.Interdiff(ctx, d.interdiffFrom, d.interdiffTo, git.DiffOptions{})
 	}
 	return msg
 }

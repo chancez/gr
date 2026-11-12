@@ -428,7 +428,7 @@ func TestInterdiffExcludesBase(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	files, exact, err := h.Interdiff(ctx, rev1, rev2)
+	files, exact, err := h.Interdiff(ctx, rev1, rev2, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -530,7 +530,7 @@ func TestMarks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := h.CommitFiles(ctx, c)
+	files, err := h.CommitFiles(ctx, c, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -563,7 +563,7 @@ func TestMarks(t *testing.T) {
 	}
 
 	// A whole-diff mark lapses when the file changes.
-	diffFiles, err := h.RevisionFiles(ctx, rev)
+	diffFiles, err := h.RevisionFiles(ctx, rev, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -576,7 +576,7 @@ func TestMarks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	newFiles, err := h.RevisionFiles(ctx, rev2)
+	newFiles, err := h.RevisionFiles(ctx, rev2, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -600,7 +600,7 @@ func TestSetFileReviewedSplitsACommitMark(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := h.CommitFiles(ctx, c)
+	files, err := h.CommitFiles(ctx, c, git.DiffOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1279,5 +1279,63 @@ func TestReplyReopensAddressed(t *testing.T) {
 	want[2] = store.ThreadOpen
 	if diff := cmp.Diff(want, states()); diff != "" {
 		t.Errorf("after submitting the draft reply (-want +got):\n%s", diff)
+	}
+}
+
+// Ignoring whitespace keeps a file whose changes are all whitespace, without hunks, where git's
+// diff leaves it out, in a revision's diff, one file of it, and a commit's.
+func TestDiffsIgnoringWhitespaceKeepEveryFile(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Write("a.go", "a\n", "b.go", "b\n")
+	base := e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Write("a.go", "  a\n", "b.go", "B\n")
+	head := e.repo.Commit("indent a, change b")
+	h := e.service(human)
+	ctx := t.Context()
+	_, rev := e.ensure(h, "")
+	w := git.DiffOptions{IgnoreAllSpace: true}
+
+	blob := func(rev, path string) string { return e.repo.Git("rev-parse", rev+":"+path) }
+	a := git.FileDiff{
+		OldPath: "a.go", NewPath: "a.go", Status: git.StatusModified, OldMode: "100644", NewMode: "100644",
+		OldBlob: blob(base, "a.go"), NewBlob: blob(head, "a.go"), OnlyWhitespace: true,
+	}
+	b := git.FileDiff{
+		OldPath: "b.go", NewPath: "b.go", Status: git.StatusModified, OldMode: "100644", NewMode: "100644",
+		OldBlob: blob(base, "b.go"), NewBlob: blob(head, "b.go"), Added: 1, Deleted: 1,
+		Hunks: []git.Hunk{{
+			OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1,
+			Lines: []git.Line{
+				{Kind: git.LineDeleted, Text: "b", OldLine: 1},
+				{Kind: git.LineAdded, Text: "B", NewLine: 1},
+			},
+		}},
+	}
+
+	files, err := h.RevisionFiles(ctx, rev, w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]git.FileDiff{a, b}, files); diff != "" {
+		t.Errorf("RevisionFiles -w mismatch (-want +got):\n%s", diff)
+	}
+	files, err = h.RevisionFile(ctx, rev, "a.go", w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]git.FileDiff{a}, files); diff != "" {
+		t.Errorf("RevisionFile -w mismatch (-want +got):\n%s", diff)
+	}
+	c, err := h.Git().ReadCommit(ctx, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err = h.CommitFiles(ctx, c, w)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]git.FileDiff{review.CommitMessageFile(c), a, b}, files); diff != "" {
+		t.Errorf("CommitFiles -w mismatch (-want +got):\n%s", diff)
 	}
 }
