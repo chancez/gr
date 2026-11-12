@@ -13,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
@@ -2275,5 +2276,32 @@ func TestOverviewOpensAtItsNewestEnd(t *testing.T) {
 		if !strings.Contains(lines[1], "#1 feature") || !strings.Contains(lines[3], "Threads: ") {
 			t.Errorf("after %q the details are not pinned:\n%s", keys, again.screen())
 		}
+	}
+}
+
+// Under the files list's header, a summary of the view's files: how many, and their size, with
+// the entries after it, which clicks still reach; a click on the summary picks no file.
+func TestFilesSummary(t *testing.T) {
+	e := goldenEnv(t)
+	e.openNav("All changes")
+	lines := strings.Split(e.screen(), "\n")
+	summary := -1
+	for y, l := range lines {
+		if strings.HasPrefix(l, " 2 files") {
+			summary = y
+		}
+	}
+	if summary < 0 {
+		t.Fatalf("no summary under the files header:\n%s", e.screen())
+	}
+	got := []string{strings.TrimSpace(strings.SplitN(lines[summary], "|", 2)[0])}
+	e.m.setFocus(focusViews)
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: summary, Button: tea.MouseLeft})
+	got = append(got, fmt.Sprintf("summary click: pos %d", e.m.filesNav.pos))
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: summary + 2, Button: tea.MouseLeft})
+	got = append(got, fmt.Sprintf("second file click: focus files %v, pos %d", e.m.focus == focusFiles, e.m.filesNav.pos))
+	want := []string{"2 files       +7 -1", "summary click: pos 0", "second file click: focus files true, pos 1"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("summary and clicks (-want +got):\n%s", diff)
 	}
 }

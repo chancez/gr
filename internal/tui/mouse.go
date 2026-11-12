@@ -98,9 +98,9 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if msg.X < nw {
 		l, f, i := m.sidebarAt(msg.Y)
 		vh, fh := m.sidebarHeights(bh)
-		rows, y := vh-1, msg.Y-1
+		rows, y := vh-l.head(), msg.Y-l.head()
 		if f == focusFiles {
-			rows, y = fh-1, msg.Y-vh-sidebarGap-1
+			rows, y = fh-l.head(), msg.Y-vh-sidebarGap-l.head()
 		}
 		if dir := l.indicatorAt(y, rows); dir != 0 {
 			if right {

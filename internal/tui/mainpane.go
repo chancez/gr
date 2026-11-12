@@ -556,9 +556,9 @@ var listMoves = moves{
 		l := m.focusedList()
 		_, _, bh := m.layoutSizes()
 		vh, fh := m.sidebarHeights(bh)
-		page := vh - 1
+		page := vh - l.head()
 		if l == &m.filesNav {
-			page = fh - 1
+			page = fh - l.head()
 		}
 		return m.landed(l.move(dir * max(page/div, 1)))
 	},

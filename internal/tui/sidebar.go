@@ -49,6 +49,8 @@ type navList struct {
 	items []navItem
 	pos   int
 	top   int
+	// summary, when set, is a line under the header, as the files' count and size.
+	summary []look.Span
 }
 
 // move moves the selection by n, reporting whether it changed.
@@ -103,6 +105,14 @@ func (l *navList) indicatorAt(y, height int) int {
 }
 
 // at returns the item index on line y of the list, or -1.
+// head is how many lines come before the list's entries: its header, and its summary, if any.
+func (l *navList) head() int {
+	if len(l.summary) > 0 {
+		return 2
+	}
+	return 1
+}
+
 func (l *navList) at(y int) int {
 	i := l.top + y
 	if y < 0 || i >= len(l.items) {
@@ -116,9 +126,12 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 	if height <= 0 {
 		return nil
 	}
-	rows := height - 1
+	rows := height - l.head()
 	l.scrollTo(rows)
 	out := []string{paneTitle(th, " "+title, width, focused)}
+	if len(l.summary) > 0 && height > 1 {
+		out = append(out, th.DrawCut(look.HeadingBar, width, l.summary...))
+	}
 	first, last := l.covers(l.top, rows)
 	for y := range rows {
 		i := l.top + y
@@ -356,6 +369,7 @@ func (m *model) renderSidebar(width, height int) []string {
 	out := m.viewsNav.render(th, title, width, vh, m.focus == focusViews)
 	if fh > 0 {
 		out = append(out, th.Render(look.Plain, look.Border(strings.Repeat("-", width), false)))
+		m.filesNav.summary = m.filesSummary(width)
 		files := m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)
 		if len(m.filesNav.items) == 0 && len(files) > 1 {
 			files[1] = th.DrawCut(look.Plain, width, look.Muted(" No files here"))
@@ -481,6 +495,31 @@ func paneTitle(th *look.Theme, title string, width int, focused bool) string {
 	return th.DrawCut(paneSurface(focused), width, look.Text(title))
 }
 
+// filesSummary is the line under the files list's header: how many files the view shown has, and
+// their size in all, as the overview gives the change's, at the right as the entries' sizes are.
+// Without files there is none.
+func (m *model) filesSummary(width int) []look.Span {
+	n := len(m.filesNav.items)
+	if n == 0 {
+		return nil
+	}
+	count := fmt.Sprintf(" %d files", n)
+	if n == 1 {
+		count = " 1 file"
+	}
+	var files []git.FileDiff
+	v := m.views[m.current]
+	for _, it := range m.filesNav.items {
+		files = append(files, v.files[it.file])
+	}
+	size := filesSize(files)
+	gap := width - ansi.StringWidth(count) - ansi.StringWidth(m.r.th.TextOf(size...))
+	if gap < 1 {
+		return []look.Span{look.Muted(count)}
+	}
+	return append([]look.Span{look.Muted(count), look.Default(strings.Repeat(" ", gap))}, size...)
+}
+
 // paneSurface is a pane's title bar, focused or not.
 func paneSurface(focused bool) look.Surface {
 	if focused {
@@ -494,10 +533,10 @@ func (m *model) sidebarAt(y int) (*navList, focus, int) {
 	_, _, bh := m.layoutSizes()
 	vh, _ := m.sidebarHeights(bh)
 	if y < vh {
-		return &m.viewsNav, focusViews, m.viewsNav.at(y - 1)
+		return &m.viewsNav, focusViews, m.viewsNav.at(y - m.viewsNav.head())
 	}
 	// Past the divider and the files header.
-	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - sidebarGap - 1)
+	return &m.filesNav, focusFiles, m.filesNav.at(y - vh - sidebarGap - m.filesNav.head())
 }
 
 // showFile shows file s in the main pane, in its view.
