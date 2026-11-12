@@ -52,6 +52,17 @@ func (m *model) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// searchText searches for the text selected with the mouse, and lets it go, as moving on from it
+// does.
+func (m *model) searchText() {
+	text, _ := m.selectedText()
+	m.text = nil
+	m.main.anchor = -1
+	m.search = text
+	m.searchPos, m.searchHits = 0, 0
+	m.searchStep(1)
+}
+
 // searchStep moves to the next match in direction dir, wrapping at the ends of the view.
 func (m *model) searchStep(dir int) {
 	if m.search == "" {

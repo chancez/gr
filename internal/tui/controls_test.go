@@ -886,3 +886,64 @@ func TestCommentOnSelectedText(t *testing.T) {
 		t.Errorf("+ on a selected line, then off the selection (-want +got):\n%s", diff)
 	}
 }
+
+// A right click on text selected within a line offers to search for it, and one selected across
+// lines does not.
+func TestSearchForSelectedText(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("say hello")
+	e.pressRun("l")
+	var x, y int
+	for i, l := range strings.Split(e.m.render(), "\n") {
+		if j := strings.Index(ansi.Strip(l), `println("hello")`); j >= 0 {
+			x, y = ansi.StringWidth(ansi.Strip(l)[:j]), i
+		}
+	}
+	drag := func(toX, toY int) {
+		e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseReleaseMsg{X: toX, Y: toY, Button: tea.MouseLeft})
+	}
+	offered := func() bool {
+		e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseRight})
+		for _, it := range e.m.picker.items {
+			if it.value == actSearchText.Title {
+				return true
+			}
+		}
+		return false
+	}
+	// From println back up a line.
+	drag(x+3, y-1)
+	acrossLines := offered()
+	e.press("esc")
+	drag(x+7, y)
+	withinLine := offered()
+	e.typeText("search for")
+	e.press("enter")
+	type result struct {
+		AcrossLines bool
+		WithinLine  bool
+		Search      string
+		Cursor      string
+		Status      string
+		Selected    bool
+	}
+	got := result{
+		AcrossLines: acrossLines,
+		WithinLine:  withinLine,
+		Search:      e.m.search,
+		Cursor:      e.m.main.rows[e.m.main.cursor].line.Text,
+		Status:      e.m.status,
+		Selected:    e.m.text != nil || e.m.main.anchor >= 0,
+	}
+	want := result{
+		WithinLine: true,
+		Search:     "println",
+		Cursor:     "\tprintln(\"hi\")",
+		Status:     "search wrapped",
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("search for the selection (-want +got):\n%s", diff)
+	}
+}

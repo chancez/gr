@@ -285,6 +285,16 @@ var (
 		Applies: func(m *model, s rowSubject) bool { return s.index == m.main.cursor },
 		Run:     func(m *model, _ rowSubject) tea.Cmd { m.toggleSelection(); return nil },
 	}
+	actSearchText = &interact.Action[*model, rowSubject]{
+		Title: "search for the selected text",
+		Help:  "search for the text selected with the mouse",
+		// A match is within a line, so the text must be too.
+		Applies: func(m *model, s rowSubject) bool {
+			lo, hi, ok := m.textLines()
+			return ok && lo == hi && s.index == lo
+		},
+		Run: func(m *model, _ rowSubject) tea.Cmd { m.searchText(); return nil },
+	}
 	actExpandFold = &interact.Action[*model, rowSubject]{
 		Title: "expand",
 		Help:  "show the unchanged lines",
@@ -648,8 +658,8 @@ func init() {
 
 	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor)
 
-	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actOpenRowInEditor)
-	messageLineKind = interact.NewKind(func(rowSubject) string { return "Message line" }, actCommentOnLine, actSelectLine)
+	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor)
+	messageLineKind = interact.NewKind(func(rowSubject) string { return "Message line" }, actCommentOnLine, actSelectLine, actSearchText)
 	hunkKind = interact.NewKind(func(rowSubject) string { return "Hunk" }, actSelectLine, actOpenRowInEditor)
 	foldKind = interact.NewKind(func(rowSubject) string { return "Unchanged lines" }, actExpandFold, actOpenRowInEditor)
 
