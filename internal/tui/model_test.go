@@ -2371,12 +2371,12 @@ func TestSidebarPeek(t *testing.T) {
 	if got := strings.Split(e.screen(), "\n")[y]; got != before[y] {
 		t.Errorf("line off the sidebar = %q, want %q", got, before[y])
 	}
-	// A peek is on a surface of its own: here over a hunk header, beside a view.
+	// A peek is on a surface of its own, and what it covers fades: here a hunk header beside a view.
 	vy := slices.IndexFunc(before, func(l string) bool { return strings.HasPrefix(l, "All changes (2 fi...") })
 	e.m.Update(tea.MouseMotionMsg{X: 1, Y: vy})
+	got := strings.Split(e.m.render(), "\n")[vy]
 	label := "All changes (2 files) "
-	got := ansi.Cut(strings.Split(e.m.render(), "\n")[vy], 0, len(label))
-	want := e.m.r.th.Draw(look.Peek, len(label), look.Text(label))
+	want := e.m.r.th.Draw(look.Peek, len(label), look.Text(label)) + e.m.r.th.Render(look.Plain, look.Muted(before[vy][len(label):]))
 	if !reflect.DeepEqual(cells.Parse(got), cells.Parse(want)) {
 		t.Errorf("view peek = %q, want %q", got, want)
 	}

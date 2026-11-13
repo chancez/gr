@@ -51,6 +51,12 @@ func Styled(draw func(bg color.Color) string) Span {
 	return Span{styled: draw}
 }
 
+// Fade redraws a drawn line's text muted on the plain surface, for what something drawn over its
+// start covers. Its zone marks stay, so a click still finds what is there.
+func (t *Theme) Fade(drawn string) string {
+	return KeepMarks(drawn, func(s string) string { return t.Render(Plain, Muted(ansi.Strip(s))) })
+}
+
 // DimIf dims spans when on, for what is finished.
 func DimIf(on bool, spans ...Span) []Span {
 	if !on {

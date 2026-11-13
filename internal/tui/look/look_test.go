@@ -137,6 +137,19 @@ func TestKeepMarks(t *testing.T) {
 	}
 }
 
+// Fading a line drops its styles for muted text, and keeps its text and zones.
+func TestFade(t *testing.T) {
+	th := New(true, ThemeDefault)
+	line := th.Render(AddedLine, append(append([]Span{Text("ab ")}, MarkSHA("sha", SHA("0123456789").Short())...), Text(" cd"))...)
+	got, zones := Scan(th.Fade(line))
+	if want := th.Render(Plain, Muted("ab 0123456 cd")); got != want {
+		t.Errorf("faded = %q, want %q", got, want)
+	}
+	if want := map[string][]Zone{"sha": {{X: 3, Y: 0, W: 7}}}; !reflect.DeepEqual(zones, want) {
+		t.Errorf("zones = %+v, want %+v", zones, want)
+	}
+}
+
 // Wrap breaks between marked runs, never inside one, and drops the gap where it breaks.
 func TestWrap(t *testing.T) {
 	th := New(true, ThemeDefault)

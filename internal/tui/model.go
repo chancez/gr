@@ -734,7 +734,10 @@ func (m *model) frame() string {
 		screen[y] = line.String()
 	}
 	if line, ok := m.navPeek(nw); ok {
-		screen = overlay(screen, []string{line}, 0, m.navHover)
+		// What it covers fades, so the peek stands out from the rest of its line.
+		w := ansi.StringWidth(line)
+		rest := m.r.th.Fade(ansi.Cut(screen[m.navHover], w, ansi.StringWidth(screen[m.navHover])))
+		screen = overlay(screen, []string{line + rest}, 0, m.navHover)
 	}
 	if m.mode == modePicker {
 		m.picker.layout(m.width, bh)
