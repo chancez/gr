@@ -82,6 +82,8 @@ const (
 	ByCopy   EventHow = "copied"
 	// Detected is gr seeing the change's branch land on its base.
 	Detected EventHow = "detected"
+	// Rebased is gr seeing the change's branch rebased past its base onto the default branch.
+	Rebased EventHow = "rebased"
 )
 
 // Event is something that happened to a change: its branch or base moved from one branch to

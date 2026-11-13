@@ -351,6 +351,8 @@ func eventHow(h store.EventHow) string {
 		return "onto a copy"
 	case store.Detected:
 		return "as its branch landed"
+	case store.Rebased:
+		return "as its branch was rebased onto it"
 	}
 	return "by hand"
 }

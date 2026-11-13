@@ -986,6 +986,31 @@ func TestLandedOnTheBasesUpstream(t *testing.T) {
 	}
 }
 
+// A stacked branch whose parent landed upstream, rebased onto the default branch's upstream while
+// the local parent is stale, is cut where it was rebased onto, not at the parent, and is on the
+// default branch now.
+func TestRebasedOffALandedParent(t *testing.T) {
+	e, s, _, upstream := staleMainEnv(t)
+	e.repo.Git("checkout", "-q", "-b", "child")
+	e.repo.Commit("child")
+	change, _ := e.ensure(s, "")
+	if change.BaseBranch != "feature" {
+		t.Fatalf("change on %s; want feature", change.BaseBranch)
+	}
+	newer := upstream("feature, landed")
+	e.repo.Git("checkout", "-q", "child")
+	e.repo.Git("rebase", "-q", "--onto", "work/main", "feature")
+	head := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	got, rev, err := s.Sync(t.Context(), change)
+	if err != nil || got.BaseBranch != "work/main" || rev.BaseSHA != newer || rev.HeadSHA != head {
+		t.Errorf("Sync = %s, %s..%s, %v; want work/main, %s..%s", got.BaseBranch, rev.BaseSHA, rev.HeadSHA, err, newer, head)
+	}
+	want := []store.Event{{Kind: store.EventBase, From: "feature", To: "work/main", How: store.Rebased, Author: human}}
+	if diff := cmp.Diff(want, events(t, s, got), ignoreEventIDs); diff != "" {
+		t.Errorf("events (-want +got):\n%s", diff)
+	}
+}
+
 // Moving a change onto its branch's new name drops a change opened there without reviews.
 func TestSetBranch(t *testing.T) {
 	e := newEnv(t)

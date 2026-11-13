@@ -177,25 +177,34 @@ func (s *Service) ParseTarget(ctx context.Context, spec, base string) (Target, e
 }
 
 // branchRevision resolves a branch change's current base and head. A branch rebased onto its
-// base's upstream, ahead of the local base until pulled, is cut where it was rebased onto.
+// base's upstream, ahead of the local base until pulled, is cut where it was rebased onto. So is
+// one stacked on a parent that landed, rebased onto the default branch past the stale parent.
 func (s *Service) branchRevision(ctx context.Context, branch, baseBranch string) (base, head string, err error) {
+	base, head, _, err = s.cut(ctx, branch, baseBranch)
+	return base, head, err
+}
+
+// cut is branchRevision, with the branch the base was found on: baseBranch, or the default branch
+// when it is nearer.
+func (s *Service) cut(ctx context.Context, branch, baseBranch string) (base, head, onto string, err error) {
 	if head, err = s.git.ResolveCommit(ctx, "refs/heads/"+branch); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	refs := s.baseRefs(ctx, baseBranch)
-	if base, err = s.git.MergeBase(ctx, refs[0], head); err != nil {
-		return "", "", fmt.Errorf("find merge base of %s and %s: %w", baseBranch, branch, err)
+	refs := s.cutRefs(ctx, baseBranch)
+	if base, err = s.git.MergeBase(ctx, refs[0].ref, head); err != nil {
+		return "", "", "", fmt.Errorf("find merge base of %s and %s: %w", baseBranch, branch, err)
 	}
-	for _, ref := range refs[1:] {
-		mb, err := s.git.MergeBase(ctx, ref, head)
-		if err != nil {
+	onto = baseBranch
+	for _, r := range refs[1:] {
+		mb, err := s.git.MergeBase(ctx, r.ref, head)
+		if err != nil || mb == base {
 			continue
 		}
 		if nearer, err := s.git.IsAncestor(ctx, base, mb); err == nil && nearer {
-			base = mb
+			base, onto = mb, r.branch
 		}
 	}
-	return base, head, nil
+	return base, head, onto, nil
 }
 
 // baseRefs are what a change's base branch stands for: the branch, then the one it tracks.
@@ -207,12 +216,38 @@ func (s *Service) baseRefs(ctx context.Context, baseBranch string) []string {
 	return refs
 }
 
-// BaseTips are the commits a change's base branch and its upstream are at, to tell when either
-// moves.
+// cutRef is a ref a change may be cut at, and the base branch it stands for.
+type cutRef struct {
+	ref    string
+	branch string
+}
+
+// cutRefs are where a change on baseBranch may be cut: its base refs, then the default branch's
+// when baseBranch is another.
+func (s *Service) cutRefs(ctx context.Context, baseBranch string) []cutRef {
+	var refs []cutRef
+	for _, ref := range s.baseRefs(ctx, baseBranch) {
+		refs = append(refs, cutRef{
+			ref:    ref,
+			branch: baseBranch,
+		})
+	}
+	if def, err := s.git.DefaultBranch(ctx); err == nil && def != baseBranch {
+		for _, ref := range s.baseRefs(ctx, def) {
+			refs = append(refs, cutRef{
+				ref:    ref,
+				branch: def,
+			})
+		}
+	}
+	return refs
+}
+
+// BaseTips are the commits the refs a change can be cut at point to, to tell when any moves.
 func (s *Service) BaseTips(ctx context.Context, change store.Change) string {
 	var tips []string
-	for _, ref := range s.baseRefs(ctx, change.BaseBranch) {
-		sha, _ := s.git.ResolveCommit(ctx, ref)
+	for _, r := range s.cutRefs(ctx, change.BaseBranch) {
+		sha, _ := s.git.ResolveCommit(ctx, r.ref)
 		tips = append(tips, sha)
 	}
 	return strings.Join(tips, " ")
@@ -351,9 +386,15 @@ func (s *Service) sync(ctx context.Context, change store.Change) (store.Change, 
 		return s.markMerged(ctx, change, latest)
 	}
 
-	base, head, err := s.branchRevision(ctx, change.Branch, change.BaseBranch)
+	base, head, onto, err := s.cut(ctx, change.Branch, change.BaseBranch)
 	if err != nil {
 		return store.Change{}, store.Revision{}, err
+	}
+	// A branch rebased past its base onto the default branch is on that now.
+	if onto != change.BaseBranch {
+		if change, err = s.moveBase(ctx, change, onto, store.Rebased); err != nil {
+			return store.Change{}, store.Revision{}, err
+		}
 	}
 	if base == latest.BaseSHA && head == latest.HeadSHA {
 		// Nothing moved here, but a rebase merge puts copies on the base, which moves neither.
@@ -639,19 +680,28 @@ func (s *Service) SetBase(ctx context.Context, change store.Change, base string)
 	if _, err := s.git.ResolveCommit(ctx, base); err != nil {
 		return fail(fmt.Errorf("%q is not a branch or commit", base))
 	}
+	change, err := s.moveBase(ctx, change, base, store.ByHand)
+	if err != nil {
+		return fail(err)
+	}
+	return s.Sync(ctx, change)
+}
+
+// moveBase records a branch change's base moving to base, how it did.
+func (s *Service) moveBase(ctx context.Context, change store.Change, base string, how store.EventHow) (store.Change, error) {
 	err := s.store.Tx(ctx, func(tx *store.Tx) error {
 		if _, err := tx.CreateEvent(ctx, store.Event{ChangeID: change.ID, Kind: store.EventBase, From: change.BaseBranch, To: base,
-			How: store.ByHand, Author: s.author}); err != nil {
+			How: how, Author: s.author}); err != nil {
 			return err
 		}
 		return tx.SetChangeBase(ctx, change.ID, base)
 	})
 	if err != nil {
-		return fail(err)
+		return store.Change{}, err
 	}
-	slog.Info("change base moved", "change", change.Seq, "from", change.BaseBranch, "to", base)
+	slog.Info("change base moved", "change", change.Seq, "from", change.BaseBranch, "to", base, "how", how)
 	change.BaseBranch = base
-	return s.Sync(ctx, change)
+	return change, nil
 }
 
 // Rename is the change of a branch's earlier name, found by git's record of renaming or copying the
