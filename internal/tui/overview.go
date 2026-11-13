@@ -100,7 +100,6 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	}
 	blank := []look.Span{}
 
-	rev := d.revision
 	var rows []row
 
 	byReview := map[string][]int{}
@@ -159,8 +158,14 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		})
 	}
 
-	// The moves made before each review show above it, and those since the last after it.
+	// The moves and revisions made before each review show above it, and those since the last
+	// after it. The first revision is where the change starts.
 	moves := d.events
+	var from store.Revision
+	revs := d.revisions
+	if len(revs) > 0 {
+		from, revs = revs[0], revs[1:]
+	}
 	eventsBefore := func(at time.Time, all bool) {
 		n := 0
 		for n < len(moves) && (all || moves[n].CreatedAt.Before(at)) {
@@ -170,14 +175,21 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 		for _, m := range merged {
 			rows = append(rows, divider(m.label(d.change.BaseBranch)))
 		}
-		if len(merged) > 0 {
+		moves = moves[n:]
+		k := 0
+		for k < len(revs) && (all || revs[k].CreatedAt.Before(at)) {
+			k++
+		}
+		if k > 0 {
+			rows = append(rows, divider(revisionsLabel(from, revs[:k])))
+			from, revs = revs[k-1], revs[k:]
+		}
+		if len(merged) > 0 || k > 0 {
 			rows = append(rows, plain(blank))
 		}
-		moves = moves[n:]
 	}
 
 	shown := 0
-	lastRev := 0
 	for i := range d.reviews {
 		rv := &d.reviews[i]
 		if rv.State != store.ReviewSubmitted {
@@ -191,10 +203,6 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 			continue
 		}
 		seq := revSeq[rv.RevisionID]
-		if lastRev != 0 && seq != lastRev {
-			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, seq)), plain(blank))
-		}
-		lastRev = seq
 		parts := [][]look.Span{
 			{look.Heading(fmt.Sprintf("Review #%d", rv.Seq))},
 			{look.Author(rv.Author)},
@@ -226,9 +234,6 @@ func buildOverview(d *changeData, r *renderer, filter threadFilter) []row {
 	eventsBefore(time.Time{}, true)
 	if draft, ok := d.draft(); ok {
 		threads := threadRows(byReview[draft.ID])
-		if lastRev != 0 && lastRev != rev.Seq {
-			rows = append(rows, divider(fmt.Sprintf("branch updated: revision %d -> %d", lastRev, rev.Seq)), plain(blank))
-		}
 		rows = append(rows, reviewRow(&draft, nil,
 			[]look.Span{look.Heading("Your pending review")},
 			[]look.Span{look.Draft(fmt.Sprintf("%d new threads", len(byReview[draft.ID]))).With(look.Strong)},
@@ -304,6 +309,20 @@ func (m mergedEvent) label(base string) string {
 		label += fmt.Sprintf(" (%d moves)", m.count)
 	}
 	return label
+}
+
+// revisionsLabel is how the overview's timeline says a run of revisions after from was recorded:
+// rebased when any moved the branch's base commit.
+func revisionsLabel(from store.Revision, run []store.Revision) string {
+	what := "branch updated"
+	last := from
+	for _, r := range run {
+		if r.BaseSHA != last.BaseSHA {
+			what = "rebased"
+		}
+		last = r
+	}
+	return fmt.Sprintf("%s: revision %d -> %d", what, from.Seq, last.Seq)
 }
 
 func hasSummary(d *changeData, reviewID string) bool {

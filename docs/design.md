@@ -72,7 +72,9 @@ number or a UUID prefix.
   merged or abandoned.
 - **abandoned**: set by hand.
 
-Each change of state is an event in the change's history, with the moves of its branch and base.
+Each change of state is an event in the change's history, with the moves of its branch and base,
+and its revisions: each run of them between reviews is one entry, marked rebased when the base
+commit moved.
 
 ## Revisions
 

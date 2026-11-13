@@ -1106,6 +1106,54 @@ func TestOverviewGroupsReviews(t *testing.T) {
 	}
 }
 
+// The overview's timeline shows each run of revisions between reviews, reviewed or not, and says
+// when the branch was rebased.
+func TestOverviewShowsRevisions(t *testing.T) {
+	e := newTUIEnv(t)
+	ctx := t.Context()
+	sync := func() {
+		t.Helper()
+		if _, _, err := e.svc.Sync(ctx, e.chg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.repo.Write("more.go", "package main\n")
+	e.repo.Commit("more")
+	sync()
+	if _, err := e.svc.StartThread(ctx, e.chg, review.NewThread{Scope: store.ScopeChange, Body: "looked"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.svc.Submit(ctx, e.chg, store.VerdictComment, ""); err != nil {
+		t.Fatal(err)
+	}
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Write("other.go", "package main\n")
+	e.repo.Commit("landed")
+	e.repo.Git("checkout", "-q", "feature")
+	e.repo.Git("rebase", "-q", "main")
+	sync()
+	e.repo.Write("last.go", "package main\n")
+	e.repo.Commit("last")
+	sync()
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 60})
+	e.drain(e.m.loadCmd())
+	e.openNav("Overview")
+
+	screen := e.screen()
+	order := []string{
+		"--- branch updated: revision 1 -> 2", "Review #1", "looked",
+		"--- rebased: revision 2 -> 4",
+	}
+	last := -1
+	for _, want := range order {
+		i := strings.Index(screen, want)
+		if i < 0 || i < last {
+			t.Fatalf("%q missing or out of order in:\n%s", want, screen)
+		}
+		last = i
+	}
+}
+
 func TestCommentFromTheSidebar(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")
