@@ -819,7 +819,7 @@ func TestSelectedTextIsShownAndCommentedOn(t *testing.T) {
 // its lines, once the cursor moves by key.
 func TestSelectedTextScrollsAndGoes(t *testing.T) {
 	e := goldenEnv(t)
-	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 12})
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 11})
 	e.openNav("say hello")
 	e.pressRun("l")
 	// Down to the first code drawn with a few cells to it.

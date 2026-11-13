@@ -61,7 +61,8 @@ type rowState struct {
 	lead     []look.Span
 	// below are drawn on a line of their own under the row, as an open review summary's buttons.
 	below []look.Span
-	// trail are drawn at the end of an open thread's header line in the overview.
+	// trail are drawn at the end of a header line: an open thread's in the overview, and a commit's
+	// subject's.
 	trail []look.Span
 	// code names a diff line's code, for the mouse to find on screen: its zone is code, then the
 	// side, as codeZone has it.
@@ -187,6 +188,9 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return []string{r.hunkMarker(state) + r.th.Draw(surf, width-1, look.Hunk(*h))}
 	case rowLine:
 		f := v.files[rw.file]
+		if isMessage(f) && rw.line.NewLine == 1 {
+			return []string{r.renderSubject(v, *rw.line, rw.coverNew, width, state)}
+		}
 		if isMessage(f) {
 			return []string{r.renderMessageLine(*rw.line, rw.coverNew, width, state)}
 		}
@@ -403,26 +407,44 @@ func (r *renderer) renderMessageLine(l git.Line, covered []cover, width int, sta
 	return line
 }
 
-// renderCommit draws the box's footer and its bottom.
+// renderCommit draws the box's footer, who made the commit, and its bottom.
 func (r *renderer) renderCommit(v view, width int, state rowState) []string {
-	c := v.commit
-	inner := max(width-4, 10)
 	surf := look.Plain
 	if state.cursor {
 		surf = cursorSurface(state)
 	}
-	by := look.CommitBy(c)
-	which := append(filesSize(slices.DeleteFunc(slices.Clone(v.files), isMessage)), look.Muted("  commit "), look.SHA(c.SHA).Short())
-	if len(state.controls) > 0 {
-		which = append(append(which, look.Default("  ")), state.controls...)
+	foot := r.th.Draw(surf, max(width-4, 10), look.CommitBy(v.commit)...)
+	return append(r.boxed([]string{"", foot}, width), r.boxEdge(width))
+}
+
+// renderSubject draws a commit's subject as the top of its box: a bar, as a file's header is, cut to
+// leave room at the right for the commit's size, SHA, and controls.
+func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int, state rowState) string {
+	surf := look.HeadingBar
+	switch {
+	case state.cursor:
+		surf = cursorSurface(state)
+	case state.selected, state.focusNew:
+		surf = look.Selected
 	}
-	var foot []string
-	if gap := inner - ansi.StringWidth(r.th.TextOf(by...)) - ansi.StringWidth(r.th.TextOf(which...)); gap > 0 {
-		foot = []string{r.th.Draw(surf, inner, append(append(by, look.Default(strings.Repeat(" ", gap))), which...)...)}
-	} else {
-		foot = []string{r.th.Draw(surf, inner, by...), r.th.Draw(surf, inner, which...)}
+	inner := max(width-4, 10)
+	rest := append([]look.Span{look.Default("  ")}, filesSize(slices.DeleteFunc(slices.Clone(v.files), isMessage))...)
+	rest = append(rest, look.Muted("  commit "), look.SHA(v.commit.SHA).Short())
+	if len(state.trail) > 0 {
+		rest = append(append(rest, look.Default("  ")), state.trail...)
 	}
-	return append(r.boxed(append([]string{""}, foot...), width), r.boxEdge(width))
+	room := max(inner-ansi.StringWidth(r.th.Render(surf, rest...)), 4)
+	cut := r.th.DrawCut(surf, room, look.Heading(termtext.Line(l.Text)))
+	line := r.th.Draw(surf, inner, append([]look.Span{look.Styled(func(color.Color) string { return cut })}, rest...)...)
+	// The margin is a message line's: the + that comments on it, or tinted for threads on it.
+	margin := r.th.Draw(surf, 1)
+	switch {
+	case len(state.controls) > 0:
+		margin = r.th.Draw(look.ActiveHunk, 1, state.controls...)
+	case commented(covered):
+		margin = r.th.Render(surf, look.OnCommented(look.Default(" ")))
+	}
+	return r.th.Draw(surf, 1) + margin + line + r.th.Draw(surf, 2)
 }
 
 // commentHeader is a comment's author and time, and whether it is a draft.

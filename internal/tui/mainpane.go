@@ -83,6 +83,16 @@ func (m *model) stickyFile() (int, bool) {
 	return 0, false
 }
 
+// isSubject reports whether r is a commit message's first line.
+func (m *model) isSubject(r row) bool {
+	return m.isMessageLine(r) && r.line.NewLine == 1
+}
+
+// isMessageLine reports whether r is a line of a commit's message.
+func (m *model) isMessageLine(r row) bool {
+	return r.kind == rowLine && r.line != nil && r.file >= 0 && isMessage(m.views[m.current].files[r.file])
+}
+
 func (m *model) renderMainRow(i int, state rowState) []string {
 	state.dim = m.focus != focusMain
 	state.split = m.split
@@ -135,6 +145,11 @@ func (m *model) rowControls(i int, state *rowState) {
 		}
 		return m.controls(where, modeNormal, t, cs...)
 	}
+	if m.isSubject(r) {
+		// The subject heads the commit, whose controls it shows always.
+		commit := commitHeader.Target(commitSubject{m.inView(m.current)})
+		state.trail = controls(commit, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
+	}
 	switch {
 	case r.kind == rowLine && !hovered:
 		return
@@ -158,8 +173,6 @@ func (m *model) rowControls(i int, state *rowState) {
 			cs = []control{expandAll}
 		}
 		state.controls = controls(t, append(cs, collapseGap)...)
-	case rowCommit:
-		state.controls = controls(t, commitViewedBox.checked(m.viewReviewed(m.views[m.current])))
 	case rowThread:
 		// A thread folds and unfolds from its chevron; its buttons show only while it is open.
 		state.lead = controls(t, threadFold.checked(!r.collapsed).heading(append([]look.Span{look.Default(" ")}, threadName(*r.thread)...)...))

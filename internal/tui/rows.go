@@ -69,7 +69,8 @@ const (
 	rowGap
 	// rowReview is a review in the overview: its header bar, then its summary when it has one.
 	rowReview
-	// rowBoxTop is the top border of a commit's header box, above its message's lines.
+	// rowBoxTop is the top border of a commit's header box with no message, whose subject is
+	// otherwise its top.
 	rowBoxTop
 )
 
@@ -261,9 +262,10 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 	msg := -1
 	if v.kind == viewCommit {
 		// The message is the commit header's own: its lines are rows in the header's box, each
-		// followed by its threads, rather than a file of added lines.
-		rows = append(rows, row{kind: rowBoxTop, file: -1})
-		if msg = slices.IndexFunc(v.files, isMessage); msg >= 0 {
+		// followed by its threads, rather than a file of added lines. Its subject is the box's top.
+		if msg = slices.IndexFunc(v.files, isMessage); msg < 0 {
+			rows = append(rows, row{kind: rowBoxTop, file: -1})
+		} else {
 			mf := review.CommitMessageFile(v.commit)
 			for _, h := range mf.Hunks {
 				for li := range h.Lines {
