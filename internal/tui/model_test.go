@@ -2078,11 +2078,12 @@ func TestStickyFileHeader(t *testing.T) {
 	e.press("l")
 	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.Text == "line 30" })
 	nw, _, _ := e.m.layoutSizes()
-	top := func() string { return strings.Split(e.screen(), "\n")[1][nw+1:] }
+	// Under the commit's header, pinned above it.
+	top := func() string { return strings.Split(e.screen(), "\n")[2][nw+1:] }
 	if !strings.Contains(top(), "A long.txt") {
 		t.Fatalf("top of the diff, scrolled into long.txt: %q", top())
 	}
-	e.m.Update(tea.MouseClickMsg{X: nw + 10, Y: 1, Button: tea.MouseLeft})
+	e.m.Update(tea.MouseClickMsg{X: nw + 10, Y: 2, Button: tea.MouseLeft})
 	if r := e.m.main.rows[e.m.main.cursor]; r.kind != rowFile {
 		t.Errorf("click on the pinned header put the cursor on %+v", r)
 	}
@@ -2560,5 +2561,53 @@ func TestHideWhitespaceInAFile(t *testing.T) {
 	if screen := e.screen(); strings.Contains(screen, "Hide whitespace") || strings.Contains(screen, "  var x = 1") ||
 		!strings.Contains(screen, "whitespace hidden") {
 		t.Fatalf("every file should hide whitespace changes, none set apart:\n%s", screen)
+	}
+}
+
+// A commit's subject heads its box as a bar with the commit's size, SHA, and Viewed box, and stays
+// pinned at the top as it scrolls, drawn the same. The message line under it starts with "..." for
+// the lines it hides, and a click on it is on the subject.
+func TestStickyCommitHeader(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("long.txt", gittest.Lines(gittest.Numbered(40)...))
+	e.repo.Commit("Add a long file with a subject that is quite long indeed, long enough to cut\n\nFirst body line.\nSecond body line.")
+	sha := strings.TrimSpace(e.repo.Git("rev-parse", "--short", "HEAD"))
+	e.drain(e.m.loadCmd())
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+	e.openNav("Add a long file")
+	e.press("l")
+	e.press("j")
+	nw, mw, _ := e.m.layoutSizes()
+	lines := func(n int) []string {
+		var out []string
+		for _, l := range strings.Split(e.screen(), "\n")[1 : 1+n] {
+			out = append(out, strings.TrimRight(l[nw+1:], " "))
+		}
+		return out
+	}
+	box := func(s string) string { return "| " + look.Fit(s, mw-4) + " |" }
+	edge := "+" + strings.Repeat("-", mw-2) + "+"
+	subject := "  Add a long file with a subject that is quite long ind...  +40 -0  commit " + sha + "  [ ] Viewed"
+	for _, tc := range []struct {
+		offset int
+		want   []string
+	}{
+		{0, []string{subject, box(""), box("First body line."), box("Second body line."), box(""), box("Test committed 2025-12-31 16:00"), edge}},
+		{2, []string{subject, box("... Second body line."), box(""), box("Test committed 2025-12-31 16:00"), edge}},
+		// The author is not a message line, and is not marked.
+		{4, []string{subject, box("Test committed 2025-12-31 16:00"), edge}},
+	} {
+		e.m.main.offset = tc.offset
+		if got := lines(len(tc.want)); !slices.Equal(got, tc.want) {
+			t.Errorf("offset %d:\n%q\nwant\n%q", tc.offset, got, tc.want)
+		}
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.Text == "line 30" })
+	if got, want := lines(2), []string{subject, "v A long.txt  +40 -0  [ ] Viewed"}; !slices.Equal(got, want) {
+		t.Fatalf("scrolled into long.txt:\n%q\nwant\n%q", got, want)
+	}
+	e.m.Update(tea.MouseClickMsg{X: nw + 10, Y: 1, Button: tea.MouseLeft})
+	if r := e.m.main.rows[e.m.main.cursor]; !e.m.isSubject(r) {
+		t.Errorf("click on the pinned subject put the cursor on %+v", r)
 	}
 }

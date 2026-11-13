@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,6 +24,7 @@ func (m *model) rebuildMain() {
 	m.main.marker = m.r.hunkMarker(rowState{activeHunk: true})
 	m.segments = map[int][]int{}
 	m.main.segments = func(i int) []int { return m.segments[i] }
+	m.main.elided = m.elidedRow
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
@@ -64,23 +66,44 @@ func (m *model) rowOptions(v view) rowOptions {
 	}
 }
 
-// stickyFile is the header row of the file the top of the diff is in, once that header has
-// scrolled out of view, so it can stay pinned at the top, as GitHub's file headers do.
-func (m *model) stickyFile() (int, bool) {
+// stickyRows are the header rows pinned over the top of the diff, top down: a commit's header once
+// its box has scrolled out of view, then the header of the file the top of the diff is in once
+// that header has, as GitHub's file headers do.
+func (m *model) stickyRows() []int {
+	if m.main.reader {
+		return nil
+	}
+	var out []int
+	if h, ok := m.stickyCommit(); ok {
+		out = append(out, h)
+	}
+	if h, ok := m.stickyFile(len(out)); ok {
+		out = append(out, h)
+	}
+	return out
+}
+
+// stickyRow is the sticky header row pinned on line y of the main pane's rows, if any.
+func (m *model) stickyRow(y int) (int, bool) {
+	s := m.stickyRows()
+	if y < 0 || y >= len(s) {
+		return 0, false
+	}
+	return s[y], true
+}
+
+// stickyCommit is a commit view's subject row, the top of the commit's box, once it has scrolled
+// out of view.
+func (m *model) stickyCommit() (int, bool) {
 	p := &m.main
-	if p.reader {
+	if m.views[m.current].kind != viewCommit {
 		return 0, false
 	}
-	first := p.rowAt(0)
-	if first < 0 || p.rows[first].file < 0 || isMessage(m.views[m.current].files[p.rows[first].file]) {
+	h := slices.IndexFunc(p.rows, m.isSubject)
+	if h < 0 || h >= len(p.starts) {
 		return 0, false
 	}
-	for h := first; h >= 0; h-- {
-		if r := p.rows[h]; r.kind == rowFile && r.file == p.rows[first].file {
-			return h, p.starts[h] < p.offset
-		}
-	}
-	return 0, false
+	return h, p.starts[h] < p.offset
 }
 
 // isSubject reports whether r is a commit message's first line.
@@ -91,6 +114,40 @@ func (m *model) isSubject(r row) bool {
 // isMessageLine reports whether r is a line of a commit's message.
 func (m *model) isMessageLine(r row) bool {
 	return r.kind == rowLine && r.line != nil && r.file >= 0 && isMessage(m.views[m.current].files[r.file])
+}
+
+// stickyFile is the header row of the file on line y of the main pane's rows, once that header
+// has scrolled above it.
+func (m *model) stickyFile(y int) (int, bool) {
+	p := &m.main
+	first := p.rowAt(y)
+	if first < 0 || p.rows[first].file < 0 || isMessage(m.views[m.current].files[p.rows[first].file]) {
+		return 0, false
+	}
+	for h := first; h >= 0; h-- {
+		if r := p.rows[h]; r.kind == rowFile && r.file == p.rows[first].file {
+			return h, p.starts[h] < p.offset+y
+		}
+	}
+	return 0, false
+}
+
+// renderSticky draws sticky header row h, pinned over whatever row is under it.
+func (m *model) renderSticky(h int) string {
+	return m.renderMainRow(h, rowState{cursor: h == m.main.cursor})[0]
+}
+
+// elidedRow is the message line just under a commit's pinned subject, which marks the lines the
+// subject hides, or -1.
+func (m *model) elidedRow() int {
+	p := &m.main
+	if _, ok := m.stickyCommit(); !ok {
+		return -1
+	}
+	if i := p.rowAt(len(m.stickyRows())); i >= 0 && m.isMessageLine(p.rows[i]) {
+		return i
+	}
+	return -1
 }
 
 func (m *model) renderMainRow(i int, state rowState) []string {

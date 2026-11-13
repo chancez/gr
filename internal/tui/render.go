@@ -61,6 +61,9 @@ type rowState struct {
 	lead     []look.Span
 	// below are drawn on a line of their own under the row, as an open review summary's buttons.
 	below []look.Span
+	// elided is set on a commit's message line just under its pinned subject, which starts with
+	// "..." for the lines the subject hides.
+	elided bool
 	// trail are drawn at the end of a header line: an open thread's in the overview, and a commit's
 	// subject's.
 	trail []look.Span
@@ -390,7 +393,11 @@ func (r *renderer) renderMessageLine(l git.Line, covered []cover, width int, sta
 	case commented(covered):
 		surf = look.Commented
 	}
-	line := r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), el(termtext.Line(l.Text)))}, width)[0]
+	text := []look.Span{el(termtext.Line(l.Text))}
+	if state.elided {
+		text = append([]look.Span{look.Muted("... ")}, text...)
+	}
+	line := r.boxed([]string{r.th.DrawCut(surf, max(width-4, 0), text...)}, width)[0]
 	// The + that comments on the line takes the box's margin, as it takes a diff line's sign, or else
 	// the margin is tinted when threads are on the line, as a diff line's numbers are.
 	margin := ""
@@ -418,7 +425,8 @@ func (r *renderer) renderCommit(v view, width int, state rowState) []string {
 }
 
 // renderSubject draws a commit's subject as the top of its box: a bar, as a file's header is, cut to
-// leave room at the right for the commit's size, SHA, and controls.
+// leave room at the right for the commit's size, SHA, and controls. It is drawn the same pinned
+// as not, so nothing moves as it is pinned.
 func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int, state rowState) string {
 	surf := look.HeadingBar
 	switch {

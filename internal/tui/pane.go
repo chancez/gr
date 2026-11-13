@@ -49,6 +49,9 @@ type pane struct {
 	segments func(i int) []int
 	// marker is drawn in the left margin beside the selected item in reader mode.
 	marker string
+	// elided, when set, is the row under the rows pinned over the pane's top that marks what they
+	// hide, or -1.
+	elided func() int
 	// overscroll lets the view sit past the end of the content, showing blank lines, so content
 	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
 	// scrolls back up.
@@ -506,6 +509,10 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 	if first < 0 {
 		return out
 	}
+	elided := -1
+	if p.elided != nil {
+		elided = p.elided()
+	}
 	var cursorHunk *git.Hunk
 	if p.cursor < len(p.rows) {
 		cursorHunk = p.rows[p.cursor].hunk
@@ -515,11 +522,12 @@ func (p *pane) visible(render func(i int, state rowState) []string) []string {
 		state.activeHunk = cursorHunk != nil && p.rows[i].hunk == cursorHunk
 		state.hover = p.hovering && i == p.hover
 		state.hoverSide = p.hoverSide
+		state.elided = i == elided
 		if p.focusThread != "" {
 			state.focusOld, state.focusNew = p.rows[i].covers(p.focusThread)
 		}
 		var lines []string
-		if state.cursor || state.selected || state.activeHunk || state.hover || state.focusOld || state.focusNew || p.attaching(i) ||
+		if state.cursor || state.selected || state.activeHunk || state.hover || state.focusOld || state.focusNew || state.elided || p.attaching(i) ||
 			p.fresh != nil && p.fresh(i) {
 			lines = render(i, state)
 		} else if cached, ok := p.cache[i]; ok {

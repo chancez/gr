@@ -140,8 +140,8 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 		return m, m.landed(true)
 	}
 	i := m.main.rowAt(msg.Y - m.mainTop())
-	if h, ok := m.stickyFile(); ok && msg.Y == m.mainTop() {
-		// The pinned header is its file's, whatever row it covers.
+	if h, ok := m.stickyRow(msg.Y - m.mainTop()); ok {
+		// A pinned header is its commit's or file's, whatever row it covers.
 		i = h
 	}
 	if i < 0 || !m.main.rows[i].selectable() {
@@ -282,7 +282,7 @@ func (m *model) hoverAt(x, y int) {
 		return
 	}
 	i := p.rowAt(y - m.mainTop())
-	if h, ok := m.stickyFile(); ok && y == m.mainTop() {
+	if h, ok := m.stickyRow(y - m.mainTop()); ok {
 		i = h
 	}
 	if i < 0 {
