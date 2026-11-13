@@ -2750,3 +2750,34 @@ func TestSubjectPeek(t *testing.T) {
 		})
 	}
 }
+
+// The wheel scrolls a long sidebar list to its end and back, leaving the selection behind.
+func TestSidebarWheelScrollsPastTheSelection(t *testing.T) {
+	e := newTUIEnv(t)
+	for i := range 60 {
+		e.repo.Write("main.go", gittest.Lines("package main", fmt.Sprint(i)))
+		e.repo.Commit(fmt.Sprintf("commit %d", i))
+	}
+	if _, _, err := e.svc.Sync(t.Context(), e.chg); err != nil {
+		t.Fatal(err)
+	}
+	e.pressRun("R")
+	_, _, _, rows := e.m.sidebarLine(2)
+	type scrolled struct {
+		Top int
+		Pos int
+	}
+	pos := e.m.viewsNav.pos
+	wheel := func(b tea.MouseButton) scrolled {
+		for range 40 {
+			e.m.Update(tea.MouseWheelMsg{X: 1, Y: 2, Button: b})
+			e.screen()
+		}
+		return scrolled{e.m.viewsNav.top, e.m.viewsNav.pos}
+	}
+	got := []scrolled{wheel(tea.MouseWheelDown), wheel(tea.MouseWheelUp)}
+	want := []scrolled{{len(e.m.viewsNav.items) - rows, pos}, {0, pos}}
+	if !slices.Equal(got, want) {
+		t.Errorf("scrolled = %+v, want %+v", got, want)
+	}
+}

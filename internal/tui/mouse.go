@@ -26,9 +26,9 @@ func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
 		case msg.Button == tea.MouseWheelRight || shifted && msg.Button == tea.MouseWheelDown:
 			l.scrollSide(-sideStep)
 		case msg.Button == tea.MouseWheelUp:
-			l.top = max(l.top-3, 0)
+			l.wheel(-3)
 		case msg.Button == tea.MouseWheelDown:
-			l.top += 3
+			l.wheel(3)
 		}
 		return m, nil
 	}

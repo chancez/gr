@@ -69,6 +69,9 @@ type navList struct {
 	summary []look.Span
 	// shift is how many columns the labels cut at the front are scrolled back toward their start.
 	shift int
+	// wheeled is set when the wheel has scrolled the list, which may leave the selection out of
+	// view until it moves.
+	wheeled bool
 }
 
 // sideStep is how many columns a sideways scroll of the sidebar's names moves them.
@@ -80,10 +83,19 @@ func (l *navList) scrollSide(n int) {
 	l.shift = max(l.shift+n, 0)
 }
 
+// wheel scrolls the list n entries down, or up when n is negative.
+func (l *navList) wheel(n int) {
+	l.top = max(l.top+n, 0)
+	l.wheeled = true
+}
+
 // move moves the selection by n, reporting whether it changed.
 func (l *navList) move(n int) bool {
 	prev := l.pos
 	l.pos = min(max(l.pos+n, 0), max(len(l.items)-1, 0))
+	if l.pos != prev {
+		l.wheeled = false
+	}
 	return l.pos != prev
 }
 
@@ -154,7 +166,11 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 		return nil
 	}
 	rows := height - l.head()
-	l.scrollTo(rows)
+	if l.wheeled {
+		l.top = min(l.top, max(len(l.items)-rows, 0))
+	} else {
+		l.scrollTo(rows)
+	}
 	// No further back than the longest label has to go to show its start.
 	most := 0
 	for _, it := range l.items {
