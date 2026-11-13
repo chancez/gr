@@ -156,6 +156,8 @@ type model struct {
 	// is drawn in full when truncated.
 	navHovering bool
 	navHover    int
+	// subjectHover is set while the mouse is over a commit's subject on its bar.
+	subjectHover bool
 	// search is the last search pattern, and searchInput the prompt while typing one. searchPos
 	// and searchHits are the current match's position among the matches.
 	search      string
@@ -737,10 +739,10 @@ func (m *model) frame() string {
 		screen[y] = line.String()
 	}
 	if line, ok := m.navPeek(nw); ok {
-		// What it covers fades, so the peek stands out from the rest of its line.
-		w := ansi.StringWidth(line)
-		rest := m.r.th.Fade(ansi.Cut(screen[m.navHover], w, ansi.StringWidth(screen[m.navHover])))
-		screen = overlay(screen, []string{line + rest}, 0, m.navHover)
+		screen = m.peek(screen, []string{line}, 0, m.navHover)
+	}
+	if lines, z, ok := m.subjectPeek(); ok {
+		screen = m.peek(screen, lines, z.X, z.Y)
 	}
 	if m.mode == modePicker {
 		m.picker.layout(m.width, bh)
@@ -758,6 +760,20 @@ func (m *model) frame() string {
 	}
 	b.WriteString(m.renderStatus())
 	return b.String()
+}
+
+// peek draws a peek's lines over screen from x, y, and fades the rest of the lines they are on,
+// so the peek stands out from what it covers.
+func (m *model) peek(screen, lines []string, x, y int) []string {
+	out := make([]string, len(lines))
+	for k, l := range lines {
+		if row := y + k; row >= 0 && row < len(screen) {
+			end := x + ansi.StringWidth(l)
+			l += m.r.th.Fade(ansi.Cut(screen[row], end, ansi.StringWidth(screen[row])))
+		}
+		out[k] = l
+	}
+	return overlay(screen, out, x, y)
 }
 
 // clearTransient clears the selection, the status message, and the search.

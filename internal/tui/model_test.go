@@ -2649,3 +2649,56 @@ func TestCursorNotUnderPinned(t *testing.T) {
 		}
 	}
 }
+
+// With the mouse over a commit's cut subject on its bar, the subject shows in full over what is
+// beside and under it, wrapping at the screen's edge. Off it, it is cut again.
+func TestSubjectPeek(t *testing.T) {
+	words := "one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen sixteen"
+	for name, tc := range map[string]struct {
+		subject string
+		want    []string
+	}{
+		"fits the screen": {
+			subject: "Add a long file with a subject that is quite long indeed, long enough to cut",
+			want:    []string{"Add a long file with a subject that is quite long indeed, long enough to cut bde  [ ] Viewed m"},
+		},
+		"wraps": {
+			subject: words + " " + words,
+			want: []string{
+				words,
+				words,
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newTUIEnv(t)
+			e.repo.Write("long.txt", gittest.Lines(gittest.Numbered(40)...))
+			e.repo.Commit(tc.subject + "\n\nIts body.")
+			e.drain(e.m.loadCmd())
+			e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 20})
+			e.openNav(tc.subject[:10])
+			e.press("l")
+			e.m.render()
+			zs := e.m.zones[subjectZone]
+			if len(zs) != 1 {
+				t.Fatalf("subject zones: %+v", zs)
+			}
+			z := zs[0]
+			at := func() []string {
+				var out []string
+				for _, l := range strings.Split(e.screen(), "\n")[z.Y : z.Y+len(tc.want)] {
+					out = append(out, strings.TrimRight(ansi.Cut(l, z.X, e.m.width), " "))
+				}
+				return out
+			}
+			e.m.Update(tea.MouseMotionMsg{X: z.X + 2, Y: z.Y})
+			if got := at(); !slices.Equal(got, tc.want) {
+				t.Fatalf("over the subject:\n%q\nwant\n%q", got, tc.want)
+			}
+			e.m.Update(tea.MouseMotionMsg{X: z.X + 2, Y: z.Y + 5})
+			if got := at(); strings.Contains(got[0], tc.subject) {
+				t.Errorf("off the subject, it still shows in full: %q", got)
+			}
+		})
+	}
+}

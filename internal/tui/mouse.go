@@ -1,9 +1,13 @@
 package tui
 
 import (
+	"slices"
+
 	tea "charm.land/bubbletea/v2"
+
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/tui/interact"
+	"github.com/chancez/gr/internal/tui/look"
 )
 
 func (m *model) mouseWheel(msg tea.MouseWheelMsg) (tea.Model, tea.Cmd) {
@@ -277,6 +281,7 @@ func (m *model) hoverAt(x, y int) {
 	p := &m.main
 	nw, _, bh := m.layoutSizes()
 	p.hovering = false
+	m.subjectHover = slices.ContainsFunc(m.zones[subjectZone], func(z look.Zone) bool { return z.Contains(x, y) })
 	m.navHovering, m.navHover = m.data != nil && x < nw && y < bh, y
 	if m.data == nil || x <= nw || y < m.mainTop() || y >= bh {
 		return

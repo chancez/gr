@@ -4,13 +4,16 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
+	"github.com/chancez/gr/internal/termtext"
 	"github.com/chancez/gr/internal/tui/interact"
 	"github.com/chancez/gr/internal/tui/look"
 )
@@ -148,6 +151,32 @@ func (m *model) elidedRow() int {
 		return i
 	}
 	return -1
+}
+
+// subjectPeek draws a commit's subject in full while the mouse is over it on its bar, if the bar
+// cut it, for the frame to draw over what is under it from where it starts, as the sidebar's cut
+// entries are. It wraps at the screen's edge, its lines as wide as its widest.
+func (m *model) subjectPeek() ([]string, look.Zone, bool) {
+	zs := m.zones[subjectZone]
+	if !m.subjectHover || len(zs) == 0 || m.views[m.current].kind != viewCommit {
+		return nil, look.Zone{}, false
+	}
+	z := zs[0]
+	subject := termtext.Line(m.views[m.current].commit.Subject())
+	if ansi.StringWidth(subject) <= z.W {
+		return nil, look.Zone{}, false
+	}
+	// Room for the space that closes it.
+	lines := strings.Split(ansi.Wrap(subject, max(m.width-z.X-1, 10), ""), "\n")
+	w := 0
+	for _, l := range lines {
+		w = max(w, ansi.StringWidth(l))
+	}
+	// On a surface of its own and closed by a space, as the sidebar's peek is.
+	for k, l := range lines {
+		lines[k] = m.r.th.Draw(look.Peek, w+1, look.Text(l))
+	}
+	return lines, z, true
 }
 
 func (m *model) renderMainRow(i int, state rowState) []string {

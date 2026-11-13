@@ -424,6 +424,9 @@ func (r *renderer) renderCommit(v view, width int, state rowState) []string {
 	return append(r.boxed([]string{"", foot}, width), r.boxEdge(width))
 }
 
+// subjectZone marks a commit's subject on its bar.
+const subjectZone = "subject"
+
 // renderSubject draws a commit's subject as the top of its box: a bar, as a file's header is, cut to
 // leave room at the right for the commit's size, SHA, and controls. It is drawn the same pinned
 // as not, so nothing moves as it is pinned.
@@ -443,7 +446,9 @@ func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int,
 	}
 	room := max(inner-ansi.StringWidth(r.th.Render(surf, rest...)), 4)
 	cut := r.th.DrawCut(surf, room, look.Heading(termtext.Line(l.Text)))
-	line := r.th.Draw(surf, inner, append([]look.Span{look.Styled(func(color.Color) string { return cut })}, rest...)...)
+	// Marked, so the mouse over it can show it in full when it is cut.
+	subject := look.Mark(subjectZone, look.Styled(func(color.Color) string { return cut }))
+	line := r.th.Draw(surf, inner, append(subject, rest...)...)
 	// The margin is a message line's: the + that comments on it, or tinted for threads on it.
 	margin := r.th.Draw(surf, 1)
 	switch {
