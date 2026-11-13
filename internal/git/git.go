@@ -187,7 +187,7 @@ func (r *Repo) Branches(ctx context.Context) ([]string, error) {
 func (r *Repo) StackParents(ctx context.Context, branch, base string) ([]string, error) {
 	args := []string{"for-each-ref", "--format=%(refname:short) %(objectname)",
 		"--merged=refs/heads/" + branch, "--no-merged=" + base}
-	if upstream, err := r.line(ctx, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", base+"@{upstream}"); err == nil && upstream != "" {
+	if upstream := r.Upstream(ctx, base); upstream != "" {
 		args = append(args, "--no-merged="+upstream)
 	}
 	out, err := r.run(ctx, append(args, "refs/heads")...)
@@ -224,6 +224,15 @@ func (r *Repo) StackParents(ctx context.Context, branch, base string) ([]string,
 		names[i] = p.name
 	}
 	return names, nil
+}
+
+// Upstream is the full name of the ref branch tracks, or "" when it tracks none.
+func (r *Repo) Upstream(ctx context.Context, branch string) string {
+	upstream, err := r.line(ctx, "rev-parse", "--verify", "--quiet", "--symbolic-full-name", branch+"@{upstream}")
+	if err != nil {
+		return ""
+	}
+	return upstream
 }
 
 // BranchExists reports whether refs/heads/name exists.
@@ -523,10 +532,12 @@ func (r *Repo) PatchIDs(ctx context.Context, shas []string) (map[string]string, 
 	return ids, nil
 }
 
-// CommitsSince lists the commits in from..to committed at or after since, newest first: the commits
-// that can have copied commits written since then, as a rebase merge's copies of a branch's.
-func (r *Repo) CommitsSince(ctx context.Context, from, to string, since time.Time) ([]string, error) {
-	out, err := r.run(ctx, "rev-list", "--since="+strconv.FormatInt(since.Unix(), 10), to, "^"+from, "--")
+// CommitsSince lists the commits on any of tos and not on from committed at or after since, newest
+// first: the commits that can have copied commits written since then, as a rebase merge's copies of
+// a branch's.
+func (r *Repo) CommitsSince(ctx context.Context, from string, since time.Time, tos ...string) ([]string, error) {
+	args := append([]string{"rev-list", "--since=" + strconv.FormatInt(since.Unix(), 10)}, tos...)
+	out, err := r.run(ctx, append(args, "^"+from, "--")...)
 	if err != nil {
 		return nil, err
 	}

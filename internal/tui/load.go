@@ -133,7 +133,7 @@ func (m *model) refreshCmd() tea.Cmd {
 			}
 			// The base moving can merge the change, as fast-forwarding main onto the branch does.
 			if change.State == store.ChangeOpen {
-				if sha, err := svc.Git().ResolveCommit(ctx, change.BaseBranch); err == nil && sha != baseTip {
+				if svc.BaseTips(ctx, change) != baseTip {
 					msg.headMoved = true
 				}
 			}

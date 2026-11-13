@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -933,6 +934,55 @@ func TestBranchFromAStaleMain(t *testing.T) {
 	change, rev := e.ensure(e.service(human), "")
 	if change.BaseBranch != "work/main" || rev.BaseSHA != stale || rev.HeadSHA != one {
 		t.Errorf("change on %s, revision %s..%s; want work/main, %s..%s", change.BaseBranch, rev.BaseSHA, rev.HeadSHA, stale, one)
+	}
+}
+
+// staleMainEnv is a repository whose main tracks work/main, with a change on feature opened onto
+// main while the two were at one commit. upstream moves work/main to a new commit and returns it,
+// leaving main behind.
+func staleMainEnv(t *testing.T) (e *env, s *review.Service, change store.Change, upstream func(string) string) {
+	e = newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("remote", "add", "work", "https://example.com/work.git")
+	e.repo.Git("update-ref", "refs/remotes/work/main", "main")
+	e.repo.Git("branch", "--set-upstream-to=work/main", "main")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("one")
+	s = e.service(human)
+	change, _ = e.ensure(s, "")
+	if change.BaseBranch != "main" {
+		t.Fatalf("change on %s; want main", change.BaseBranch)
+	}
+	upstream = func(message string) string {
+		e.repo.Git("checkout", "-q", "--detach", "work/main")
+		sha := e.repo.Commit(message)
+		e.repo.Git("update-ref", "refs/remotes/work/main", sha)
+		e.repo.Git("checkout", "-q", "feature")
+		return sha
+	}
+	return e, s, change, upstream
+}
+
+// A branch rebased onto its base's upstream, while the local base is behind, is cut where it was
+// rebased onto, not where the stale local base is.
+func TestRebasedOntoTheBasesUpstream(t *testing.T) {
+	e, s, change, upstream := staleMainEnv(t)
+	newer := upstream("landed upstream")
+	e.repo.Git("rebase", "-q", "work/main")
+	head := strings.TrimSpace(e.repo.Git("rev-parse", "HEAD"))
+	_, rev, err := s.Sync(t.Context(), change)
+	if err != nil || rev.BaseSHA != newer || rev.HeadSHA != head {
+		t.Errorf("Sync = %s..%s, %v; want %s..%s", rev.BaseSHA, rev.HeadSHA, err, newer, head)
+	}
+}
+
+// A change merged upstream has landed though the local base has not been pulled.
+func TestLandedOnTheBasesUpstream(t *testing.T) {
+	e, s, change, _ := staleMainEnv(t)
+	e.repo.Git("update-ref", "refs/remotes/work/main", "feature")
+	got, _, err := s.Sync(t.Context(), change)
+	if err != nil || got.State != store.ChangeMerged {
+		t.Errorf("Sync = %s, %v; want merged", got.State, err)
 	}
 }
 

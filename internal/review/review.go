@@ -176,15 +176,46 @@ func (s *Service) ParseTarget(ctx context.Context, spec, base string) (Target, e
 	return Target{Kind: store.KindCommit, Base: parent, Head: sha}, nil
 }
 
-// branchRevision resolves a branch change's current base and head.
+// branchRevision resolves a branch change's current base and head. A branch rebased onto its
+// base's upstream, ahead of the local base until pulled, is cut where it was rebased onto.
 func (s *Service) branchRevision(ctx context.Context, branch, baseBranch string) (base, head string, err error) {
 	if head, err = s.git.ResolveCommit(ctx, "refs/heads/"+branch); err != nil {
 		return "", "", err
 	}
-	if base, err = s.git.MergeBase(ctx, baseBranch, head); err != nil {
+	refs := s.baseRefs(ctx, baseBranch)
+	if base, err = s.git.MergeBase(ctx, refs[0], head); err != nil {
 		return "", "", fmt.Errorf("find merge base of %s and %s: %w", baseBranch, branch, err)
 	}
+	for _, ref := range refs[1:] {
+		mb, err := s.git.MergeBase(ctx, ref, head)
+		if err != nil {
+			continue
+		}
+		if nearer, err := s.git.IsAncestor(ctx, base, mb); err == nil && nearer {
+			base = mb
+		}
+	}
 	return base, head, nil
+}
+
+// baseRefs are what a change's base branch stands for: the branch, then the one it tracks.
+func (s *Service) baseRefs(ctx context.Context, baseBranch string) []string {
+	refs := []string{baseBranch}
+	if upstream := s.git.Upstream(ctx, baseBranch); upstream != "" {
+		refs = append(refs, upstream)
+	}
+	return refs
+}
+
+// BaseTips are the commits a change's base branch and its upstream are at, to tell when either
+// moves.
+func (s *Service) BaseTips(ctx context.Context, change store.Change) string {
+	var tips []string
+	for _, ref := range s.baseRefs(ctx, change.BaseBranch) {
+		sha, _ := s.git.ResolveCommit(ctx, ref)
+		tips = append(tips, sha)
+	}
+	return strings.Join(tips, " ")
 }
 
 // EnsureChange finds the open change for a target or creates it, then syncs it. A branch's open
@@ -423,8 +454,11 @@ func (s *Service) landed(ctx context.Context, change store.Change, latest store.
 }
 
 func (s *Service) landedOn(ctx context.Context, change store.Change, latest store.Revision) (bool, error) {
-	if on, err := s.git.IsAncestor(ctx, latest.HeadSHA, change.BaseBranch); err != nil || on {
-		return on, err
+	refs := s.baseRefs(ctx, change.BaseBranch)
+	for _, ref := range refs {
+		if on, err := s.git.IsAncestor(ctx, latest.HeadSHA, ref); err != nil || on {
+			return on, err
+		}
 	}
 	commits, err := s.git.Commits(ctx, latest.BaseSHA, latest.HeadSHA)
 	if err != nil || len(commits) == 0 {
@@ -440,7 +474,7 @@ func (s *Service) landedOn(ctx context.Context, change store.Change, latest stor
 			since = c.AuthorTime
 		}
 	}
-	candidates, err := s.git.CommitsSince(ctx, latest.BaseSHA, change.BaseBranch, since)
+	candidates, err := s.git.CommitsSince(ctx, latest.BaseSHA, since, refs...)
 	if err != nil || len(candidates) == 0 {
 		return false, err
 	}
