@@ -123,6 +123,19 @@ func TestBranches(t *testing.T) {
 	}
 }
 
+// A branch stopped mid-rebase, its HEAD detached, is still the branch checked out.
+func TestCurrentBranchMidRebase(t *testing.T) {
+	r := gittest.New(t)
+	r.Commit("base")
+	r.Git("checkout", "-q", "-b", "feature")
+	r.Commit("feature")
+	r.Git("-c", "sequence.editor=echo break >", "rebase", "-q", "-i", "HEAD~1")
+	branch, err := open(t, r.Dir).CurrentBranch(t.Context())
+	if err != nil || branch != "feature" {
+		t.Errorf("CurrentBranch = %q, %v; want feature", branch, err)
+	}
+}
+
 func TestCommitDiff(t *testing.T) {
 	r := gittest.New(t)
 	r.Write("a.txt", gittest.Lines("one", "two"))

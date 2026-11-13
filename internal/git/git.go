@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
@@ -285,9 +286,25 @@ func (r *Repo) BranchOrigins(ctx context.Context, branch string) ([]BranchOrigin
 	return origins, nil
 }
 
-// CurrentBranch returns the short name of the checked out branch. It fails on a detached HEAD.
+// CurrentBranch returns the short name of the checked out branch, or of the branch being rebased
+// while a rebase has HEAD detached. It fails on a detached HEAD otherwise.
 func (r *Repo) CurrentBranch(ctx context.Context) (string, error) {
-	return r.line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	branch, err := r.line(ctx, "symbolic-ref", "--quiet", "--short", "HEAD")
+	if err == nil {
+		return branch, nil
+	}
+	for _, dir := range []string{"rebase-merge", "rebase-apply"} {
+		path, perr := r.line(ctx, "rev-parse", "--path-format=absolute", "--git-path", dir+"/head-name")
+		if perr != nil {
+			continue
+		}
+		if b, rerr := os.ReadFile(path); rerr == nil {
+			if name, ok := strings.CutPrefix(strings.TrimSpace(string(b)), "refs/heads/"); ok {
+				return name, nil
+			}
+		}
+	}
+	return "", err
 }
 
 // DefaultBranch guesses the branch changes are based on: the base remote's HEAD, or its branch
