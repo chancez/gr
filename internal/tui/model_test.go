@@ -2611,3 +2611,41 @@ func TestStickyCommitHeader(t *testing.T) {
 		t.Errorf("click on the pinned subject put the cursor on %+v", r)
 	}
 }
+
+// The cursor never sits under the headers pinned over the top of the diff: moving up keeps the
+// scrolloff margin under them, and the wheel drags the cursor to the first row under them.
+func TestCursorNotUnderPinned(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("long.txt", gittest.Lines(gittest.Numbered(40)...))
+	e.repo.Commit("Add a long file\n\nFirst body line.\nSecond body line.\nThird body line.")
+	e.drain(e.m.loadCmd())
+	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 16})
+	e.openNav("Add a long file")
+	e.press("l")
+	p := &e.m.main
+	// hidden is how the cursor sits under the pinned rows, if it does.
+	hidden := func() string {
+		pinned := p.pinnedRows()
+		if slices.Contains(pinned, p.cursor) || p.cursorY() >= len(pinned) {
+			return ""
+		}
+		return fmt.Sprintf("cursor on %+v at screen line %d, under %d pinned:\n%s", p.rows[p.cursor], p.cursorY(), len(pinned), e.screen())
+	}
+	e.cursorTo(func(r row) bool { return r.kind == rowLine && r.line != nil && r.line.Text == "line 30" })
+	for p.cursor > 0 {
+		e.press("k")
+		// The scrolloff margin is kept under the pinned rows, not under the pane's top.
+		pinned := p.pinnedRows()
+		if !slices.Contains(pinned, p.cursor) && p.offset > 0 && p.cursorY() < len(pinned)+p.margin() {
+			t.Fatalf("up: cursor on %+v at screen line %d, under %d pinned and a margin of %d:\n%s",
+				p.rows[p.cursor], p.cursorY(), len(pinned), p.margin(), e.screen())
+		}
+	}
+	nw, _, _ := e.m.layoutSizes()
+	for range 20 {
+		e.m.Update(tea.MouseWheelMsg{X: nw + 10, Y: 5, Button: tea.MouseWheelDown})
+		if h := hidden(); h != "" {
+			t.Fatalf("wheel down: %s", h)
+		}
+	}
+}

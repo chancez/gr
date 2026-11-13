@@ -49,8 +49,10 @@ type pane struct {
 	segments func(i int) []int
 	// marker is drawn in the left margin beside the selected item in reader mode.
 	marker string
-	// elided, when set, is the row under the rows pinned over the pane's top that marks what they
+	// pinned, when set, are the rows drawn pinned over the pane's top lines at its offset, one a
+	// line, which hide what scrolls under them. elided is the row under them that marks what they
 	// hide, or -1.
+	pinned func() []int
 	elided func() int
 	// overscroll lets the view sit past the end of the content, showing blank lines, so content
 	// that shrinks near the end does not drag the cursor down the screen. It drains as the view
@@ -145,6 +147,28 @@ func (p *pane) showAttached(top int) {
 		p.offset = start
 	}
 	p.clamp()
+}
+
+// pinnedRows are the rows pinned over the top of the pane at its offset.
+func (p *pane) pinnedRows() []int {
+	if p.pinned == nil {
+		return nil
+	}
+	return p.pinned()
+}
+
+// unpin scrolls the cursor's row out from under the rows pinned over the top, unless it is one of
+// them. What is pinned changes with the offset, so it settles over a few tries.
+func (p *pane) unpin() {
+	for range 3 {
+		pinned := p.pinnedRows()
+		start := p.starts[p.cursor]
+		if slices.Contains(pinned, p.cursor) || start-p.margin() >= p.offset+len(pinned) {
+			return
+		}
+		p.offset = start - p.margin() - len(pinned)
+		p.clamp()
+	}
 }
 
 func (p *pane) rowHeight(i int) int {
@@ -272,8 +296,11 @@ func (p *pane) scroll(n int) {
 		return
 	}
 	start, end := p.starts[p.cursor], p.starts[p.cursor]+p.rowHeight(p.cursor)
-	if end <= p.offset || start >= p.offset+p.height {
-		if i := p.rowAt(0); n > 0 && i >= 0 {
+	pinned := p.pinnedRows()
+	hidden := end <= p.offset+len(pinned) && !slices.Contains(pinned, p.cursor)
+	if hidden || start >= p.offset+p.height {
+		// Onto the first row in view, under what is pinned.
+		if i := p.rowAt(len(pinned)); n > 0 && i >= 0 {
 			p.cursor = i
 		} else if i := p.rowAt(p.height - 1); i >= 0 {
 			p.cursor = i
@@ -305,6 +332,7 @@ func (p *pane) ensureVisible() {
 		p.offset = start + h + so - p.height
 	}
 	p.clamp()
+	p.unpin()
 }
 
 // readerNext reads on: through the selected item if its end is below the pane, else to the next

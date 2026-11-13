@@ -24,7 +24,7 @@ func (m *model) rebuildMain() {
 	m.main.marker = m.r.hunkMarker(rowState{activeHunk: true})
 	m.segments = map[int][]int{}
 	m.main.segments = func(i int) []int { return m.segments[i] }
-	m.main.elided = m.elidedRow
+	m.main.pinned, m.main.elided = m.stickyRows, m.elidedRow
 	if v.kind == viewOverview {
 		m.main.rows = buildOverview(m.data, m.r, m.filter)
 	} else {
