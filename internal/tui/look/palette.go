@@ -25,6 +25,8 @@ var (
 	paleBlue    = lipgloss.Color("#eef6ff")
 	paleSky     = lipgloss.Color("#ddf4ff")
 	steelBlue   = lipgloss.Color("#1f3a5f")
+	powderBlue  = lipgloss.Color("#d4ebff")
+	denim       = lipgloss.Color("#2b4c77")
 	navy        = lipgloss.Color("#121d2f")
 	deepNavy    = lipgloss.Color("#0d2140")
 	babyBlue    = lipgloss.Color("#badfff")

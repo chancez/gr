@@ -54,6 +54,8 @@ type roles struct {
 	paneUnfocusedBg color.Color
 	controlBg       color.Color
 	commentedBg     color.Color
+	// peekBg is what is drawn over its neighbours, a step from the cursor so the two do not blend.
+	peekBg color.Color
 }
 
 // The built-in themes.
@@ -99,6 +101,7 @@ func newRoles(isDark bool, theme string) roles {
 		paneUnfocusedBg:    ld(lightGray, darkGray),
 		controlBg:          ld(paleGray, charcoal),
 		commentedBg:        ld(sand, darkOlive),
+		peekBg:             ld(powderBlue, denim),
 	}
 	if theme == ThemeColorblind {
 		r.success, r.added = r.accent, r.accent
@@ -236,6 +239,9 @@ const (
 	ControlSolid
 	// Commented is the line numbers of lines a thread is on, as GitHub highlights a range's.
 	Commented
+	// Peek is what is drawn over its neighbours to show it whole, which has to stand apart from
+	// anything it covers.
+	Peek
 	numSurfaces
 )
 
@@ -262,6 +268,7 @@ var surfaceNames = [numSurfaces]string{
 	Control:          "surface.control",
 	ControlSolid:     "surface.control-solid",
 	Commented:        "surface.commented",
+	Peek:             "surface.peek",
 }
 
 // surfaceStyle is how a surface draws. A soft surface keeps its elements' colors. A solid one
@@ -347,6 +354,7 @@ func New(isDark bool, name string) *Theme {
 		Control:          {bg: p.controlBg},
 		ControlSolid:     {bg: p.accent, solid: true, fg: p.onSolid, bold: true},
 		Commented:        {bg: p.commentedBg},
+		Peek:             {bg: p.peekBg},
 	}
 	return t
 }

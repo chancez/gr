@@ -2362,14 +2362,23 @@ func TestSidebarPeek(t *testing.T) {
 			t.Errorf("line %d changed: %q, was %q", i, after[i], before[i])
 		}
 	}
-	// The entry covers the start of the line beside it, and leaves the rest.
-	peek := "A " + long + " +1 -0"
+	// The entry covers the start of the line beside it, closed by a space, and leaves the rest.
+	peek := "A " + long + " +1 -0 "
 	if want := peek + before[y][len(peek):]; after[y] != want {
 		t.Errorf("hovered line = %q, want %q", after[y], want)
 	}
 	e.m.Update(tea.MouseMotionMsg{X: nw + 10, Y: y})
 	if got := strings.Split(e.screen(), "\n")[y]; got != before[y] {
 		t.Errorf("line off the sidebar = %q, want %q", got, before[y])
+	}
+	// A peek is on a surface of its own: here over a hunk header, beside a view.
+	vy := slices.IndexFunc(before, func(l string) bool { return strings.HasPrefix(l, "All changes (2 fi...") })
+	e.m.Update(tea.MouseMotionMsg{X: 1, Y: vy})
+	label := "All changes (2 files) "
+	got := ansi.Cut(strings.Split(e.m.render(), "\n")[vy], 0, len(label))
+	want := e.m.r.th.Draw(look.Peek, len(label), look.Text(label))
+	if !reflect.DeepEqual(cells.Parse(got), cells.Parse(want)) {
+		t.Errorf("view peek = %q, want %q", got, want)
 	}
 }
 

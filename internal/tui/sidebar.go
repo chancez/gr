@@ -218,11 +218,6 @@ func (it navItem) labelRoom(th *look.Theme, width int) int {
 // render draws one entry at width: the label, truncated so the badge always shows at the right.
 // A label cut at the front shows shift columns back from its end.
 func (it navItem) render(th *look.Theme, width, shift int, selected, focused bool) string {
-	room := it.room(th, width)
-	label := ansi.Truncate(it.label, it.labelRoom(th, width), "...")
-	if it.prefix != "" {
-		label = it.prefix + cutBack(it.label, it.labelRoom(th, width), shift)
-	}
 	surf, text := look.Plain, look.Default
 	var p []look.Prop
 	switch {
@@ -234,6 +229,16 @@ func (it navItem) render(th *look.Theme, width, shift int, selected, focused boo
 		surf, text = look.HeadingBar, look.Heading
 	case it.done:
 		p = []look.Prop{look.Dim}
+	}
+	return it.draw(th, surf, text, p, width, shift)
+}
+
+// draw draws the entry at width on surf, its text as text with props p.
+func (it navItem) draw(th *look.Theme, surf look.Surface, text func(string) look.Span, p []look.Prop, width, shift int) string {
+	room := it.room(th, width)
+	label := ansi.Truncate(it.label, it.labelRoom(th, width), "...")
+	if it.prefix != "" {
+		label = it.prefix + cutBack(it.label, it.labelRoom(th, width), shift)
 	}
 	var spans []look.Span
 	if it.sha != "" {
@@ -608,18 +613,19 @@ func (m *model) navPeek(width int) (string, bool) {
 	if !m.navHovering || width == 0 {
 		return "", false
 	}
-	l, f, line, rows := m.sidebarLine(m.navHover)
+	l, _, line, rows := m.sidebarLine(m.navHover)
 	i := l.at(line)
 	if i < 0 || l.indicatorAt(line, rows) != 0 {
 		return "", false
 	}
 	it := l.items[i]
-	w := min(it.width(m.r.th), m.width)
+	w := it.width(m.r.th)
 	if w <= width {
 		return "", false
 	}
-	// Lit as the cursor is, so it stands apart from the diff it covers.
-	return it.render(m.r.th, w, 0, true, i == l.pos && m.focus == f), true
+	// On a surface of its own and closed by a space, so it stands apart from the diff it covers.
+	w = min(w, m.width-1)
+	return it.draw(m.r.th, look.Peek, look.Text, nil, w, 0) + m.r.th.Draw(look.Peek, 1), true
 }
 
 // showFile shows file s in the main pane, in its view.
