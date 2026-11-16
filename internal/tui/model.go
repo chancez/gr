@@ -778,7 +778,7 @@ func (m *model) peek(screen, lines []string, x, y int) []string {
 
 // clearTransient clears the selection, the status message, and the search.
 func (m *model) clearTransient() {
-	m.main.anchor = -1
+	m.main.anchor, m.text = -1, nil
 	m.status = ""
 	m.search, m.searchPos, m.searchHits = "", 0, 0
 }

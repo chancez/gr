@@ -827,7 +827,7 @@ func TestSelectedTextScrollsAndGoes(t *testing.T) {
 	for scrolled := 0; y < 0 && scrolled < 30; scrolled++ {
 		e.m.render()
 		for id, zs := range e.m.zones {
-			if _, _, ok := parseCodeZone(id); ok && zs[0].W > 4 && (y < 0 || zs[0].Y < y) {
+			if pos, ok := parseTextZone(id); ok && !pos.inComment() && zs[0].W > 4 && (y < 0 || zs[0].Y < y) {
 				x, y = zs[0].X, zs[0].Y
 			}
 		}
@@ -846,7 +846,7 @@ func TestSelectedTextScrollsAndGoes(t *testing.T) {
 	// drawn with nothing selected.
 	painted := func() bool {
 		selected := e.m.render()
-		zs, ok := e.m.zones[codeZone(codeRow(row), e.m.text.anchor.side)]
+		zs, ok := e.m.zones[codeZone(textRow(row), e.m.text.anchor.side)]
 		if !ok {
 			return false
 		}
@@ -874,7 +874,7 @@ func TestSelectedTextScrollsAndGoes(t *testing.T) {
 	// Down until it is back in view: the scroll up stopped at the top.
 	for range 30 {
 		e.m.render()
-		if _, ok := e.m.zones[codeZone(codeRow(row), e.m.text.anchor.side)]; ok {
+		if _, ok := e.m.zones[codeZone(textRow(row), e.m.text.anchor.side)]; ok {
 			break
 		}
 		e.m.Update(tea.MouseWheelMsg{X: x, Y: y, Button: tea.MouseWheelDown})
@@ -1101,5 +1101,110 @@ func TestOpenFoldsFromBefore(t *testing.T) {
 	tgt, _ := e.m.cursorTarget()
 	if got := menuTitles(e.m, tgt); !slices.Contains(got, actCollapseGap.Title) {
 		t.Errorf("menu on a line a fold showed = %q, want it to offer %q", got, actCollapseGap.Title)
+	}
+}
+
+// Dragging over a comment selects its text as drawn, across its lines and no further than its
+// body: letting go copies it and selects no lines. A key lets it go.
+func TestSelectTextInAComment(t *testing.T) {
+	e := newTUIEnv(t)
+	if _, err := e.svc.StartThread(t.Context(), e.chg, review.NewThread{Scope: store.ScopeCommit,
+		Commit: strings.TrimSpace(e.repo.Git("rev-parse", "HEAD")), Path: "main.go", StartLine: 4, Body: "Print a **greeting** here.\n\nThen the name."}); err != nil {
+		t.Fatal(err)
+	}
+	e.drain(e.m.loadCmd())
+	e.openNav("say hello")
+	e.pressRun("l")
+	at := func(s string) (int, int) {
+		t.Helper()
+		for y, l := range strings.Split(e.m.render(), "\n") {
+			if i := strings.Index(ansi.Strip(l), s); i >= 0 {
+				return ansi.StringWidth(ansi.Strip(l)[:i]), y
+			}
+		}
+		t.Fatalf("%q not on screen:\n%s", s, e.screen())
+		return 0, 0
+	}
+	type copied struct {
+		Clipboard string
+		Status    string
+		Anchor    int
+		Painted   bool
+	}
+	// drag presses at from, moves through to, and lets go at the last.
+	drag := func(from [2]int, to ...[2]int) copied {
+		t.Helper()
+		e.m.Update(tea.MouseClickMsg{X: from[0], Y: from[1], Button: tea.MouseLeft})
+		for _, p := range to {
+			e.m.Update(tea.MouseMotionMsg{X: p[0], Y: p[1], Button: tea.MouseLeft})
+		}
+		end := to[len(to)-1]
+		_, cmd := e.m.Update(tea.MouseReleaseMsg{X: end[0], Y: end[1], Button: tea.MouseLeft})
+		selected := e.m.render()
+		text := e.m.text
+		e.m.text = nil
+		plain := e.m.render()
+		e.m.text = text
+		got := copied{Status: e.m.status, Anchor: e.m.main.anchor, Painted: selected != plain}
+		if cmd != nil {
+			got.Clipboard = fmt.Sprint(cmd())
+		}
+		return got
+	}
+
+	gx, gy := at("greeting")
+	tx, ty := at("Then")
+	// Within a line; from its last line up to the first's, past its start; then down past the
+	// body's end and on, onto the box's border.
+	got := []copied{
+		drag([2]int{gx, gy}, [2]int{gx + 8, gy}),
+		drag([2]int{tx + 4, ty}, [2]int{0, gy}),
+		drag([2]int{gx, gy}, [2]int{tx + 40, ty}, [2]int{tx + 40, ty + 3}),
+	}
+	e.press("j")
+	got = append(got, copied{Painted: e.m.textActive()})
+	want := []copied{
+		{Clipboard: "greeting", Status: "copied 1 line", Anchor: -1, Painted: true},
+		{Clipboard: "Print a greeting here.\n\nThen", Status: "copied 3 lines", Anchor: -1, Painted: true},
+		{Clipboard: "greeting here.\n\nThen the name.", Status: "copied 3 lines", Anchor: -1, Painted: true},
+		{},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("drags, then j (-want +got):\n%s\n%s", diff, e.screen())
+	}
+}
+
+// Comments are selected wherever they are drawn: a review's summary in the overview, and a thread
+// in the commit message's box.
+func TestSelectTextInCommentsElsewhere(t *testing.T) {
+	e := goldenEnv(t)
+	copyFrom := func(s string, n int) string {
+		t.Helper()
+		x, y := -1, -1
+		for i, l := range strings.Split(e.m.render(), "\n") {
+			if j := strings.Index(ansi.Strip(l), s); j >= 0 {
+				x, y = ansi.StringWidth(ansi.Strip(l)[:j]), i
+				break
+			}
+		}
+		if y < 0 {
+			t.Fatalf("%q not on screen:\n%s", s, e.screen())
+		}
+		e.m.Update(tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: x + n, Y: y, Button: tea.MouseLeft})
+		_, cmd := e.m.Update(tea.MouseReleaseMsg{X: x + n, Y: y, Button: tea.MouseLeft})
+		if cmd == nil {
+			return ""
+		}
+		return fmt.Sprint(cmd())
+	}
+	got := []string{copyFrom("A few things", 5)}
+	e.openNav("say hello")
+	e.pressRun("l")
+	e.m.foldRow(slices.IndexFunc(e.m.main.rows, func(r row) bool { return r.kind == rowThread && r.thread.Location.Path == review.CommitMsgPath }), foldToggle)
+	got = append(got, copyFrom("Capitalize", 10))
+	want := []string{"A few", "Capitalize"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("copied (-want +got):\n%s\n%s", diff, e.screen())
 	}
 }

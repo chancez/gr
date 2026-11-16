@@ -142,6 +142,9 @@ func Mark(id string, spans ...Span) []Span {
 	return out
 }
 
+// MarkText marks text already drawn as zone id, as a comment's line is.
+func MarkText(id, drawn string) string { return markZone(id, drawn) }
+
 // MarkSHA marks the shas among spans as zone id, as the commit a thread's location names.
 func MarkSHA(id string, spans ...Span) []Span {
 	out := make([]Span, len(spans))

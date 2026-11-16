@@ -102,7 +102,8 @@ Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. In the comment box, a c
 cursor and a drag selects, as shift with the arrows does; `ctrl+shift+c` copies the selection.
 In a diff, dragging over code selects its text, the code alone: letting go copies it to the
 clipboard, through the terminal, and selects its lines, so `c` comments on them. Its menu searches
-for text selected within a line. It stays as the view scrolls, and goes as the cursor moves. Quitting remembers where you were in a change, the view,
+for text selected within a line. Dragging over a comment copies its text as drawn. A selection
+stays as the view scrolls, and goes as the cursor moves. Quitting remembers where you were in a change, the view,
 the line, folds, and split, and opening it again goes back there.
 
 Colors follow the terminal's light or dark background. `GR_THEME=colorblind` uses blue and orange in

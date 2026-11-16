@@ -12,162 +12,127 @@ import (
 	"github.com/chancez/gr/internal/tui/look"
 )
 
-// Text in a diff's code is selected with the mouse: a drag from one cell to another, across lines,
-// over the code alone, not its line numbers or signs. Letting go copies it, through the terminal,
-// and leaves its lines selected, for c to comment on them.
+// Text is selected with the mouse: a drag from one cell to another, across lines, over a diff's
+// code alone, not its line numbers or signs, or over a comment's body. Letting go copies it,
+// through the terminal. Code leaves its lines selected, for c to comment on them.
 
-// codePos is a cell of a diff line's code: its row, the side of a split diff, or a unified line,
-// and the column in the code as drawn, tabs expanded.
-type codePos struct {
+// textPos is a cell of text that can be selected: its row; the side of a split diff, a unified
+// line, or the comment it is in; the line of the comment's body as drawn; and the column as drawn,
+// a diff's tabs expanded.
+type textPos struct {
 	row  int
 	side string
+	line int
 	col  int
 }
 
 // before reports whether p comes before q in the text.
-func (p codePos) before(q codePos) bool {
-	return p.row < q.row || p.row == q.row && p.col < q.col
+func (p textPos) before(q textPos) bool {
+	if p.row != q.row {
+		return p.row < q.row
+	}
+	if p.line != q.line {
+		return p.line < q.line
+	}
+	return p.col < q.col
 }
 
-// textDrag is code text selected with the mouse, from anchor to head, and whether the button is
-// still down.
+// inComment reports whether p is in a comment's body rather than a diff's code.
+func (p textPos) inComment() bool { return strings.HasPrefix(p.side, "comment") }
+
+// textDrag is text selected with the mouse, from anchor to head, and whether the button is still
+// down.
 type textDrag struct {
-	anchor codePos
-	head   codePos
+	anchor textPos
+	head   textPos
 	down   bool
 }
 
 // span is the selection in order.
-func (t *textDrag) span() (codePos, codePos) {
+func (t *textDrag) span() (textPos, textPos) {
 	if t.head.before(t.anchor) {
 		return t.head, t.anchor
 	}
 	return t.anchor, t.head
 }
 
-// codeRow is the name of row i's code, for its zone.
-func codeRow(i int) string { return "code" + strconv.Itoa(i) }
+// textRow is the name of row i's text, for its zones.
+func textRow(i int) string { return "text" + strconv.Itoa(i) }
 
-// codeAt is the code cell at x, y in the last frame, if code is drawn there.
-func (m *model) codeAt(x, y int) (codePos, bool) {
+// commentZone is the zone line k of comment c's body is drawn in, under the row's name.
+func commentZone(row string, c, k int) string {
+	return row + ":comment" + strconv.Itoa(c) + ":" + strconv.Itoa(k)
+}
+
+// textAt is the cell of text at x, y in the last frame, if text that can be selected is drawn
+// there.
+func (m *model) textAt(x, y int) (textPos, bool) {
 	for id, zones := range m.zones {
-		row, side, ok := parseCodeZone(id)
+		pos, ok := parseTextZone(id)
 		if !ok {
 			continue
 		}
 		for _, z := range zones {
 			if z.Contains(x, y) {
-				return codePos{row: row, side: side, col: x - z.X}, true
+				pos.col = x - z.X
+				return pos, true
 			}
 		}
 	}
-	return codePos{}, false
+	return textPos{}, false
 }
 
-// codeOnLine is the code cell on screen line y nearest x, on side, for a drag to reach: before
-// the code its start, past it its end.
-func (m *model) codeOnLine(x, y int, side string) (codePos, bool) {
+// textOnLine is the cell on screen line y nearest x of the text anchor is in, for a drag to
+// reach: code on its side, or its comment. Before the text it is its start, past it its end.
+func (m *model) textOnLine(x, y int, anchor textPos) (textPos, bool) {
 	for id, zones := range m.zones {
-		row, s, ok := parseCodeZone(id)
-		if !ok || s != side {
+		pos, ok := parseTextZone(id)
+		if !ok || pos.side != anchor.side || anchor.inComment() && pos.row != anchor.row {
 			continue
 		}
 		for _, z := range zones {
 			if z.Y == y {
-				return codePos{row: row, side: side, col: min(max(x-z.X, 0), z.W)}, true
+				pos.col = min(max(x-z.X, 0), z.W)
+				return pos, true
 			}
 		}
 	}
-	return codePos{}, false
+	return textPos{}, false
 }
 
-func parseCodeZone(id string) (int, string, bool) {
-	rest, ok := strings.CutPrefix(id, "code")
-	if !ok {
-		return 0, "", false
+// parseTextZone is where the text zone id names: its row, side, and line.
+func parseTextZone(id string) (textPos, bool) {
+	rest, ok := strings.CutPrefix(id, "text")
+	parts := strings.Split(rest, ":")
+	if !ok || len(parts) < 2 || len(parts) > 3 {
+		return textPos{}, false
 	}
-	n, side, ok := strings.Cut(rest, ":")
-	row, err := strconv.Atoi(n)
-	return row, side, ok && err == nil
+	row, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return textPos{}, false
+	}
+	pos := textPos{row: row, side: parts[1]}
+	if len(parts) == 3 {
+		if pos.line, err = strconv.Atoi(parts[2]); err != nil {
+			return textPos{}, false
+		}
+	}
+	return pos, true
 }
 
-// textActive reports whether text is selected: being dragged over, or since, while the lines it
-// selected are selected. It is kept as the view scrolls, and let go of as the cursor moves by key.
+// textActive reports whether text is selected: being dragged over, or since. Code stays while
+// the lines it selected are selected, and a comment's text until a click or a key lets it go. It
+// is kept as the view scrolls, and let go of as the cursor moves by key.
 func (m *model) textActive() bool {
 	t := m.text
 	if t == nil || t.anchor == t.head {
 		return false
 	}
-	return t.down || m.main.anchor == t.anchor.row
+	return t.down || t.anchor.inComment() || m.main.anchor == t.anchor.row
 }
 
-// textOnRow is where the selection is on row i, in columns of its code: from, to, up to the
-// line's end where it runs on.
-func (m *model) textOnRow(i int) (from, to int, ok bool) {
-	if !m.textActive() {
-		return 0, 0, false
-	}
-	return m.text.onRow(i)
-}
-
-// onRow is where the selection is on row i, whether or not it is still shown.
-func (t *textDrag) onRow(i int) (from, to int, ok bool) {
-	lo, hi := t.span()
-	if i < lo.row || i > hi.row {
-		return 0, 0, false
-	}
-	from, to = 0, 1<<30
-	if i == lo.row {
-		from = lo.col
-	}
-	if i == hi.row {
-		to = hi.col
-	}
-	return from, to, true
-}
-
-// paintText draws the selection on row i's drawn line, over its code.
-func (m *model) paintText(i int, line string) string {
-	from, to, ok := m.textOnRow(i)
-	if !ok {
-		return line
-	}
-	_, zones := look.Scan(line)
-	z, found := zones[codeZone(codeRow(i), m.text.anchor.side)]
-	if !found || len(z) == 0 {
-		return line
-	}
-	start, end := z[0].X+min(from, z[0].W), z[0].X+min(to, z[0].W)
-	if end <= start {
-		return line
-	}
-	style := m.r.th.SelectionStyle()
-	return look.KeepMarks(line, func(l string) string { return lipgloss.StyleRanges(l, lipgloss.NewRange(start, end, style)) })
-}
-
-// textPress starts a selection at x, y when it is on code, and drops any before.
-func (m *model) textPress(x, y int) {
-	if m.textActive() {
-		// The lines it selected go with it.
-		m.main.anchor = -1
-	}
-	m.text = nil
-	if pos, ok := m.codeAt(x, y); ok {
-		m.text = &textDrag{anchor: pos, head: pos, down: true}
-	}
-}
-
-// textDragTo moves the selection's head to where the mouse is, along the code of the line it is
-// on, on the side the selection began on, and in its file, as a comment on its lines can be.
-func (m *model) textDragTo(x, y int) {
-	pos, ok := m.codeOnLine(x, y, m.text.anchor.side)
-	if ok && m.main.rows[pos.row].file == m.main.rows[m.text.anchor.row].file {
-		m.text.head = pos
-	}
-}
-
-// textLines are the first and last rows text selected with the mouse is on, while it is.
-func (m *model) textLines() (lo, hi int, ok bool) {
+// textRows are the first and last rows text selected with the mouse is on, while it is.
+func (m *model) textRows() (lo, hi int, ok bool) {
 	if !m.textActive() {
 		return 0, 0, false
 	}
@@ -175,8 +140,83 @@ func (m *model) textLines() (lo, hi int, ok bool) {
 	return from.row, to.row, true
 }
 
-// textRelease ends the drag: a selection is copied, and its lines selected, for c to comment on.
-// A press with no drag selects nothing.
+// on is where the selection is on line k of row i, in columns of its text: from, to, up to the
+// line's end where it runs on. It holds whether or not the selection is still shown.
+func (t *textDrag) on(i, k int) (from, to int, ok bool) {
+	lo, hi := t.span()
+	at := textPos{row: i, line: k}
+	if at.before(textPos{row: lo.row, line: lo.line}) || (textPos{row: hi.row, line: hi.line}).before(at) {
+		return 0, 0, false
+	}
+	from, to = 0, 1<<30
+	if i == lo.row && k == lo.line {
+		from = lo.col
+	}
+	if i == hi.row && k == hi.line {
+		to = hi.col
+	}
+	return from, to, true
+}
+
+// paintText draws the selection on row i's drawn lines, over its text.
+func (m *model) paintText(i int, lines []string) []string {
+	if lo, hi, ok := m.textRows(); !ok || i < lo || i > hi {
+		return lines
+	}
+	style := m.r.th.SelectionStyle()
+	for k, line := range lines {
+		_, zones := look.Scan(line)
+		for id, zs := range zones {
+			pos, ok := parseTextZone(id)
+			if !ok || pos.row != i || pos.side != m.text.anchor.side || len(zs) == 0 {
+				continue
+			}
+			from, to, ok := m.text.on(i, pos.line)
+			start, end := zs[0].X+min(from, zs[0].W), zs[0].X+min(to, zs[0].W)
+			if !ok || end <= start {
+				continue
+			}
+			lines[k] = look.KeepMarks(lines[k], func(l string) string {
+				return lipgloss.StyleRanges(l, lipgloss.NewRange(start, end, style))
+			})
+		}
+	}
+	return lines
+}
+
+// textPress starts a selection at x, y when it is on text that can be selected, and drops any
+// before.
+func (m *model) textPress(x, y int) {
+	if m.textActive() && !m.text.anchor.inComment() {
+		// The lines it selected go with it.
+		m.main.anchor = -1
+	}
+	m.text = nil
+	if pos, ok := m.textAt(x, y); ok {
+		m.text = &textDrag{anchor: pos, head: pos, down: true}
+	}
+}
+
+// textDragTo moves the selection's head to where the mouse is, along the text of the line it is
+// on: on the side code began on, and in its file, as a comment on its lines can be, or in the
+// comment it began in.
+func (m *model) textDragTo(x, y int) {
+	pos, ok := m.textOnLine(x, y, m.text.anchor)
+	if ok && m.main.rows[pos.row].file == m.main.rows[m.text.anchor.row].file {
+		m.text.head = pos
+	}
+}
+
+// textLines are the first and last rows code selected with the mouse is on, while it is.
+func (m *model) textLines() (lo, hi int, ok bool) {
+	if m.text == nil || m.text.anchor.inComment() {
+		return 0, 0, false
+	}
+	return m.textRows()
+}
+
+// textRelease ends the drag: a selection is copied, and code's lines selected, for c to comment
+// on. A press with no drag selects nothing.
 func (m *model) textRelease() tea.Cmd {
 	t := m.text
 	t.down = false
@@ -185,29 +225,60 @@ func (m *model) textRelease() tea.Cmd {
 		return nil
 	}
 	text, lines := m.selectedText()
-	m.main.anchor, m.main.cursor = t.anchor.row, t.head.row
-	m.syncNav()
 	plural := "lines"
 	if lines == 1 {
 		plural = "line"
 	}
+	if t.anchor.inComment() {
+		m.setStatus("copied %d %s", lines, plural)
+		return tea.SetClipboard(text)
+	}
+	m.main.anchor, m.main.cursor = t.anchor.row, t.head.row
+	m.syncNav()
 	m.setStatus("copied %d %s; c comments on them", lines, plural)
 	return tea.SetClipboard(text)
 }
 
-// selectedText is the code selected, as the lines have it, tabs and all, and how many lines it is
-// on.
+// selectedText is the text selected, and how many lines it is on: code as the lines have it, tabs
+// and all, and a comment as drawn.
 func (m *model) selectedText() (string, int) {
 	lo, hi := m.text.span()
+	if lo.inComment() {
+		return m.commentText()
+	}
 	var out []string
 	for i := lo.row; i <= hi.row && i < len(m.main.rows); i++ {
 		l, ok := m.lineOn(i, lo.side)
 		if !ok {
 			continue
 		}
-		from, to, _ := m.text.onRow(i)
+		from, to, _ := m.text.on(i, 0)
 		text := l.Text
 		out = append(out, text[cellIndex(text, from):cellIndex(text, to)])
+	}
+	return strings.Join(out, "\n"), len(out)
+}
+
+// commentText is the comment's text selected, as its row draws it, without the spaces that pad
+// its lines.
+func (m *model) commentText() (string, int) {
+	a := m.text.anchor
+	var out []string
+	for _, line := range m.renderMainRow(a.row, rowState{}) {
+		plain, zones := look.Scan(line)
+		plain = ansi.Strip(plain)
+		for id, zs := range zones {
+			pos, ok := parseTextZone(id)
+			if !ok || pos.row != a.row || pos.side != a.side || len(zs) == 0 {
+				continue
+			}
+			from, to, ok := m.text.on(a.row, pos.line)
+			if !ok {
+				continue
+			}
+			z := zs[0]
+			out = append(out, strings.TrimRight(ansi.Cut(plain, z.X+min(from, z.W), z.X+min(to, z.W)), " "))
+		}
 	}
 	return strings.Join(out, "\n"), len(out)
 }

@@ -67,9 +67,9 @@ type rowState struct {
 	// trail are drawn at the end of a header line: an open thread's in the overview, and a commit's
 	// subject's.
 	trail []look.Span
-	// code names a diff line's code, for the mouse to find on screen: its zone is code, then the
-	// side, as codeZone has it.
-	code string
+	// text names the row's text, for the mouse to find on screen: a diff line's code, its zone as
+	// codeZone has it, and comments' bodies, as commentZone has them.
+	text string
 }
 
 // hunkMarker is the one-column margin beside hunk rows: a bar along the hunk the cursor is in.
@@ -303,10 +303,30 @@ func codeZone(row, side string) string { return row + ":" + side }
 
 // markCode marks a line's code as the row's, on side, for the mouse to find.
 func (r *renderer) markCode(state rowState, side string, code look.Span) look.Span {
-	if state.code == "" {
+	if state.text == "" {
 		return code
 	}
-	return look.Mark(codeZone(state.code, side), code)[0]
+	return look.Mark(codeZone(state.text, side), code)[0]
+}
+
+// markComment marks the lines of comment c's body as the row's, for the mouse to find, all but
+// the margin they share, which Markdown puts before them.
+func markComment(state rowState, c int, lines []string) []string {
+	if state.text == "" {
+		return lines
+	}
+	margin := -1
+	for _, l := range lines {
+		plain := ansi.Strip(l)
+		if text := strings.TrimLeft(plain, " "); text != "" && (margin < 0 || len(plain)-len(text) < margin) {
+			margin = len(plain) - len(text)
+		}
+	}
+	margin = max(margin, 0)
+	for k, l := range lines {
+		lines[k] = ansi.Cut(l, 0, margin) + look.MarkText(commentZone(state.text, c, k), ansi.Cut(l, margin, ansi.StringWidth(l)))
+	}
+	return lines
 }
 
 // commented reports whether threads that are not resolved are on a line, which tints its line
@@ -601,7 +621,7 @@ func (r *renderer) renderReview(d *changeData, rw row, width int, state rowState
 			lines = append(lines, "")
 			lines = append(lines, r.th.Draw(look.Plain, width, append([]look.Span{look.Default("    ")}, commentHeader(d, c)...)...))
 		}
-		for _, l := range r.renderMarkdown(c.Body, width-6) {
+		for _, l := range markComment(state, i, r.renderMarkdown(c.Body, width-6)) {
 			lines = append(lines, "    "+l)
 		}
 	}
@@ -687,7 +707,7 @@ func (r *renderer) renderThread(d *changeData, t review.ThreadView, width int, s
 			lines = append(lines, "")
 		}
 		lines = append(lines, r.th.Render(look.Plain, look.DimIf(done, commentHeader(d, c)...)...))
-		lines = append(lines, r.renderMarkdown(c.Body, inner)...)
+		lines = append(lines, markComment(state, i, r.renderMarkdown(c.Body, inner))...)
 	}
 	// The thread's controls sit in its bottom border, under its comments, where they take no line;
 	// the last one's room for its key runs into the border's line. A box too narrow for them, as on
