@@ -443,6 +443,58 @@ func TestPatchIDs(t *testing.T) {
 	}
 }
 
+// Paths lists each path a range's commits change once, both names of a rename, and none for a
+// commit that changes nothing.
+func TestPaths(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "a\n")
+	r.Commit("root")
+	base := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+	r.Write("b[1].txt", "b\n")
+	r.Commit("add b")
+	r.Write("b[1].txt", "b, again\n")
+	r.Commit("change b")
+	r.Git("mv", "a.txt", "c.txt")
+	r.Commit("rename a")
+	r.Git("commit", "-q", "--allow-empty", "-m", "nothing")
+
+	got, err := open(t, r.Dir).Paths(t.Context(), base, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	slices.Sort(got)
+	if diff := cmp.Diff([]string{"a.txt", "b[1].txt", "c.txt"}, got); diff != "" {
+		t.Errorf("Paths (-want +got):\n%s", diff)
+	}
+}
+
+// CommitsSince lists only the commits that change the paths given, taken literally.
+func TestCommitsSinceChangingPaths(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "a\n")
+	r.Commit("root")
+	base := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+	r.Write("b[1].txt", "b\n")
+	r.Commit("add b")
+	withB := strings.TrimSpace(r.Git("rev-parse", "HEAD"))
+	r.Write("b1.txt", "glob match\n")
+	r.Commit("add b1")
+	r.Write("c.txt", "c\n")
+	r.Commit("add c")
+	repo := open(t, r.Dir)
+
+	got, err := repo.CommitsSince(t.Context(), base, gittest.Epoch, []string{"b[1].txt"}, "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]string{withB}, got); diff != "" {
+		t.Errorf("CommitsSince (-want +got):\n%s", diff)
+	}
+	if got, err := repo.CommitsSince(t.Context(), base, gittest.Epoch, nil, "main"); err != nil || got != nil {
+		t.Errorf("CommitsSince with no paths = %q, %v; want none", got, err)
+	}
+}
+
 // A repository is named for its main worktree, so a linked worktree takes the repository's name.
 func TestRepoName(t *testing.T) {
 	r := gittest.New(t)

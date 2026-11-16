@@ -515,7 +515,12 @@ func (s *Service) landedOn(ctx context.Context, change store.Change, latest stor
 			since = c.AuthorTime
 		}
 	}
-	candidates, err := s.git.CommitsSince(ctx, latest.BaseSHA, since, refs...)
+	// A copy changes the same paths, so only the base's commits that change those can be one.
+	paths, err := s.git.Paths(ctx, latest.BaseSHA, latest.HeadSHA)
+	if err != nil {
+		return false, err
+	}
+	candidates, err := s.git.CommitsSince(ctx, latest.BaseSHA, since, paths, refs...)
 	if err != nil || len(candidates) == 0 {
 		return false, err
 	}

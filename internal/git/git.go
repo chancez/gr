@@ -549,16 +549,42 @@ func (r *Repo) PatchIDs(ctx context.Context, shas []string) (map[string]string, 
 	return ids, nil
 }
 
-// CommitsSince lists the commits on any of tos and not on from committed at or after since, newest
-// first: the commits that can have copied commits written since then, as a rebase merge's copies of
-// a branch's.
-func (r *Repo) CommitsSince(ctx context.Context, from string, since time.Time, tos ...string) ([]string, error) {
-	args := append([]string{"rev-list", "--since=" + strconv.FormatInt(since.Unix(), 10)}, tos...)
-	out, err := r.run(ctx, append(args, "^"+from, "--")...)
+// CommitsSince lists the commits on any of tos and not on from committed at or after since that
+// change any of paths, newest first: the commits that can have copied commits written since then,
+// as a rebase merge's copies of a branch's, when paths are what those change.
+func (r *Repo) CommitsSince(ctx context.Context, from string, since time.Time, paths []string, tos ...string) ([]string, error) {
+	if len(paths) == 0 {
+		return nil, nil
+	}
+	// The paths go in on stdin, as there can be more than a command line holds.
+	in := slices.Concat(tos, []string{"^" + from, "--"}, paths)
+	out, err := run(ctx, r.Dir, []byte(strings.Join(in, "\n")+"\n"),
+		"--literal-pathspecs", "rev-list", "--since="+strconv.FormatInt(since.Unix(), 10), "--stdin")
 	if err != nil {
 		return nil, err
 	}
 	return strings.Fields(string(out)), nil
+}
+
+// Paths lists the paths the commits on to and not on from change, each once, a file renamed under
+// both its names, as their patches name them. A path with a newline in it, which cannot be passed
+// on as a line, is left out.
+func (r *Repo) Paths(ctx context.Context, from, to string) ([]string, error) {
+	out, err := r.run(ctx, "log", "--format=", "--name-only", "--no-renames", "-z", from+".."+to, "--")
+	if err != nil {
+		return nil, err
+	}
+	var paths []string
+	seen := map[string]bool{}
+	for p := range strings.SplitSeq(string(out), "\x00") {
+		p = strings.TrimLeft(p, "\n")
+		if p == "" || seen[p] || strings.Contains(p, "\n") {
+			continue
+		}
+		seen[p] = true
+		paths = append(paths, p)
+	}
+	return paths, nil
 }
 
 // EmptyTree returns the id of the empty tree in this repository's hash algorithm.
