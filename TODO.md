@@ -37,7 +37,14 @@ In priority order.
 
 ## Polish
 
-11. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
+11. Never block the TUI on slow work. Some actions still run git in Update, so a large repository
+    freezes the screen until they finish, as the change pickers did. Review every place that does
+    (branch pickers, `reviewBranch`, opening a repository by path, loads) and pick one pattern: work
+    in a command under a context Esc cancels, its result dropped if stale. An indicator shows only
+    once the work runs past a short delay, around 200ms, and then stays a minimum time, so quick
+    work never flashes one. Decide where it shows: the status line, or the thing loading, as the
+    pickers' "(checking)".
+12. Highlight syntax across lines. Lines are highlighted one at a time, so a block comment spanning
     lines is colored only on its first line.
 
 ## Later
