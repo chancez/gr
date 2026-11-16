@@ -301,7 +301,8 @@ const sideUnified = "unified"
 // codeZone is the zone a diff line's code on side is drawn in, under the row's name.
 func codeZone(row, side string) string { return row + ":" + side }
 
-// markCode marks a line's code as the row's, on side, for the mouse to find.
+// markCode marks a line's code, or a commit message's text, as the row's, on side, for the mouse
+// to find.
 func (r *renderer) markCode(state rowState, side string, code look.Span) look.Span {
 	if state.text == "" {
 		return code
@@ -413,7 +414,7 @@ func (r *renderer) renderMessageLine(l git.Line, covered []cover, width int, sta
 	case commented(covered):
 		surf = look.Commented
 	}
-	text := []look.Span{el(termtext.Line(l.Text))}
+	text := []look.Span{r.markCode(state, sideUnified, el(termtext.Line(l.Text)))}
 	if state.elided {
 		text = append([]look.Span{look.Muted("... ")}, text...)
 	}
@@ -465,7 +466,7 @@ func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int,
 		rest = append(append(rest, look.Default("  ")), state.trail...)
 	}
 	room := max(inner-ansi.StringWidth(r.th.Render(surf, rest...)), 4)
-	cut := r.th.DrawCut(surf, room, look.Heading(termtext.Line(l.Text)))
+	cut := r.th.DrawCut(surf, room, r.markCode(state, sideUnified, look.Heading(termtext.Line(l.Text))))
 	// Marked, so the mouse over it can show it in full when it is cut.
 	subject := look.Mark(subjectZone, look.Styled(func(color.Color) string { return cut }))
 	line := r.th.Draw(surf, inner, append(subject, rest...)...)

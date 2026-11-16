@@ -822,12 +822,17 @@ func TestSelectedTextScrollsAndGoes(t *testing.T) {
 	e.m.Update(tea.WindowSizeMsg{Width: 120, Height: 11})
 	e.openNav("say hello")
 	e.pressRun("l")
-	// Down to the first code drawn with a few cells to it.
+	// Down to the first code drawn with a few cells to it, not the message's, whose subject is
+	// pinned.
 	x, y := -1, -1
+	code := func(pos textPos) bool {
+		r := e.m.main.rows[pos.row]
+		return !pos.inComment() && r.file >= 0 && !isMessage(e.m.views[e.m.current].files[r.file])
+	}
 	for scrolled := 0; y < 0 && scrolled < 30; scrolled++ {
 		e.m.render()
 		for id, zs := range e.m.zones {
-			if pos, ok := parseTextZone(id); ok && !pos.inComment() && zs[0].W > 4 && (y < 0 || zs[0].Y < y) {
+			if pos, ok := parseTextZone(id); ok && code(pos) && zs[0].W > 4 && (y < 0 || zs[0].Y < y) {
 				x, y = zs[0].X, zs[0].Y
 			}
 		}
@@ -1206,5 +1211,52 @@ func TestSelectTextInCommentsElsewhere(t *testing.T) {
 	want := []string{"A few", "Capitalize"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("copied (-want +got):\n%s\n%s", diff, e.screen())
+	}
+}
+
+// Dragging over a commit's message selects its text as code's is, across its subject and lines,
+// unified or split: letting go copies it and selects its lines, for c to comment on them.
+func TestSelectTextInACommitMessage(t *testing.T) {
+	type copied struct {
+		Clipboard string
+		Status    string
+		Title     string
+	}
+	drag := func(split bool) copied {
+		e := newTUIEnv(t)
+		e.openNav("say hello")
+		e.pressRun("l")
+		if split {
+			e.press("s")
+		}
+		at := func(s string) (int, int) {
+			t.Helper()
+			for y, l := range strings.Split(e.m.render(), "\n") {
+				if i := strings.Index(ansi.Strip(l), s); i >= 0 {
+					return ansi.StringWidth(ansi.Strip(l)[:i]), y
+				}
+			}
+			t.Fatalf("%q not on screen:\n%s", s, e.screen())
+			return 0, 0
+		}
+		hx, hy := at("hello")
+		lx, ly := at("Longer")
+		e.m.Update(tea.MouseClickMsg{X: hx, Y: hy, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: lx, Y: hy + 1, Button: tea.MouseLeft})
+		e.m.Update(tea.MouseMotionMsg{X: lx + 6, Y: ly, Button: tea.MouseLeft})
+		_, cmd := e.m.Update(tea.MouseReleaseMsg{X: lx + 6, Y: ly, Button: tea.MouseLeft})
+		got := copied{Status: e.m.status}
+		if cmd != nil {
+			got.Clipboard = fmt.Sprint(cmd())
+		}
+		e.press("c")
+		got.Title, _, _ = strings.Cut(e.m.compose.title, " in commit")
+		return got
+	}
+	got := []copied{drag(false), drag(true)}
+	selected := copied{Clipboard: "hello\n\nLonger", Status: "copied 3 lines; c comments on them", Title: "Comment on /COMMIT_MSG:1-3"}
+	want := []copied{selected, selected}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("unified, then split (-want +got):\n%s", diff)
 	}
 }

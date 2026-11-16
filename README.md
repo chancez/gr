@@ -100,7 +100,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 
 Comments are Markdown. `ctrl+e` writes one in `$EDITOR`. In the comment box, a click places the
 cursor and a drag selects, as shift with the arrows does; `ctrl+shift+c` copies the selection.
-In a diff, dragging over code selects its text, the code alone: letting go copies it to the
+In a diff, dragging over code or a commit message selects its text, the code alone: letting go copies it to the
 clipboard, through the terminal, and selects its lines, so `c` comments on them. Its menu searches
 for text selected within a line. Dragging over a comment copies its text as drawn. A selection
 stays as the view scrolls, and goes as the cursor moves. Quitting remembers where you were in a change, the view,
