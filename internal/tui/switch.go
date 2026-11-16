@@ -2,11 +2,11 @@ package tui
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,12 +23,13 @@ type openChange func(m *model, svc *review.Service, c store.Change) tea.Cmd
 // pickChange opens a picker of this repository's open changes, then its branches with no change
 // yet, to switch to without leaving gr. A branch picked gets a change onto the default branch.
 func (m *model) pickChange() tea.Cmd {
-	items, err := m.repoItems(m.svc, func(m *model, _ *review.Service, c store.Change) tea.Cmd { return m.switchChange(c) }, true)
+	items, check, err := m.repoItems(m.svc, func(m *model, _ *review.Service, c store.Change) tea.Cmd { return m.switchChange(c) }, true)
 	if err != nil {
 		m.setError(err)
 		return nil
 	}
-	return m.openPicker(newPicker("Switch to a change", items, runItem(m)))
+	p := newPicker("Switch to a change", items, runItem(m))
+	return tea.Batch(m.openPicker(p), m.checkLanded(p, check))
 }
 
 // inNewTab opens a change in a new tab.
@@ -43,7 +44,7 @@ func inNewTab(m *model, svc *review.Service, c store.Change) tea.Cmd {
 // the other repositories gr has reviewed, each under its name and path, then a way to open any
 // repository by its path, to open a change in a new tab.
 func (m *model) pickTab() tea.Cmd {
-	items, err := m.repoItems(m.svc, inNewTab, true)
+	items, check, err := m.repoItems(m.svc, inNewTab, true)
 	if err != nil {
 		m.setError(err)
 		return nil
@@ -76,26 +77,47 @@ func (m *model) pickTab() tea.Cmd {
 			pickerItem{value: "Open a repository by its path", run: (*model).pickRepoPath})
 	}
 	p := newPicker("Open in a new tab", items, runItem(m))
-	return tea.Batch(m.openPicker(p), m.checkOtherRepos(p, others))
+	return tea.Batch(m.openPicker(p), m.checkLanded(p, check), m.checkLanded(p, m.otherReposLanded(others)))
 }
 
-// landedMsg is the changes of other repositories found landed after picker p opened listing them.
+// landedCheck finds which of a picker's changes landed since gr last looked, by id, each with
+// the entry to put in its place, or nil to drop it.
+type landedCheck func(ctx context.Context) (map[string]*pickerItem, error)
+
+// landedMsg is what check found of picker p's changes.
 type landedMsg struct {
 	picker *picker
-	landed map[string]bool
+	landed map[string]*pickerItem
+	err    error
 }
 
-// checkOtherRepos looks, in the background, for which of the other repositories' changes have
-// landed since gr last looked, as this repository's own are when listed: their git has to be
-// opened for it, which the picker does not wait on. A repository gr cannot open, as a worktree
-// since removed, is left as listed.
-func (m *model) checkOtherRepos(p *picker, repos []review.RepoChanges) tea.Cmd {
+// checkLanded runs check in the background, as reading git for it can take seconds in a large
+// repository, while picker p shows it is checking. Closing p cancels it.
+func (m *model) checkLanded(p *picker, check landedCheck) tea.Cmd {
+	if check == nil {
+		return nil
+	}
+	if p.cancel == nil {
+		p.ctx, p.cancel = context.WithCancel(m.ctx)
+	}
+	p.checking++
+	ctx := p.ctx
+	return func() tea.Msg {
+		landed, err := check(ctx)
+		return landedMsg{picker: p, landed: landed, err: err}
+	}
+}
+
+// otherReposLanded checks which of the other repositories' changes have landed, as this
+// repository's own are when listed: their git has to be opened for it. A repository gr cannot
+// open, as a worktree since removed, is left as listed.
+func (m *model) otherReposLanded(repos []review.RepoChanges) landedCheck {
 	if len(repos) == 0 {
 		return nil
 	}
-	ctx, openRepo := m.ctx, m.openRepo
-	return func() tea.Msg {
-		landed := map[string]bool{}
+	openRepo := m.openRepo
+	return func(ctx context.Context) (map[string]*pickerItem, error) {
+		landed := map[string]*pickerItem{}
 		for _, r := range repos {
 			svc, err := openRepo(ctx, r.Repo.LastPath)
 			if err != nil {
@@ -109,11 +131,11 @@ func (m *model) checkOtherRepos(p *picker, repos []review.RepoChanges) tea.Cmd {
 			}
 			for _, c := range changes {
 				if c.State != store.ChangeOpen {
-					landed[c.ID] = true
+					landed[c.ID] = nil
 				}
 			}
 		}
-		return landedMsg{picker: p, landed: landed}
+		return landed, nil
 	}
 }
 
@@ -126,8 +148,10 @@ func (m *model) pickRepoPath() tea.Cmd {
 			var svc *review.Service
 			if svc, err = m.openRepo(m.ctx, dir); err == nil {
 				var items []pickerItem
-				if items, err = m.repoItems(svc, inNewTab, true); err == nil {
-					return m.openPicker(newPicker("Open in a new tab", items, runItem(m)))
+				var check landedCheck
+				if items, check, err = m.repoItems(svc, inNewTab, true); err == nil {
+					p := newPicker("Open in a new tab", items, runItem(m))
+					return tea.Batch(m.openPicker(p), m.checkLanded(p, check))
 				}
 			}
 		}
@@ -221,19 +245,15 @@ func repoHeading(name, dir string) pickerItem {
 
 // repoItems are svc's repository's entries, under a heading naming it: its open changes, then,
 // with branches, its branches with no change yet, which open as a new change onto the default
-// branch. Typing hides the heading, so each entry then shows its repository too.
-func (m *model) repoItems(svc *review.Service, open openChange, branches bool) ([]pickerItem, error) {
+// branch. Typing hides the heading, so each entry then shows its repository too. The changes are as
+// gr last knew them; the check returned finds those landed since.
+func (m *model) repoItems(svc *review.Service, open openChange, branches bool) ([]pickerItem, landedCheck, error) {
 	dir := svc.Repo().LastPath
 	name := m.repoName(dir)
 	changes, err := svc.ListChanges(m.ctx, store.ChangeOpen)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	// Changes that landed since gr last looked are not open any more.
-	if changes, err = svc.MarkLanded(m.ctx, changes); err != nil {
-		return nil, err
-	}
-	changes = slices.DeleteFunc(changes, func(c store.Change) bool { return c.State != store.ChangeOpen })
 	items := []pickerItem{repoHeading(name, dir)}
 	reviewed := map[string]bool{}
 	for _, c := range changes {
@@ -244,25 +264,53 @@ func (m *model) repoItems(svc *review.Service, open openChange, branches bool) (
 		if c.Kind == store.KindBranch {
 			reviewed[c.Branch] = true
 		}
-		items = append(items, pickerItem{value: changeLabel(c), full: name + ": " + changeLabel(c), note: note,
+		items = append(items, pickerItem{value: changeLabel(c), full: name + ": " + changeLabel(c), note: note, key: c.ID,
 			run: func(m *model) tea.Cmd { return open(m, svc, c) }})
 	}
-	if !branches {
-		return items, nil
+	branchItem := func(b string) pickerItem {
+		return pickerItem{value: b, full: name + ": " + b, note: "branch, new change",
+			run: func(m *model) tea.Cmd { return m.reviewBranch(svc, b, open) }}
 	}
-	all, err := svc.Git().Branches(m.ctx)
-	if err != nil {
-		return nil, err
-	}
-	def, _ := svc.Git().DefaultBranch(m.ctx)
-	for _, b := range all {
-		if reviewed[b] || b == def {
-			continue
+	var def string
+	// held are the branches open changes have, which show as those changes.
+	held := map[string]bool{}
+	if branches {
+		all, err := svc.Git().Branches(m.ctx)
+		if err != nil {
+			return nil, nil, err
 		}
-		items = append(items, pickerItem{value: b, full: name + ": " + b, note: "branch, new change",
-			run: func(m *model) tea.Cmd { return m.reviewBranch(svc, b, open) }})
+		def, _ = svc.Git().DefaultBranch(m.ctx)
+		for _, b := range all {
+			if b == def {
+				continue
+			}
+			if reviewed[b] {
+				held[b] = true
+				continue
+			}
+			items = append(items, branchItem(b))
+		}
 	}
-	return items, nil
+	// Changes that landed since gr last looked are not open any more; the branch of one, if left,
+	// is offered as any branch without an open change is.
+	check := func(ctx context.Context) (map[string]*pickerItem, error) {
+		changes, err := svc.MarkLanded(ctx, changes)
+		if err != nil {
+			return nil, err
+		}
+		landed := map[string]*pickerItem{}
+		for _, c := range changes {
+			if c.State == store.ChangeOpen {
+				continue
+			}
+			landed[c.ID] = nil
+			if c.Kind == store.KindBranch && held[c.Branch] {
+				landed[c.ID] = new(branchItem(c.Branch))
+			}
+		}
+		return landed, nil
+	}
+	return items, check, nil
 }
 
 // changeLabel names a change in the picker: its number, and its branch and base or its title.

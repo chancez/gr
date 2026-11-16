@@ -374,22 +374,18 @@ func TestTabPickerSeesOtherReposLanded(t *testing.T) {
 		return out
 	}
 	otherName, goneName := filepath.Base(other.Dir), filepath.Base(gone.Dir)
-	before := []string{goneName + ": #1 lost onto main", otherName + ": #2 kept onto main", otherName + ": #1 landed onto main"}
+	own := filepath.Base(e.repo.Dir) + ": #1 feature onto main"
+	before := []string{own, goneName + ": #1 lost onto main", otherName + ": #2 kept onto main", otherName + ": #1 landed onto main"}
 	slices.Sort(before)
 	got := names()
 	slices.Sort(got)
 	if diff := cmp.Diff(before, got); diff != "" {
 		t.Fatalf("as opened (-want +got):\n%s", diff)
 	}
-	for _, c := range cmd().(tea.BatchMsg) {
-		if c == nil {
-			continue
-		}
-		if msg, ok := c().(landedMsg); ok {
-			tab.Update(msg)
-		}
+	for _, msg := range landedChecks(cmd) {
+		tab.Update(msg)
 	}
-	after := []string{goneName + ": #1 lost onto main", otherName + ": #2 kept onto main"}
+	after := []string{own, goneName + ": #1 lost onto main", otherName + ": #2 kept onto main"}
 	slices.Sort(after)
 	got = names()
 	slices.Sort(got)

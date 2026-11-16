@@ -1,14 +1,18 @@
 package tui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"reflect"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/review"
+	"github.com/chancez/gr/internal/store"
 )
 
 // w lists the open changes and the branches without one, and switches to the one picked, making a
@@ -171,7 +175,22 @@ func TestCopiedBranchInNewTab(t *testing.T) {
 	}
 }
 
-// A change whose branch landed since gr last looked is not offered as open.
+// landedChecks runs the background checks among what cmd batches, for what they found.
+func landedChecks(cmd tea.Cmd) []landedMsg {
+	var out []landedMsg
+	for _, c := range cmd().(tea.BatchMsg) {
+		if c == nil {
+			continue
+		}
+		if msg, ok := c().(landedMsg); ok {
+			out = append(out, msg)
+		}
+	}
+	return out
+}
+
+// A change whose branch landed since gr last looked is offered as open until the check in the
+// background finds it landed, and then as its branch.
 func TestSwitchPickerSeesLanded(t *testing.T) {
 	e := newTUIEnv(t)
 	e.repo.Git("checkout", "-q", "-b", "other", "main")
@@ -187,15 +206,53 @@ func TestSwitchPickerSeesLanded(t *testing.T) {
 	e.repo.Git("checkout", "-q", "main")
 	e.repo.Git("merge", "-q", "--ff-only", "other")
 	e.repo.Git("checkout", "-q", "feature")
-	e.press("w")
-	var got []string
-	for _, it := range e.m.picker.items {
-		if !it.heading {
-			got = append(got, it.value)
+	_, cmd := e.m.Update(keyMsg("w"))
+	shown := func() []string {
+		out := []string{e.m.picker.heading()}
+		for _, it := range e.m.picker.items {
+			if !it.heading {
+				out = append(out, it.value+" ("+it.note+")")
+			}
 		}
+		return out
 	}
-	// Its branch is left, as any branch without an open change is.
-	if diff := cmp.Diff([]string{"#1 feature onto main", "other"}, got); diff != "" {
-		t.Errorf("picker (-want +got):\n%s", diff)
+	want := []string{"Switch to a change  (checking)", "#2 other onto main ()", "#1 feature onto main (current)"}
+	if diff := cmp.Diff(want, shown()); diff != "" {
+		t.Errorf("as opened (-want +got):\n%s", diff)
+	}
+	for _, msg := range landedChecks(cmd) {
+		e.m.Update(msg)
+	}
+	want = []string{"Switch to a change", "other (branch, new change)", "#1 feature onto main (current)"}
+	if diff := cmp.Diff(want, shown()); diff != "" {
+		t.Errorf("after the check (-want +got):\n%s", diff)
+	}
+}
+
+// Closing the picker cancels its check, which leaves the change it had not got to as it was.
+func TestClosingPickerCancelsCheck(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Git("checkout", "-q", "main")
+	e.repo.Git("merge", "-q", "--ff-only", "feature")
+	_, cmd := e.m.Update(keyMsg("w"))
+	e.press("esc")
+	var canceled []bool
+	for _, msg := range landedChecks(cmd) {
+		canceled = append(canceled, errors.Is(msg.err, context.Canceled))
+		e.m.Update(msg)
+	}
+	if diff := cmp.Diff([]bool{true}, canceled); diff != "" {
+		t.Errorf("checks canceled (-want +got):\n%s", diff)
+	}
+	open, err := e.svc.ListChanges(t.Context(), store.ChangeOpen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, c := range open {
+		ids = append(ids, c.ID)
+	}
+	if diff := cmp.Diff([]string{e.m.changeID}, ids); diff != "" {
+		t.Errorf("open changes (-want +got):\n%s", diff)
 	}
 }

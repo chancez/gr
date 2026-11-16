@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -31,6 +32,11 @@ type picker struct {
 	suggest func(text string) []pickerItem
 	// bound marks a menu of actions bound to subjects, which new data makes stale.
 	bound bool
+	// checking counts the checks of its entries still running in the background under ctx, which
+	// closing the picker cancels.
+	checking int
+	ctx      context.Context
+	cancel   context.CancelFunc
 	// anchored places the popup at a point, as a menu opens where it was clicked, rather than near
 	// the top and centered.
 	anchored bool
@@ -164,17 +170,21 @@ func pickerRows(height int) int {
 	return max(height-5, 1)
 }
 
-// move moves the selection n entries, past headings.
-// drop removes the entries whose key is in keys, as changes found closed after the picker opened,
-// and any heading left with nothing under it. The entry chosen stays chosen while it is there.
-func (p *picker) drop(keys map[string]bool) {
+// replace puts in place of each entry whose key is in with what it maps to, or drops it for nil,
+// as changes found closed after the picker opened, and drops any heading left with nothing under
+// it. The entry chosen stays chosen while it is there.
+func (p *picker) replace(with map[string]*pickerItem) {
 	chosen := -1
 	if p.pos < len(p.shown) {
 		chosen = p.shown[p.pos]
 	}
 	keep := make([]bool, len(p.items))
 	for i, it := range p.items {
-		keep[i] = it.key == "" || !keys[it.key]
+		r, ok := with[it.key]
+		if it.key != "" && ok && r != nil {
+			p.items[i] = *r
+		}
+		keep[i] = it.key == "" || !ok || r != nil
 	}
 	for i, it := range p.items {
 		if !it.heading {
@@ -205,6 +215,7 @@ func (p *picker) drop(keys map[string]bool) {
 	}
 }
 
+// move moves the selection n entries, past headings.
 func (p *picker) move(n int) {
 	if len(p.shown) == 0 {
 		return
@@ -251,7 +262,7 @@ func (p *picker) chosen() (pickerItem, bool) {
 // centered in the upper part of the screen and large, or, anchored, as a menu, with its top left
 // corner just right of its point, growing down, shifted up or left only as far as it needs to fit.
 func (p *picker) layout(width, height int) {
-	w := ansi.StringWidth(p.title) + 4
+	w := ansi.StringWidth(p.heading()) + 4
 	for _, it := range p.items {
 		w = max(w, ansi.StringWidth(it.text(true))+ansi.StringWidth(it.note)+8)
 	}
@@ -270,9 +281,17 @@ func (p *picker) layout(width, height int) {
 	p.filter.SetWidth(p.width - 8)
 }
 
+// heading is the title, and while the entries are being checked, that they are.
+func (p *picker) heading() string {
+	if p.checking > 0 {
+		return p.title + "  (checking)"
+	}
+	return p.title
+}
+
 func (p *picker) render(th *look.Theme) []string {
 	inner := p.width - 4
-	lines := []string{th.Draw(look.Plain, inner, look.Heading(p.title)), look.Fit(p.filter.View(), inner)}
+	lines := []string{th.Draw(look.Plain, inner, look.Heading(p.heading())), look.Fit(p.filter.View(), inner)}
 	rows := pickerRows(p.height)
 	// Entries under headings are indented beneath them.
 	grouped := slices.ContainsFunc(p.shown, func(i int) bool { return p.items[i].heading })
@@ -460,6 +479,9 @@ func placeCursor(in *textinput.Model, col int) {
 }
 
 func (m *model) openPicker(p *picker) tea.Cmd {
+	if m.mode == modePicker && m.picker != p {
+		m.closePicker()
+	}
 	m.picker = p
 	m.mode = modePicker
 	return p.filter.Focus()
@@ -467,4 +489,7 @@ func (m *model) openPicker(p *picker) tea.Cmd {
 
 func (m *model) closePicker() {
 	m.mode = modeNormal
+	if m.picker != nil && m.picker.cancel != nil {
+		m.picker.cancel()
+	}
 }

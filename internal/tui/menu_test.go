@@ -444,22 +444,23 @@ func TestRightClickInSplitTakesItsSide(t *testing.T) {
 	}
 }
 
-// drop takes out entries by key, and headings left empty, keeping the chosen entry chosen.
-func TestPickerDrop(t *testing.T) {
+// replace swaps entries by key, or takes them out for nil, and headings left empty, keeping the
+// chosen entry chosen.
+func TestPickerReplace(t *testing.T) {
 	p := newPicker("t", []pickerItem{
 		{value: "A", heading: true}, {value: "a1", key: "x"}, {value: "a2", key: "y"},
-		{value: "B", heading: true}, {value: "b1", key: "z"}, {value: "b2"},
+		{value: "B", heading: true}, {value: "b1", key: "z"}, {value: "b2"}, {value: "b3", key: "w"},
 	}, nil)
 	p.layout(80, 20)
 	p.move(3)
-	p.drop(map[string]bool{"x": true, "y": true, "z": true})
+	p.replace(map[string]*pickerItem{"x": nil, "y": nil, "z": nil, "w": {value: "c3"}})
 	var got []string
 	for _, i := range p.shown {
 		got = append(got, p.items[i].value)
 	}
 	chosen, _ := p.chosen()
-	if diff := cmp.Diff([]string{"B", "b2", "chosen b2"}, append(got, "chosen "+chosen.value)); diff != "" {
-		t.Errorf("after drop (-want +got):\n%s", diff)
+	if diff := cmp.Diff([]string{"B", "b2", "c3", "chosen b2"}, append(got, "chosen "+chosen.value)); diff != "" {
+		t.Errorf("after replace (-want +got):\n%s", diff)
 	}
 }
 
