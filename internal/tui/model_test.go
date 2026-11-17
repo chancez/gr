@@ -2781,3 +2781,25 @@ func TestSidebarWheelScrollsPastTheSelection(t *testing.T) {
 		t.Errorf("scrolled = %+v, want %+v", got, want)
 	}
 }
+
+// The mouse does nothing to a change still loading, whose views are not there yet.
+func TestMouseBeforeLoad(t *testing.T) {
+	e := newTUIEnv(t)
+	m, err := newModel(t.Context(), e.svc, e.chg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(m.close)
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	at := tea.Mouse{X: 80, Y: 5}
+	for _, msg := range []tea.Msg{
+		tea.MouseClickMsg{X: at.X, Y: at.Y, Button: tea.MouseLeft},
+		tea.MouseReleaseMsg{X: at.X, Y: at.Y, Button: tea.MouseLeft},
+		tea.MouseClickMsg{X: at.X, Y: at.Y, Button: tea.MouseRight},
+		tea.MouseWheelMsg{X: at.X, Y: at.Y, Button: tea.MouseWheelDown},
+		tea.MouseMotionMsg{X: at.X, Y: at.Y},
+	} {
+		m.Update(msg)
+	}
+	m.render()
+}

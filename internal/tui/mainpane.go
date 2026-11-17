@@ -71,9 +71,9 @@ func (m *model) rowOptions(v view) rowOptions {
 
 // stickyRows are the header rows pinned over the top of the diff, top down: a commit's header once
 // its box has scrolled out of view, then the header of the file the top of the diff is in once
-// that header has, as GitHub's file headers do.
+// that header has, as GitHub's file headers do. A change still loading has none.
 func (m *model) stickyRows() []int {
-	if m.main.reader {
+	if m.main.reader || m.data == nil {
 		return nil
 	}
 	var out []int
