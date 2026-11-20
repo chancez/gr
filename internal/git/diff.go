@@ -40,6 +40,9 @@ type FileDiff struct {
 	// OnlyWhitespace is set on a file in a diff that ignores whitespace when all of its changes are
 	// whitespace. It has no hunks.
 	OnlyWhitespace bool
+	// FirstLine is the file's first line when its hunks do not show it, set by the reader of the
+	// diff for files whose name does not say what they are.
+	FirstLine string
 }
 
 // Path is the file's path on the new side, or the old side for a deleted file.

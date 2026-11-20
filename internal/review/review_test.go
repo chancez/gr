@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -1412,5 +1413,39 @@ func TestDiffsIgnoringWhitespaceKeepEveryFile(t *testing.T) {
 	}
 	if diff := cmp.Diff([]git.FileDiff{review.CommitMessageFile(c), a, b}, files); diff != "" {
 		t.Errorf("CommitFiles -w mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// A file with no extension carries its first line when its hunks do not show it, for its #! line.
+func TestDiffFirstLine(t *testing.T) {
+	e := newEnv(t)
+	script := append([]string{"#!/bin/sh"}, gittest.Numbered(20)...)
+	e.repo.Write("far", gittest.Lines(script...), "near", gittest.Lines(script...), "far.sh", gittest.Lines(script...))
+	base := e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	changed := slices.Clone(script)
+	changed[20] = "changed"
+	near := slices.Clone(script)
+	near[1] = "changed"
+	e.repo.Write("far", gittest.Lines(changed...), "near", gittest.Lines(near...), "far.sh", gittest.Lines(changed...))
+	head := e.repo.Commit("change")
+	h := e.service(human)
+	_, rev := e.ensure(h, "")
+
+	g, err := git.Open(t.Context(), e.repo.Dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := g.Diff(t.Context(), base, head, git.DiffOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want[0].FirstLine = "#!/bin/sh"
+	files, err := h.RevisionFiles(t.Context(), rev, git.DiffOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff(want, files); diff != "" {
+		t.Errorf("RevisionFiles mismatch (-want +got):\n%s", diff)
 	}
 }

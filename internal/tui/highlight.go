@@ -54,17 +54,17 @@ func (h *highlighter) cached(key string, find func() chroma.Lexer) chroma.Lexer 
 	return l
 }
 
-// firstLine is f's first line, from its hunks, or "" when they do not reach it.
+// firstLine is f's first line, from its hunks when they reach it.
 func firstLine(f git.FileDiff) string {
 	if len(f.Hunks) == 0 {
-		return ""
+		return f.FirstLine
 	}
 	for _, l := range f.Hunks[0].Lines {
 		if (f.NewPath == "" && l.OldLine == 1) || (f.NewPath != "" && l.NewLine == 1) {
 			return l.Text
 		}
 	}
-	return ""
+	return f.FirstLine
 }
 
 // interpreter is the program a #! line runs, without its version: "python" for

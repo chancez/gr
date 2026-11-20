@@ -49,6 +49,7 @@ func TestLexerFromShebang(t *testing.T) {
 		{"alias", file("bin/run", "#!/usr/bin/env node", 1), "JavaScript"},
 		{"name wins", file("main.go", "#!/bin/sh", 1), "Go"},
 		{"not line one", file("bin/run", "#!/bin/sh", 2), ""},
+		{"read first line", git.FileDiff{NewPath: "bin/run", FirstLine: "#!/bin/sh"}, "Bash"},
 		{"no shebang", file("bin/run", "echo hi", 1), ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

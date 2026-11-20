@@ -53,7 +53,7 @@ func Open(ctx context.Context, st *store.Store, g *git.Repo, author store.Author
 	if err != nil {
 		return nil, err
 	}
-	return &Service{store: st, git: g, repo: repo, author: author, diffs: NewCachedDiffs(g, DefaultCacheLines)}, nil
+	return &Service{store: st, git: g, repo: repo, author: author, diffs: NewCachedDiffs(firstLineDiffs{g}, DefaultCacheLines)}, nil
 }
 
 // Author is who the service acts as.
