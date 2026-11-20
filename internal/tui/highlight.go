@@ -2,6 +2,7 @@ package tui
 
 import (
 	"image/color"
+	"path"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -9,6 +10,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	chromastyles "github.com/alecthomas/chroma/v2/styles"
 
+	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/termtext"
 )
 
@@ -28,27 +30,95 @@ func newHighlighter(isDark bool) *highlighter {
 	return &highlighter{style: chromastyles.Get(name), lexers: map[string]chroma.Lexer{}, enabled: true}
 }
 
-func (h *highlighter) lexer(path string) chroma.Lexer {
-	if l, ok := h.lexers[path]; ok {
+// lexer is the lexer for f, by its name, or for a file whose name says nothing, by its #! line.
+func (h *highlighter) lexer(f git.FileDiff) chroma.Lexer {
+	if l := h.cached(f.Path(), func() chroma.Lexer { return lexers.Match(f.Path()) }); l != nil {
 		return l
 	}
-	l := lexers.Match(path)
+	name := interpreter(firstLine(f))
+	if name == "" {
+		return nil
+	}
+	return h.cached("#!"+name, func() chroma.Lexer { return interpreterLexer(name) })
+}
+
+func (h *highlighter) cached(key string, find func() chroma.Lexer) chroma.Lexer {
+	if l, ok := h.lexers[key]; ok {
+		return l
+	}
+	l := find()
 	if l != nil {
 		l = chroma.Coalesce(l)
 	}
-	h.lexers[path] = l
+	h.lexers[key] = l
 	return l
 }
 
-// line renders one line of path with syntax colors on bg. Lines are highlighted independently, so a
+// firstLine is f's first line, from its hunks, or "" when they do not reach it.
+func firstLine(f git.FileDiff) string {
+	if len(f.Hunks) == 0 {
+		return ""
+	}
+	for _, l := range f.Hunks[0].Lines {
+		if (f.NewPath == "" && l.OldLine == 1) || (f.NewPath != "" && l.NewLine == 1) {
+			return l.Text
+		}
+	}
+	return ""
+}
+
+// interpreter is the program a #! line runs, without its version: "python" for
+// "#!/usr/bin/env python3".
+func interpreter(line string) string {
+	rest, ok := strings.CutPrefix(line, "#!")
+	if !ok {
+		return ""
+	}
+	args := strings.Fields(rest)
+	if len(args) == 0 {
+		return ""
+	}
+	if path.Base(args[0]) == "env" {
+		// env's own flags and variables come before the program, as in "env -S" or "env A=1".
+		args = args[1:]
+		for len(args) > 0 && (strings.HasPrefix(args[0], "-") || strings.Contains(args[0], "=")) {
+			args = args[1:]
+		}
+		if len(args) == 0 {
+			return ""
+		}
+	}
+	return strings.TrimRight(path.Base(args[0]), "0123456789.")
+}
+
+// interpreterAliases name the lexers of interpreters chroma does not know by name.
+var interpreterAliases = map[string]string{
+	"dash":   "bash",
+	"node":   "javascript",
+	"nodejs": "javascript",
+	"deno":   "typescript",
+	"bun":    "javascript",
+}
+
+func interpreterLexer(name string) chroma.Lexer {
+	if name == "" {
+		return nil
+	}
+	if alias, ok := interpreterAliases[name]; ok {
+		name = alias
+	}
+	return lexers.Get(name)
+}
+
+// line renders one line of f with syntax colors on bg. Lines are highlighted independently, so a
 // construct spanning lines, like a block comment, may be colored only on its first line.
-func (h *highlighter) line(path, text string, bg color.Color) string {
+func (h *highlighter) line(f git.FileDiff, text string, bg color.Color) string {
 	text = termtext.Line(text)
 	base := lipgloss.NewStyle()
 	if bg != nil {
 		base = base.Background(bg)
 	}
-	l := h.lexer(path)
+	l := h.lexer(f)
 	if !h.enabled || l == nil {
 		return base.Render(text)
 	}

@@ -284,7 +284,7 @@ func lineSurface(kind git.LineKind, state rowState, cursorSide, commented, focus
 
 // code is a line's text, highlighted.
 func (r *renderer) code(f git.FileDiff, l git.Line) look.Span {
-	return look.Styled(func(bg color.Color) string { return r.hl.line(f.Path(), expandTabs(l.Text), bg) })
+	return look.Styled(func(bg color.Color) string { return r.hl.line(f, expandTabs(l.Text), bg) })
 }
 
 // renderUnified draws a line, tinted when threads are on it, and as a selection when the thread
