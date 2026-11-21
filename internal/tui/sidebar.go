@@ -279,6 +279,11 @@ func (m *model) viewLabel(v view) string {
 			return "All changes (1 file)"
 		}
 		return fmt.Sprintf("All changes (%d files)", len(v.files))
+	case viewUncommitted:
+		if len(v.files) == 1 {
+			return "Uncommitted (1 file)"
+		}
+		return fmt.Sprintf("Uncommitted (%d files)", len(v.files))
 	case viewCommit:
 		return shortSHA(v.commit.SHA) + " " + v.commit.Subject()
 	case viewInterdiff:

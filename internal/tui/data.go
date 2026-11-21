@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"maps"
 	"slices"
 	"strings"
@@ -36,6 +37,8 @@ type changeData struct {
 	commits     []git.Commit
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
+	// uncommitted is what the worktree the branch is checked out in has uncommitted.
+	uncommitted review.Uncommitted
 	loaded      map[string]bool
 	// ignored matches the files the ignore files leave collapsed.
 	ignored *ignore.Matcher
@@ -146,6 +149,12 @@ func load(ctx context.Context, svc *review.Service, changeID string, opts *diffO
 	if d.diffFiles, err = svc.RevisionFileList(ctx, rev); err != nil {
 		return nil, err
 	}
+	if d.uncommitted, err = svc.Uncommitted(ctx, change); err != nil {
+		// Not worth failing the change over. The status is kept, so the next look does not read
+		// it again until it changes.
+		slog.Warn("read uncommitted changes", "dir", d.uncommitted.Dir, "err", err)
+		d.uncommitted = review.Uncommitted{Status: d.uncommitted.Status}
+	}
 	if err := loadDB(ctx, svc, d); err != nil {
 		return nil, err
 	}
@@ -242,8 +251,10 @@ func loadDB(ctx context.Context, svc *review.Service, d *changeData) error {
 
 // viewLoadedMsg carries a view's diff contents, read by loadView with opts.
 type viewLoadedMsg struct {
-	key        string
-	head       string
+	key  string
+	head string
+	// tree is the snapshot of what was uncommitted when it was read.
+	tree       string
 	opts       *diffOptions
 	files      []git.FileDiff
 	placements map[string]store.Location
@@ -253,7 +264,7 @@ type viewLoadedMsg struct {
 
 // loadView reads a view's diff contents with d's options, through the service's cache.
 func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) viewLoadedMsg {
-	msg := viewLoadedMsg{key: v.key(), head: d.revision.HeadSHA, opts: d.opts}
+	msg := viewLoadedMsg{key: v.key(), head: d.revision.HeadSHA, tree: d.uncommitted.Tree, opts: d.opts}
 	read := func(opts git.DiffOptions) (files []git.FileDiff, exact bool, err error) {
 		switch v.kind {
 		case viewCommit:
@@ -262,6 +273,8 @@ func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) v
 			files, err = svc.RevisionFiles(ctx, d.revision, opts)
 		case viewInterdiff:
 			files, exact, err = svc.Interdiff(ctx, d.interdiffFrom, d.interdiffTo, opts)
+		case viewUncommitted:
+			files, err = svc.UncommittedFiles(ctx, d.uncommitted, opts)
 		}
 		return files, exact, err
 	}
@@ -305,6 +318,8 @@ func (d *changeData) apply(msg viewLoadedMsg) {
 		d.diffFiles, d.diffPlacements = msg.files, msg.placements
 	case view{kind: viewInterdiff}.key():
 		d.interdiff, d.interdiffExact = msg.files, msg.exact
+	case view{kind: viewUncommitted}.key():
+		d.uncommitted.Files = msg.files
 	}
 	d.loaded[msg.key] = true
 }
@@ -312,7 +327,7 @@ func (d *changeData) apply(msg viewLoadedMsg) {
 // carryLoaded keeps the diffs old had loaded that are still valid in d, so a reload does not drop
 // them and redraw the view without its hunks. A commit's diff never changes, so it carries over as
 // long as the commit is still in the change. The whole diff and the interdiff depend on the
-// revision, so they carry over only within one.
+// revision, so they carry over only within one, and what is uncommitted only while it is unchanged.
 func (d *changeData) carryLoaded(old *changeData) {
 	if old == nil {
 		return
@@ -330,6 +345,11 @@ func (d *changeData) carryLoaded(old *changeData) {
 				continue
 			}
 			d.interdiff, d.interdiffExact = old.interdiff, old.interdiffExact
+		case key == view{kind: viewUncommitted}.key():
+			if old.uncommitted.Tree != d.uncommitted.Tree {
+				continue
+			}
+			d.uncommitted.Files = old.uncommitted.Files
 		default:
 			sha := strings.TrimPrefix(key, "commit:")
 			files, ok := old.commitFiles[sha]

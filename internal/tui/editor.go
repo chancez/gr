@@ -31,6 +31,8 @@ func (m *model) oldRev(v view) string {
 		return v.commit.SHA + "^"
 	case viewDiff:
 		return m.data.revision.BaseSHA
+	case viewUncommitted:
+		return m.data.uncommitted.Head
 	}
 	return ""
 }

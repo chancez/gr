@@ -64,22 +64,28 @@ func overviewDetails(d *changeData) [][]look.Span {
 	for _, t := range d.threads {
 		counts[t.State]++
 	}
-	return [][]look.Span{
+	lines := [][]look.Span{
 		{look.Heading(fmt.Sprintf("#%d %s", c.Seq, c.Title))},
 		append([]look.Span{
 			look.Muted(fmt.Sprintf("%s, %s, revision %d of %d (", c.State, target, rev.Seq, len(d.revisions))),
 			look.SHA(rev.BaseSHA).Short(), look.Muted(".."), look.SHA(rev.HeadSHA).Short(),
 			look.Muted(fmt.Sprintf("), %d commits, %d files, ", len(d.commits), len(d.diffFiles))),
 		}, filesSize(d.diffFiles)...),
-		{
+	}
+	if u := d.uncommitted.Files; len(u) > 0 {
+		lines = append(lines, append([]look.Span{look.Muted(fmt.Sprintf("Uncommitted: %d files, ", len(u)))},
+			filesSize(u)...))
+	}
+	return append(lines,
+		[]look.Span{
 			look.Default("Threads: "),
 			look.StateCount(store.ThreadOpen, counts[store.ThreadOpen]), look.Default(", "),
 			look.StateCount(store.ThreadAddressed, counts[store.ThreadAddressed]), look.Default(", "),
 			look.StateCount(store.ThreadResolved, counts[store.ThreadResolved]),
 			look.Muted("   o opens a thread in the whole diff, O in its commit"),
 		},
-		{},
-	}
+		nil,
+	)
 }
 
 // buildOverview lays out the conversation: the change, then each submitted review in order with

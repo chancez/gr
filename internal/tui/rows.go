@@ -19,6 +19,7 @@ const (
 	viewDiff
 	viewCommit
 	viewInterdiff
+	viewUncommitted
 )
 
 // view is one thing the main pane can show.
@@ -39,10 +40,21 @@ func (v view) key() string {
 	}
 }
 
-func (v view) readOnly() bool { return v.kind == viewInterdiff }
+func (v view) readOnly() bool { return v.readOnlyReason() != "" }
+
+// readOnlyReason says why the view takes no comments or marks, "" when it does.
+func (v view) readOnlyReason() string {
+	switch v.kind {
+	case viewInterdiff:
+		return "the interdiff is read-only; comment on the files or commits"
+	case viewUncommitted:
+		return "uncommitted changes are read-only; commit them to review them"
+	}
+	return ""
+}
 
 // buildViews orders the sidebar: the overview, what changed since the last review, the commits
-// oldest first, then the whole diff.
+// oldest first, what is uncommitted on top of them, then the whole diff.
 func buildViews(d *changeData) []view {
 	head := d.revision.HeadSHA
 	views := []view{{kind: viewOverview}}
@@ -51,6 +63,9 @@ func buildViews(d *changeData) []view {
 	}
 	for _, c := range d.commits {
 		views = append(views, view{kind: viewCommit, commit: c, files: d.commitFiles[c.SHA], newRev: c.SHA})
+	}
+	if u := d.uncommitted; len(u.Files) > 0 {
+		views = append(views, view{kind: viewUncommitted, files: u.Files, newRev: u.Tree})
 	}
 	return append(views, view{kind: viewDiff, files: d.diffFiles, newRev: head})
 }

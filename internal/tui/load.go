@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
 
@@ -59,7 +61,7 @@ func (m *model) applyView(msg viewLoadedMsg) {
 		m.setError(msg.err)
 		return
 	}
-	if m.data == nil || msg.head != m.data.revision.HeadSHA || msg.opts != m.data.opts {
+	if m.data == nil || msg.head != m.data.revision.HeadSHA || msg.tree != m.data.uncommitted.Tree || msg.opts != m.data.opts {
 		return
 	}
 	m.closeStaleMenus()
@@ -112,14 +114,18 @@ func (m *model) loadCmd() tea.Cmd {
 	}
 }
 
-// refreshCmd checks whether another process wrote to the database or the branch moved.
+// refreshCmd checks whether another process wrote to the database, the branch moved, or what is
+// uncommitted in its worktree changed.
 func (m *model) refreshCmd() tea.Cmd {
 	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
 	var change store.Change
 	var tip, baseTip string
+	var uncommitted review.Uncommitted
 	if m.data != nil {
-		change, tip, baseTip = m.data.change, m.data.tip, m.data.baseTip
+		change, tip, baseTip, uncommitted = m.data.change, m.data.tip, m.data.baseTip, m.data.uncommitted
 	}
+	// Shown, a file changed again is seen, which git's status does not tell.
+	watching := m.current < len(m.views) && m.views[m.current].kind == viewUncommitted
 	return func() tea.Msg {
 		v, err := w.Version(ctx)
 		if err != nil {
@@ -137,6 +143,7 @@ func (m *model) refreshCmd() tea.Cmd {
 					msg.headMoved = true
 				}
 			}
+			msg.uncommittedMoved = uncommittedMoved(ctx, svc, change, uncommitted, watching)
 		}
 		return msg
 	}
@@ -195,4 +202,15 @@ func (m *model) applyData(d *changeData) {
 		m.main.readerSelect(len(m.main.items) - 1)
 	}
 	m.askAboutLanding()
+}
+
+// uncommittedMoved reports whether what change has uncommitted is not old any more: its status
+// changed, or, when watching, its files.
+func uncommittedMoved(ctx context.Context, svc *review.Service, change store.Change, old review.Uncommitted, watching bool) bool {
+	if !watching {
+		status, err := svc.UncommittedStatus(ctx, change)
+		return err == nil && status != old.Status
+	}
+	u, err := svc.Uncommitted(ctx, change)
+	return err == nil && (u.Status != old.Status || u.Tree != old.Tree)
 }

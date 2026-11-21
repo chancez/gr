@@ -40,6 +40,7 @@ func (m *model) inView(i int) inView { return inView{at: i, view: m.views[i]} }
 type overviewSubject struct{ inView }
 type diffSubject struct{ inView }
 type interdiffSubject struct{ inView }
+type uncommittedSubject struct{ inView }
 type commitSubject struct{ inView }
 
 // ignoredSubject is the file list's entry the ignored files of a view fold into.
@@ -144,15 +145,17 @@ func openView[S viewLike]() *interact.Action[*model, S] {
 }
 
 var (
-	actShowOverview  = showView[overviewSubject]()
-	actOpenOverview  = openView[overviewSubject]()
-	actShowDiff      = showView[diffSubject]()
-	actOpenDiff      = openView[diffSubject]()
-	actShowInterdiff = showView[interdiffSubject]()
-	actOpenInterdiff = openView[interdiffSubject]()
-	actShowCommit    = showView[commitSubject]()
-	actOpenCommit    = openView[commitSubject]()
-	actGoToCommit    = &interact.Action[*model, commitSubject]{
+	actShowOverview    = showView[overviewSubject]()
+	actOpenOverview    = openView[overviewSubject]()
+	actShowDiff        = showView[diffSubject]()
+	actOpenDiff        = openView[diffSubject]()
+	actShowInterdiff   = showView[interdiffSubject]()
+	actOpenInterdiff   = openView[interdiffSubject]()
+	actShowUncommitted = showView[uncommittedSubject]()
+	actOpenUncommitted = openView[uncommittedSubject]()
+	actShowCommit      = showView[commitSubject]()
+	actOpenCommit      = openView[commitSubject]()
+	actGoToCommit      = &interact.Action[*model, commitSubject]{
 		Title:   "open",
 		Applies: func(m *model, s commitSubject) bool { return s.at != m.current },
 		Run: func(m *model, s commitSubject) tea.Cmd {
@@ -209,15 +212,22 @@ var (
 )
 
 // canWrite applies where the subject's view takes comments and marks: everywhere but the
-// interdiff, whose lines are between two revisions, with none to anchor a thread to.
+// interdiff, whose lines are between two revisions, with none to anchor a thread to, and what is
+// uncommitted, which is in no revision.
 func canWrite[S viewLike](_ *model, s S) bool { return !s.shown().view.readOnly() }
 
 // writable binds keys to a, which applies where canWrite does, and to a refusal saying why not
 // where it does not, which keeps the keys from reaching what the subject carries.
 func writable[S viewLike](k *interact.Kind[*model, S], a *interact.Action[*model, S], help, desc string, keys ...string) {
 	k.Bind(a, help, desc, keys...)
-	refusal := refuse[S]("the interdiff is read-only; comment on the files or commits")
-	refusal.Applies = func(m *model, s S) bool { return !canWrite(m, s) }
+	refusal := &interact.Action[*model, S]{
+		Title:   "read-only",
+		Applies: func(m *model, s S) bool { return !canWrite(m, s) },
+		Run: func(m *model, s S) tea.Cmd {
+			m.setError(errors.New(s.shown().view.readOnlyReason()))
+			return nil
+		},
+	}
 	k.BindQuiet(refusal, keys...)
 }
 
@@ -718,6 +728,7 @@ var (
 	overviewKind       *interact.Kind[*model, overviewSubject]
 	diffKind           *interact.Kind[*model, diffSubject]
 	interdiffKind      *interact.Kind[*model, interdiffSubject]
+	uncommittedKind    *interact.Kind[*model, uncommittedSubject]
 	commitKind         *interact.Kind[*model, commitSubject]
 	changeKind         *interact.Kind[*model, changeSubject]
 	fileKind           *interact.Kind[*model, fileSubject]
@@ -745,6 +756,7 @@ func init() {
 	overviewKind = interact.NewKind(func(overviewSubject) string { return "Overview" }, actFilterThreads)
 	diffKind = interact.NewKind[*model, diffSubject](func(diffSubject) string { return "All changes" })
 	interdiffKind = interact.NewKind[*model, interdiffSubject](func(interdiffSubject) string { return "Changes since" })
+	uncommittedKind = interact.NewKind[*model, uncommittedSubject](func(uncommittedSubject) string { return "Uncommitted" })
 	commitKind = interact.NewKind(func(s commitSubject) string { return "Commit " + shortSHA(s.view.commit.SHA) },
 		actMarkCommitReviewed, actCommentOnCommit)
 	changeKind = interact.NewKind(func(changeSubject) string { return "Change" },
@@ -987,38 +999,40 @@ func init() {
 
 // Places, and the keys bound on them: what a subject does where it is.
 var (
-	sidebarOverview  *interact.Place[*model, overviewSubject]
-	sidebarDiff      *interact.Place[*model, diffSubject]
-	sidebarInterdiff *interact.Place[*model, interdiffSubject]
-	sidebarCommits   *interact.Place[*model, commitSubject]
-	sidebarFileList  *interact.Place[*model, fileSubject]
-	sidebarIgnored   *interact.Place[*model, ignoredSubject]
-	commitHeader     *interact.Place[*model, commitSubject]
-	fileHeaderList   *interact.Place[*model, fileSubject]
-	lines            *interact.Place[*model, rowSubject]
-	messageLines     *interact.Place[*model, rowSubject]
-	hunks            *interact.Place[*model, rowSubject]
-	folds            *interact.Place[*model, rowSubject]
-	diffThreads      *interact.Place[*model, threadSubject]
-	overviewThreads  *interact.Place[*model, threadSubject]
-	reviewBars       *interact.Place[*model, reviewSubject]
-	overviewRows     *interact.Place[*model, overviewSubject]
-	theChange        *interact.Place[*model, changeSubject]
-	theSidebarPane   *interact.Place[*model, paneSubject]
-	theDiffPane      *interact.Place[*model, paneSubject]
-	theOverviewPane  *interact.Place[*model, paneSubject]
-	theApp           *interact.Place[*model, appSubject]
-	theComposer      *interact.Place[*model, composeSubject]
-	theClosing       *interact.Place[*model, composeSubject]
-	theVerdict       *interact.Place[*model, verdictSubject]
-	theConfirm       *interact.Place[*model, confirmSubject]
-	theFoldPrefix    *interact.Place[*model, paneSubject]
+	sidebarOverview    *interact.Place[*model, overviewSubject]
+	sidebarDiff        *interact.Place[*model, diffSubject]
+	sidebarInterdiff   *interact.Place[*model, interdiffSubject]
+	sidebarUncommitted *interact.Place[*model, uncommittedSubject]
+	sidebarCommits     *interact.Place[*model, commitSubject]
+	sidebarFileList    *interact.Place[*model, fileSubject]
+	sidebarIgnored     *interact.Place[*model, ignoredSubject]
+	commitHeader       *interact.Place[*model, commitSubject]
+	fileHeaderList     *interact.Place[*model, fileSubject]
+	lines              *interact.Place[*model, rowSubject]
+	messageLines       *interact.Place[*model, rowSubject]
+	hunks              *interact.Place[*model, rowSubject]
+	folds              *interact.Place[*model, rowSubject]
+	diffThreads        *interact.Place[*model, threadSubject]
+	overviewThreads    *interact.Place[*model, threadSubject]
+	reviewBars         *interact.Place[*model, reviewSubject]
+	overviewRows       *interact.Place[*model, overviewSubject]
+	theChange          *interact.Place[*model, changeSubject]
+	theSidebarPane     *interact.Place[*model, paneSubject]
+	theDiffPane        *interact.Place[*model, paneSubject]
+	theOverviewPane    *interact.Place[*model, paneSubject]
+	theApp             *interact.Place[*model, appSubject]
+	theComposer        *interact.Place[*model, composeSubject]
+	theClosing         *interact.Place[*model, composeSubject]
+	theVerdict         *interact.Place[*model, verdictSubject]
+	theConfirm         *interact.Place[*model, confirmSubject]
+	theFoldPrefix      *interact.Place[*model, paneSubject]
 )
 
 func init() {
 	sidebarOverview = sidebarView(overviewKind, actShowOverview, actOpenOverview)
 	sidebarDiff = sidebarView(diffKind, actShowDiff, actOpenDiff)
 	sidebarInterdiff = sidebarView(interdiffKind, actShowInterdiff, actOpenInterdiff)
+	sidebarUncommitted = sidebarView(uncommittedKind, actShowUncommitted, actOpenUncommitted)
 	sidebarCommits = sidebarView(commitKind, actShowCommit, actOpenCommit)
 
 	sidebarFileList = sidebarFiles(fileKind)
@@ -1105,6 +1119,8 @@ func (m *model) viewTarget(i int, sidebar bool) interact.Target[*model] {
 		return commitHeader.Target(commitSubject{v})
 	case viewInterdiff:
 		return sidebarInterdiff.Target(interdiffSubject{v})
+	case viewUncommitted:
+		return sidebarUncommitted.Target(uncommittedSubject{v})
 	}
 	return sidebarDiff.Target(diffSubject{v})
 }
@@ -1230,7 +1246,7 @@ func (m *model) chainOf(t interact.Target[*model]) []interact.Target[*model] {
 	sidebar := false
 	for _, p := range []interface {
 		Holds(interact.Target[*model]) bool
-	}{sidebarOverview, sidebarDiff, sidebarInterdiff, sidebarCommits, sidebarFileList} {
+	}{sidebarOverview, sidebarDiff, sidebarInterdiff, sidebarUncommitted, sidebarCommits, sidebarFileList} {
 		sidebar = sidebar || p.Holds(t)
 	}
 	return m.chain(t, true, sidebar)

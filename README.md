@@ -69,6 +69,10 @@ emptied some other way, as reset after a squash merge, leaves its change open, a
 whether it merged or was abandoned. Once a change is closed, new commits on its branch are a new
 change's, which the TUI offers to open.
 
+Where a branch is checked out in any worktree, what is uncommitted there, staged or not and
+untracked files included, shows after its commits as Uncommitted, to read but not to review. The
+overview counts it.
+
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:
 every review, its summary, and its threads with the code they are on. `?` lists every key. The most used:

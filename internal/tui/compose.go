@@ -57,7 +57,7 @@ type composer struct {
 func (m *model) commentOnRow(i int, side anchor.Side, whole bool) tea.Cmd {
 	v := m.views[m.current]
 	if v.readOnly() {
-		m.setError(errors.New("the interdiff is read-only; comment on the files or commits"))
+		m.setError(errors.New(v.readOnlyReason()))
 		return nil
 	}
 	nt, title, err := m.newThreadAt(v, i, side, whole)
@@ -93,7 +93,7 @@ func (m *model) commentOnCommit(v view) tea.Cmd {
 // shown.
 func (m *model) commentOnFile(v view, f int) tea.Cmd {
 	if v.readOnly() {
-		m.setError(errors.New("the interdiff is read-only; comment on the files or commits"))
+		m.setError(errors.New(v.readOnlyReason()))
 		return nil
 	}
 	file := v.files[f]

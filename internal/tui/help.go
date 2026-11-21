@@ -73,7 +73,7 @@ func helpOrder() []struct {
 		from  []interact.Keyed
 	}{
 		{"Sidebar", []interact.Keyed{sidebarPaneKind, sidebarCommits, sidebarOverview, sidebarDiff, sidebarInterdiff,
-			sidebarFileList, sidebarIgnored}},
+			sidebarUncommitted, sidebarFileList, sidebarIgnored}},
 		{"Diff", []interact.Keyed{diffPaneKind, fileHeaderList, folds}},
 		{"Line", []interact.Keyed{lineKind, messageLineKind, hunkKind, foldKind}},
 		{"File", []interact.Keyed{fileKind}},

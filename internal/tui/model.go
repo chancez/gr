@@ -285,6 +285,8 @@ type refreshMsg struct {
 	version   int64
 	changed   bool
 	headMoved bool
+	// uncommittedMoved is set when what is uncommitted in the branch's worktree changed.
+	uncommittedMoved bool
 }
 
 type editorMsg struct {
@@ -453,7 +455,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A question about the change that waited on something else open, as each tick looks.
 		m.askAboutLanding()
 		switch {
-		case msg.headMoved:
+		case msg.headMoved, msg.uncommittedMoved:
 			return m, m.loadCmd()
 		case msg.changed:
 			return m, m.reloadCmd()
