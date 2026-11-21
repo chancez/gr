@@ -134,6 +134,21 @@ ignore_whitespace = true  # hide whitespace-only changes, as git diff -w; W togg
 vim = true             # vim's modes in the comment box: esc to normal mode, esc again to close
 ```
 
+## Ignore files
+
+Files matching an ignore file start collapsed and are marked ignored, as for vendored or generated
+code; enter expands one. Patterns are gitignore's, read from three files in order, a later match
+overriding an earlier one, so `!` can re-include a path:
+
+- `ignore` beside the config file, by default `~/.config/gr/ignore`, for every repository.
+- `.grignore` at the top of the worktree, to share with the repository.
+- `.git/info/grignore`, for patterns of your own.
+
+```gitignore
+vendor/
+*.pb.go
+```
+
 ## For agents
 
 Two skills teach an agent gr: `gr` addresses a review's threads, and `gr-review` reviews a change.

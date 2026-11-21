@@ -86,8 +86,9 @@ type row struct {
 	line        *git.Line
 	left, right *git.Line
 	thread      *review.ThreadView
-	// reviewed and collapsed describe a rowFile.
+	// reviewed, ignored, and collapsed describe a rowFile.
 	reviewed  bool
+	ignored   bool
 	collapsed bool
 	// gap is set on a rowGap, and on the lines of an open gap. A rowGap's is what it still hides.
 	gap *gap
@@ -176,6 +177,8 @@ type rowOptions struct {
 	collapsed func(file int) bool
 	// reviewed reports whether a file is marked reviewed.
 	reviewed func(file int) bool
+	// ignored reports whether the ignore files match a file.
+	ignored func(file int) bool
 	// gapShown is how much of a fold of unchanged lines is open.
 	gapShown func(file, gap int) gapShown
 	// content returns a file's new-side lines, for open folds.
@@ -292,6 +295,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		rows = append(rows, row{
 			kind: rowFile, file: fi, collapsed: collapsed,
 			reviewed: opts.reviewed != nil && opts.reviewed(fi),
+			ignored:  opts.ignored != nil && opts.ignored(fi),
 		})
 		if collapsed {
 			continue

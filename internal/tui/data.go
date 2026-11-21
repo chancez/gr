@@ -9,6 +9,7 @@ import (
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/ignore"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
@@ -36,6 +37,8 @@ type changeData struct {
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
 	loaded      map[string]bool
+	// ignored matches the files the ignore files leave collapsed.
+	ignored *ignore.Matcher
 	// threadFiles are the diffs, of just the thread's file, that excerpts are cut from.
 	threadFiles map[string][]git.FileDiff
 	threads     []review.ThreadView
@@ -131,6 +134,9 @@ func load(ctx context.Context, svc *review.Service, changeID string, opts *diffO
 	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
 		return nil, err
 	}
+	if d.ignored, err = svc.Ignored(ctx); err != nil {
+		return nil, err
+	}
 	if d.commits, err = svc.Commits(ctx, rev); err != nil {
 		return nil, err
 	}
@@ -167,6 +173,9 @@ func reload(ctx context.Context, svc *review.Service, old *changeData) (*changeD
 	d.change = change
 	d.loaded = maps.Clone(old.loaded)
 	if d.revisions, err = svc.Revisions(ctx, change); err != nil {
+		return nil, err
+	}
+	if d.ignored, err = svc.Ignored(ctx); err != nil {
 		return nil, err
 	}
 	if err := loadDB(ctx, svc, &d); err != nil {

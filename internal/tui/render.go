@@ -172,6 +172,9 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		if f.OnlyWhitespace {
 			spans = append(spans, look.Default("  "), look.Muted("whitespace only"))
 		}
+		if rw.ignored {
+			spans = append(spans, look.Default("  "), look.Muted("ignored"))
+		}
 		if rw.collapsed {
 			spans = append(spans, look.Default("  "), look.Muted("collapsed"))
 		}

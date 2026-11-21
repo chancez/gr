@@ -64,6 +64,7 @@ func (m *model) rowOptions(v view) rowOptions {
 		split:     m.split,
 		collapsed: func(f int) bool { return m.collapsed(v, f) },
 		reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
+		ignored:   func(f int) bool { return m.fileIgnored(v, f) },
 		gapShown:  func(f, g int) gapShown { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
 		content:   func(f int) []string { return m.fileContent(v, f) },
 	}

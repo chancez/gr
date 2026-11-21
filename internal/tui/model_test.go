@@ -551,6 +551,35 @@ func TestExpandReviewedFile(t *testing.T) {
 	}
 }
 
+// A file the ignore files match starts collapsed, marked ignored, and enter expands it.
+func TestIgnoredFile(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write(review.IgnoreFile, "*.go\n")
+	e.drain(e.m.reloadCmd())
+	e.openNav("All changes")
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	type result struct {
+		Rows    int
+		Ignored bool
+		Header  bool
+	}
+	header := func() result {
+		r := e.m.main.rows[e.m.main.cursor]
+		return result{
+			Rows:    len(e.m.main.rows),
+			Ignored: r.ignored,
+			Header:  strings.Contains(e.screen(), "main.go  +1 -1  ignored  collapsed"),
+		}
+	}
+	if diff := cmp.Diff(result{Rows: 1, Ignored: true, Header: true}, header()); diff != "" {
+		t.Errorf("ignored file (-want +got):\n%s", diff)
+	}
+	e.press("enter")
+	if got := header(); got.Rows == 1 {
+		t.Error("enter did not expand the ignored file")
+	}
+}
+
 func TestAllChangesToggle(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("say hello")

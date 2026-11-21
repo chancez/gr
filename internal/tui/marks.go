@@ -47,13 +47,20 @@ func (m *model) viewReviewed(v view) bool {
 	return false
 }
 
-// collapsed reports whether a file shows only its header: reviewed files do, unless expanded.
+// collapsed reports whether a file shows only its header: reviewed and ignored files do, unless
+// expanded.
 func (m *model) collapsed(v view, f int) bool {
 	expanded, toggled := m.expanded[v.key()+"\x00"+v.files[f].Path()]
 	if toggled {
 		return !expanded
 	}
-	return m.fileReviewed(v, f)
+	return m.fileReviewed(v, f) || m.fileIgnored(v, f)
+}
+
+// fileIgnored reports whether the ignore files match a file of view v. The commit message is
+// never ignored.
+func (m *model) fileIgnored(v view, f int) bool {
+	return m.data != nil && !isMessage(v.files[f]) && m.data.ignored.Match(v.files[f].Path())
 }
 
 func (m *model) toggleCollapsed(v view, f int) {
