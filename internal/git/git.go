@@ -64,8 +64,16 @@ var baseArgs = []string{
 }
 
 func run(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
+	return runEnv(ctx, dir, nil, stdin, args...)
+}
+
+// runEnv runs git with env added to the environment.
+func runEnv(ctx context.Context, dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", slices.Concat(baseArgs, args)...)
 	cmd.Dir = dir
+	if env != nil {
+		cmd.Env = append(os.Environ(), env...)
+	}
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
