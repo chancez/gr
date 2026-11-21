@@ -127,6 +127,8 @@ var (
 	viewedBox       control
 	hideSpaceBox    control
 	showSpaceBox    control
+	uncommittedBox  control
+	committedBox    control
 	commitViewedBox control
 	fileFold        control
 	threadFold      control
@@ -162,6 +164,9 @@ func init() {
 	hideSpaceBox = quietCheckbox(actHideFileSpace, "Hide whitespace")
 	showSpaceBox = quietCheckbox(actShowFileSpace, "Hide whitespace").checked(true)
 	commitViewedBox = quietCheckbox(actMarkCommitReviewed, "Viewed")
+	// All changes' box, checked while they include what is uncommitted.
+	uncommittedBox = quietCheckbox(actWithUncommitted, "Uncommitted")
+	committedBox = quietCheckbox(actWithoutUncommitted, "Uncommitted").checked(true)
 	fileFold = chevron(actFoldFile)
 	threadFold = chevron(actToggleThread)
 	reviewFold = chevron(actToggleReview)

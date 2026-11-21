@@ -249,6 +249,9 @@ func (m *model) rowControls(i int, state *rowState) {
 	switch {
 	case r.kind == rowLine && !hovered:
 		return
+	case r.kind == rowViewBar:
+		state.trail = controls(m.viewTarget(m.current, false), uncommittedBox, committedBox)
+		return
 	}
 	side := m.main.side
 	if hovered && m.split {

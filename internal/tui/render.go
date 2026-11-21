@@ -154,7 +154,7 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 	case rowBoxTop:
 		return []string{r.boxEdge(width)}
 	case rowViewBar:
-		return []string{r.renderViewBar(d, v, width)}
+		return []string{r.renderViewBar(d, v, width, state)}
 	case rowCommit:
 		return r.renderCommit(v, width, state)
 	case rowFile:
@@ -487,8 +487,8 @@ func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int,
 }
 
 // renderViewBar draws a file view's bar: what it shows, from where to where, its size, and, when
-// it takes no comments or marks, why not.
-func (r *renderer) renderViewBar(d *changeData, v view, width int) string {
+// it takes no comments or marks, why not, then its controls.
+func (r *renderer) renderViewBar(d *changeData, v view, width int, state rowState) string {
 	var spans []look.Span
 	switch {
 	case v.kind == viewInterdiff:
@@ -503,9 +503,16 @@ func (r *renderer) renderViewBar(d *changeData, v view, width int) string {
 			look.Muted(".."), look.SHA(d.revision.HeadSHA).Short()}
 	}
 	spans = append(append(spans, look.Default("  ")), filesSize(v.files)...)
-	if reason := v.readOnlyReason(); reason != "" {
+	switch reason := v.readOnlyReason(); {
+	case v.uncommitted:
+		// Its box says how to show only what is committed.
+		spans = append(spans, look.Default("  "), look.Warning("read-only"))
+	case reason != "":
 		_, hint, _ := strings.Cut(reason, "; ")
 		spans = append(spans, look.Default("  "), look.Warning("read-only"), look.Muted(": "+hint))
+	}
+	if len(state.trail) > 0 {
+		spans = append(append(spans, look.Default("  ")), state.trail...)
 	}
 	return r.th.DrawCut(look.HeadingBar, width, append([]look.Span{look.Default(" ")}, spans...)...)
 }

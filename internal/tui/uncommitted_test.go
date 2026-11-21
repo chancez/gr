@@ -84,8 +84,8 @@ func TestUncommitted(t *testing.T) {
 	}
 }
 
-// U shows all changes with what is uncommitted on top, read-only and without the head's threads,
-// and again only what is committed.
+// U, or the box on all changes' bar, shows them with what is uncommitted on top, read-only and
+// without the head's threads, and again only what is committed.
 func TestAllChangesWithUncommitted(t *testing.T) {
 	e := newTUIEnv(t)
 	e.openNav("All changes")
@@ -140,7 +140,10 @@ func TestAllChangesWithUncommitted(t *testing.T) {
 	if diff := cmp.Diff(want, look()); diff != "" {
 		t.Errorf("all changes with uncommitted (-want +got):\n%s", diff)
 	}
-	e.press("U")
+	if diff := cmp.Diff([]string{"only committed"}, e.shownControls("row0:")); diff != "" {
+		t.Errorf("bar's controls (-want +got):\n%s", diff)
+	}
+	e.click("row0:", "only committed")
 	if diff := cmp.Diff(committed, look()); diff != "" {
 		t.Errorf("all changes again (-want +got):\n%s", diff)
 	}
@@ -174,7 +177,7 @@ func TestViewBar(t *testing.T) {
 	}
 	got := []seen{look("All changes"), look("Uncommitted")}
 	want := []seen{
-		{Bar: "All changes  " + shortSHA(e.m.data.revision.BaseSHA) + ".." + head + "  +1 -1"},
+		{Bar: "All changes  " + shortSHA(e.m.data.revision.BaseSHA) + ".." + head + "  +1 -1  [ ] Uncommitted"},
 		{Bar: "Uncommitted  on " + head + "  +101 -1  read-only: commit them to review them", Pinned: true},
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
