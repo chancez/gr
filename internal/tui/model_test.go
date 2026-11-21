@@ -551,7 +551,8 @@ func TestExpandReviewedFile(t *testing.T) {
 	}
 }
 
-// A file the ignore files match starts collapsed, marked ignored, and enter expands it.
+// A file the ignore files match starts collapsed, marked ignored, and enter expands it. The file
+// list folds it under one entry, which enter or a click shows and folds again.
 func TestIgnoredFile(t *testing.T) {
 	e := newTUIEnv(t)
 	e.repo.Write(review.IgnoreFile, "*.go\n")
@@ -562,20 +563,52 @@ func TestIgnoredFile(t *testing.T) {
 		Rows    int
 		Ignored bool
 		Header  bool
+		Files   []string
+		Sel     string
 	}
-	header := func() result {
+	state := func() result {
 		r := e.m.main.rows[e.m.main.cursor]
+		var files []string
+		for _, it := range e.m.filesNav.items {
+			files = append(files, it.prefix+it.label)
+		}
 		return result{
 			Rows:    len(e.m.main.rows),
 			Ignored: r.ignored,
 			Header:  strings.Contains(e.screen(), "main.go  +1 -1  ignored  collapsed"),
+			Files:   files,
+			Sel:     e.m.filesNav.items[e.m.filesNav.pos].label,
 		}
 	}
-	if diff := cmp.Diff(result{Rows: 1, Ignored: true, Header: true}, header()); diff != "" {
+	want := result{Rows: 1, Ignored: true, Header: true, Files: []string{"> 1 ignored"}, Sel: "1 ignored"}
+	if diff := cmp.Diff(want, state()); diff != "" {
 		t.Errorf("ignored file (-want +got):\n%s", diff)
 	}
+
+	e.m.setFocus(focusFiles)
 	e.press("enter")
-	if got := header(); got.Rows == 1 {
+	want.Files = []string{"v 1 ignored", "M main.go"}
+	if diff := cmp.Diff(want, state()); diff != "" {
+		t.Errorf("after enter on the ignored entry (-want +got):\n%s", diff)
+	}
+	e.press("j")
+	if got := state().Sel; got != "main.go" {
+		t.Errorf("selected %q after j, want main.go", got)
+	}
+	// A click folds it again.
+	for y, line := range strings.Split(e.screen(), "\n") {
+		if strings.Contains(line, "v 1 ignored") {
+			e.m.Update(tea.MouseClickMsg{X: 2, Y: y, Button: tea.MouseLeft})
+		}
+	}
+	if got := state().Files; !cmp.Equal(got, []string{"> 1 ignored"}) {
+		t.Errorf("files after a click on the ignored entry = %q, want it folded", got)
+	}
+
+	e.m.setFocus(focusMain)
+	e.cursorTo(func(r row) bool { return r.kind == rowFile })
+	e.press("enter")
+	if got := state(); got.Rows == 1 {
 		t.Error("enter did not expand the ignored file")
 	}
 }

@@ -136,8 +136,9 @@ vim = true             # vim's modes in the comment box: esc to normal mode, esc
 
 ## Ignore files
 
-Files matching an ignore file start collapsed and are marked ignored, as for vendored or generated
-code; enter expands one. Patterns are gitignore's, read from three files in order, a later match
+Files matching an ignore file, as vendored or generated code, start collapsed and are marked
+ignored; enter expands one. The sidebar folds them under one entry, `N ignored`, which enter or a
+click opens. Its badge counts their threads. Patterns are gitignore's, read from three files in order, a later match
 overriding an earlier one, so `!` can re-include a path:
 
 - `ignore` beside the config file, by default `~/.config/gr/ignore`, for every repository.

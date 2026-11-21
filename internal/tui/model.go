@@ -247,11 +247,13 @@ type model struct {
 	pending string
 	// expanded overrides whether a file is collapsed, keyed by view and path.
 	expanded map[string]bool
-	main     pane
-	split    bool
-	focus    focus
-	mode     mode
-	compose  composer
+	// showIgnored lists the ignored files in the sidebar, under the entry they fold into.
+	showIgnored bool
+	main        pane
+	split       bool
+	focus       focus
+	mode        mode
+	compose     composer
 
 	status    string
 	statusErr bool

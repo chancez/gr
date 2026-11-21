@@ -387,6 +387,7 @@ func (m *model) switchChange(c store.Change) tea.Cmd {
 	m.pendingLoads, m.pendingThread, m.pendingFile, m.comparing = nil, nil, "", nil
 	m.jumps, m.jumpAt, m.returns = nil, 0, map[viewKind]jumpPoint{}
 	m.threadFolds, m.openGaps, m.expanded = map[string]bool{}, map[string]gapShown{}, map[string]bool{}
+	m.showIgnored = false
 	m.contents, m.segments = map[string][]string{}, map[int][]int{}
 	scrolloff, height := m.main.scrolloff, m.main.height
 	m.main = pane{anchor: -1, side: m.main.side, scrolloff: scrolloff, height: height}

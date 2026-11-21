@@ -19,7 +19,7 @@ type navItem struct {
 	sha   string
 	label string
 	view  int
-	// file is the file index in the view, or -1 for the view itself.
+	// file is the file index in the view, -1 for the view itself, or ignoredEntry.
 	file int
 	// prefix is shown before label and kept when label is truncated. File labels are truncated at
 	// the front, so the file name stays visible.
@@ -32,6 +32,9 @@ type navItem struct {
 	// done dims an entry that is marked reviewed, so finished work recedes at a glance.
 	done bool
 }
+
+// ignoredEntry is the file list's entry that the ignored files are listed under.
+const ignoredEntry = -2
 
 // truncateLeft keeps the end of s, marking the cut with "...".
 func truncateLeft(s string, width int) string {
@@ -341,28 +344,86 @@ func (m *model) buildNav() {
 	v := m.views[m.current]
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
+	var ignored []int
 	for fi, f := range v.files {
 		// The message is the commit's header, not a file to list.
 		if isMessage(f) {
 			continue
 		}
-		badge := look.Badge(counts[f.Path()], m.draftThreads(v, f.Path()) > 0, m.fileReviewed(v, fi))
-		if size, ok := diffSize(f); ok {
-			// The file's size leads its badge, so it lines up at the right with the others.
-			if len(badge) > 0 {
-				size = append(size, look.Default(" "))
-			}
-			badge = append(size, badge...)
+		if m.fileIgnored(v, fi) {
+			ignored = append(ignored, fi)
+			continue
 		}
-		m.filesNav.items = append(m.filesNav.items, navItem{
-			prefix: look.StatusLetter(f.Status) + " ", label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
-			done: m.fileReviewed(v, fi),
-		})
+		m.filesNav.items = append(m.filesNav.items, m.fileItem(v, fi, counts))
+	}
+	if len(ignored) > 0 {
+		m.filesNav.items = append(m.filesNav.items, m.ignoredItem(v, ignored, counts))
+		if m.showIgnored {
+			for _, fi := range ignored {
+				m.filesNav.items = append(m.filesNav.items, m.fileItem(v, fi, counts))
+			}
+		}
 	}
 	if keep >= 0 && keep < len(m.filesNav.items) {
 		m.filesNav.pos = keep
 	} else {
 		m.filesNav.pos, m.filesNav.top = 0, 0
+	}
+}
+
+// fileItem is the file list's entry for file fi of view v, counts its open threads by path.
+func (m *model) fileItem(v view, fi int, counts map[string]int) navItem {
+	f := v.files[fi]
+	badge := look.Badge(counts[f.Path()], m.draftThreads(v, f.Path()) > 0, m.fileReviewed(v, fi))
+	if size, ok := diffSize(f); ok {
+		// The file's size leads its badge, so it lines up at the right with the others.
+		if len(badge) > 0 {
+			size = append(size, look.Default(" "))
+		}
+		badge = append(size, badge...)
+	}
+	return navItem{
+		prefix: look.StatusLetter(f.Status) + " ", label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
+		done: m.fileReviewed(v, fi),
+	}
+}
+
+// ignoredItem is the entry the ignored files of view v are listed under, folded unless shown. Its
+// badge counts their open threads, so none goes unseen while they are folded.
+func (m *model) ignoredItem(v view, files []int, counts map[string]int) navItem {
+	threads, drafts, reviewed := 0, false, true
+	for _, fi := range files {
+		path := v.files[fi].Path()
+		threads += counts[path]
+		drafts = drafts || m.draftThreads(v, path) > 0
+		reviewed = reviewed && m.fileReviewed(v, fi)
+	}
+	glyph := look.GlyphFolded
+	if m.showIgnored {
+		glyph = look.GlyphOpen
+	}
+	return navItem{
+		prefix: m.r.th.Glyph(glyph) + " ",
+		label:  fmt.Sprintf("%d ignored", len(files)),
+		badge:  look.Badge(threads, drafts, reviewed),
+		view:   m.current,
+		file:   ignoredEntry,
+		done:   true,
+	}
+}
+
+// toggleIgnored shows or folds the ignored files in the file list, keeping their entry selected.
+func (m *model) toggleIgnored() {
+	m.showIgnored = !m.showIgnored
+	m.buildNav()
+	m.filesNav.show(m.current, ignoredEntry)
+}
+
+// selectFile selects file f of the current view in the file list, or the entry it is folded
+// under.
+func (m *model) selectFile(f int) {
+	if !m.filesNav.show(m.current, f) {
+		m.filesNav.show(m.current, ignoredEntry)
 	}
 }
 
@@ -404,7 +465,7 @@ func (m *model) syncNav() {
 		return
 	}
 	if file := m.main.rows[m.main.cursor].file; file >= 0 {
-		m.filesNav.show(m.current, file)
+		m.selectFile(file)
 	}
 }
 
@@ -576,18 +637,20 @@ func paneTitle(th *look.Theme, title string, width int, focused bool) string {
 // their size in all, as the overview gives the change's, at the right as the entries' sizes are.
 // Without files there is none.
 func (m *model) filesSummary(width int) []look.Span {
-	n := len(m.filesNav.items)
+	// Every file counts, the ignored ones folded out of the list too.
+	var files []git.FileDiff
+	for _, f := range m.views[m.current].files {
+		if !isMessage(f) {
+			files = append(files, f)
+		}
+	}
+	n := len(files)
 	if n == 0 {
 		return nil
 	}
 	count := fmt.Sprintf(" %d files", n)
 	if n == 1 {
 		count = " 1 file"
-	}
-	var files []git.FileDiff
-	v := m.views[m.current]
-	for _, it := range m.filesNav.items {
-		files = append(files, v.files[it.file])
 	}
 	size := filesSize(files)
 	gap := width - ansi.StringWidth(count) - ansi.StringWidth(m.r.th.TextOf(size...))

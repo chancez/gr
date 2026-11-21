@@ -162,7 +162,7 @@ func (m *model) focusFile(f int) {
 			break
 		}
 	}
-	m.filesNav.show(m.current, f)
+	m.selectFile(f)
 }
 
 // advance runs an auto-advance move as a jump, so ctrl+o returns to what was marked, and returns

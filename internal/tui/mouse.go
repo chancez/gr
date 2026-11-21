@@ -141,6 +141,11 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		l.pos = i
+		if f == focusFiles && l.items[i].file == ignoredEntry {
+			// The entry has no view of its own to show: a click unfolds it, as enter does.
+			m.toggleIgnored()
+			return m, nil
+		}
 		return m, m.landed(true)
 	}
 	i := m.main.rowAt(msg.Y - m.mainTop())
