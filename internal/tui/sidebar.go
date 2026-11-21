@@ -275,10 +275,14 @@ func (m *model) viewLabel(v view) string {
 	case viewOverview:
 		return "Overview"
 	case viewDiff:
-		if len(v.files) == 1 {
-			return "All changes (1 file)"
+		label := "All changes"
+		if v.uncommitted {
+			label = "With uncommitted"
 		}
-		return fmt.Sprintf("All changes (%d files)", len(v.files))
+		if len(v.files) == 1 {
+			return label + " (1 file)"
+		}
+		return fmt.Sprintf("%s (%d files)", label, len(v.files))
 	case viewUncommitted:
 		if len(v.files) == 1 {
 			return "Uncommitted (1 file)"

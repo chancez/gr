@@ -125,7 +125,7 @@ func (m *model) refreshCmd() tea.Cmd {
 		change, tip, baseTip, uncommitted = m.data.change, m.data.tip, m.data.baseTip, m.data.uncommitted
 	}
 	// Shown, a file changed again is seen, which git's status does not tell.
-	watching := m.current < len(m.views) && m.views[m.current].kind == viewUncommitted
+	watching := m.current < len(m.views) && (m.views[m.current].kind == viewUncommitted || m.views[m.current].uncommitted)
 	return func() tea.Msg {
 		v, err := w.Version(ctx)
 		if err != nil {

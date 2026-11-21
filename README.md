@@ -71,7 +71,7 @@ change's, which the TUI offers to open.
 
 Where a branch is checked out in any worktree, what is uncommitted there, staged or not and
 untracked files included, shows after its commits as Uncommitted, to read but not to review. The
-overview counts it.
+overview counts it, and `U` shows all changes with it on top.
 
 The sidebar lists the overview, the changes since your last review once the branch has moved, each
 commit, and the whole diff, with the selected one's files below. The overview is the conversation:
@@ -97,6 +97,7 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |
 | `W` | hide/show whitespace changes; a file's menu hides them in that file alone |
+| `U` | in all changes, include or leave out what is uncommitted; read-only while included |
 | `B` | pick another base branch for the change, as for a stacked branch: type to filter, click or enter to pick |
 | `w`, `ctrl+t` | switch to another change of this repository, or open any repository's in a new tab |
 | `ctrl+w`, `ctrl+pgdn` `ctrl+pgup`, `alt+1`..`9` | close the tab, next or previous tab, go to a tab |

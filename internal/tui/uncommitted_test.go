@@ -83,3 +83,65 @@ func TestUncommitted(t *testing.T) {
 		t.Errorf("worktree cleaned shows %q", got)
 	}
 }
+
+// U shows all changes with what is uncommitted on top, read-only and without the head's threads,
+// and again only what is committed.
+func TestAllChangesWithUncommitted(t *testing.T) {
+	e := newTUIEnv(t)
+	e.openNav("All changes")
+	e.press("l")
+	e.cursorTo(addedLine)
+	e.press("c")
+	e.typeText("on the head")
+	e.pressRun("ctrl+s")
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hey\")", "}"), "new.go", "package main\n")
+	e.tick()
+
+	type shown struct {
+		Label   string
+		Added   []string
+		Threads int
+		Status  string
+	}
+	look := func() shown {
+		v := e.m.views[e.m.current]
+		s := shown{Label: e.m.viewLabel(v)}
+		for _, f := range v.files {
+			for _, h := range f.Hunks {
+				for _, l := range h.Lines {
+					if l.Kind == git.LineAdded {
+						s.Added = append(s.Added, l.Text)
+					}
+				}
+			}
+		}
+		for i := range e.m.data.threads {
+			if _, ok := e.m.data.locationIn(&e.m.data.threads[i], v); ok {
+				s.Threads++
+			}
+		}
+		e.m.status = ""
+		e.cursorTo(addedLine)
+		e.press("c")
+		s.Status = e.m.status
+		e.press("esc")
+		return s
+	}
+	committed := shown{Label: "All changes (1 file)", Added: []string{"\tprintln(\"hello\")"}, Threads: 1}
+	if diff := cmp.Diff(committed, look()); diff != "" {
+		t.Errorf("all changes (-want +got):\n%s", diff)
+	}
+	e.press("U")
+	want := shown{
+		Label:  "With uncommitted (2 files)",
+		Added:  []string{"\tprintln(\"hey\")", "package main"},
+		Status: "uncommitted changes are read-only; U shows only what is committed",
+	}
+	if diff := cmp.Diff(want, look()); diff != "" {
+		t.Errorf("all changes with uncommitted (-want +got):\n%s", diff)
+	}
+	e.press("U")
+	if diff := cmp.Diff(committed, look()); diff != "" {
+		t.Errorf("all changes again (-want +got):\n%s", diff)
+	}
+}

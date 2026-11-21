@@ -67,6 +67,11 @@ func (s *Service) Uncommitted(ctx context.Context, change store.Change) (Uncommi
 	return u, err
 }
 
+// WithUncommitted is a revision's whole diff with what is uncommitted on top, with opts.
+func (s *Service) WithUncommitted(ctx context.Context, rev store.Revision, u Uncommitted, opts git.DiffOptions) ([]git.FileDiff, error) {
+	return s.diff(ctx, rev.BaseSHA, u.Tree, opts)
+}
+
 // UncommittedFiles is the diff of what is uncommitted, with opts.
 func (s *Service) UncommittedFiles(ctx context.Context, u Uncommitted, opts git.DiffOptions) ([]git.FileDiff, error) {
 	return s.diff(ctx, u.Head, u.Tree, opts)

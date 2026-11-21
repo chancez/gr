@@ -29,6 +29,8 @@ type view struct {
 	files  []git.FileDiff
 	// newRev is the revision the new side of files is read from, for folded context.
 	newRev string
+	// uncommitted is set on the whole diff shown with what is uncommitted on top.
+	uncommitted bool
 }
 
 func (v view) key() string {
@@ -49,6 +51,10 @@ func (v view) readOnlyReason() string {
 		return "the interdiff is read-only; comment on the files or commits"
 	case viewUncommitted:
 		return "uncommitted changes are read-only; commit them to review them"
+	case viewDiff:
+		if v.uncommitted {
+			return "uncommitted changes are read-only; U shows only what is committed"
+		}
 	}
 	return ""
 }
@@ -66,6 +72,14 @@ func buildViews(d *changeData) []view {
 	}
 	if u := d.uncommitted; len(u.Files) > 0 {
 		views = append(views, view{kind: viewUncommitted, files: u.Files, newRev: u.Tree})
+	}
+	if d.showsUncommitted() {
+		files := d.diffUncommitted
+		if files == nil {
+			// Until it loads, the committed diff stands in.
+			files = d.diffFiles
+		}
+		return append(views, view{kind: viewDiff, files: files, newRev: d.uncommitted.Tree, uncommitted: true})
 	}
 	return append(views, view{kind: viewDiff, files: d.diffFiles, newRev: head})
 }
@@ -486,6 +500,10 @@ func (d *changeData) locationIn(t *review.ThreadView, v view) (store.Location, b
 	case viewCommit:
 		return t.Location, t.Location.Scope == store.ScopeCommit && t.Location.Commit == v.commit.SHA
 	case viewDiff:
+		// Placed at the head, a thread's lines may not be where they are with what is uncommitted.
+		if v.uncommitted {
+			return store.Location{}, false
+		}
 		if t.Location.Scope == store.ScopeDiff {
 			return t.Location, true
 		}

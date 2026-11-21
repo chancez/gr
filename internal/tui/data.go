@@ -37,9 +37,11 @@ type changeData struct {
 	commits     []git.Commit
 	commitFiles map[string][]git.FileDiff
 	diffFiles   []git.FileDiff
-	// uncommitted is what the worktree the branch is checked out in has uncommitted.
-	uncommitted review.Uncommitted
-	loaded      map[string]bool
+	// uncommitted is what the worktree the branch is checked out in has uncommitted, and
+	// diffUncommitted the whole diff with it on top, when shown so.
+	uncommitted     review.Uncommitted
+	diffUncommitted []git.FileDiff
+	loaded          map[string]bool
 	// ignored matches the files the ignore files leave collapsed.
 	ignored *ignore.Matcher
 	// threadFiles are the diffs, of just the thread's file, that excerpts are cut from.
@@ -78,11 +80,18 @@ type diffOptions struct {
 	ignoreSpace bool
 	// flipped are the files, by path, shown the other way.
 	flipped map[string]bool
+	// withUncommitted shows the whole diff with what is uncommitted on top, when there is any.
+	withUncommitted bool
 }
 
 // forFile is how the file at path is diffed.
 func (o *diffOptions) forFile(path string) git.DiffOptions {
 	return git.DiffOptions{IgnoreAllSpace: o.ignoreSpace != o.flipped[path]}
+}
+
+// showsUncommitted reports whether the whole diff is shown with what is uncommitted on top.
+func (d *changeData) showsUncommitted() bool {
+	return d.opts.withUncommitted && len(d.uncommitted.Files) > 0
 }
 
 // draft returns the viewer's draft review, if any.
@@ -270,7 +279,11 @@ func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) v
 		case viewCommit:
 			files, err = svc.CommitFiles(ctx, v.commit, opts)
 		case viewDiff:
-			files, err = svc.RevisionFiles(ctx, d.revision, opts)
+			if d.showsUncommitted() {
+				files, err = svc.WithUncommitted(ctx, d.revision, d.uncommitted, opts)
+			} else {
+				files, err = svc.RevisionFiles(ctx, d.revision, opts)
+			}
 		case viewInterdiff:
 			files, exact, err = svc.Interdiff(ctx, d.interdiffFrom, d.interdiffTo, opts)
 		case viewUncommitted:
@@ -300,7 +313,7 @@ func loadView(ctx context.Context, svc *review.Service, d *changeData, v view) v
 			}
 		}
 	}
-	if v.kind == viewDiff {
+	if v.kind == viewDiff && !d.showsUncommitted() {
 		msg.placements, msg.err = placeInDiff(ctx, svc, d)
 	}
 	return msg
@@ -315,7 +328,11 @@ func (d *changeData) apply(msg viewLoadedMsg) {
 	}
 	switch msg.key {
 	case view{kind: viewDiff}.key():
-		d.diffFiles, d.diffPlacements = msg.files, msg.placements
+		if d.showsUncommitted() {
+			d.diffUncommitted = msg.files
+		} else {
+			d.diffFiles, d.diffPlacements = msg.files, msg.placements
+		}
 	case view{kind: viewInterdiff}.key():
 		d.interdiff, d.interdiffExact = msg.files, msg.exact
 	case view{kind: viewUncommitted}.key():
@@ -335,6 +352,11 @@ func (d *changeData) carryLoaded(old *changeData) {
 	sameRevision := old.revision.ID == d.revision.ID
 	for key := range old.loaded {
 		switch {
+		case key == view{kind: viewDiff}.key() && d.showsUncommitted():
+			if !sameRevision || old.uncommitted.Tree != d.uncommitted.Tree {
+				continue
+			}
+			d.diffUncommitted = old.diffUncommitted
 		case key == view{kind: viewDiff}.key():
 			if !sameRevision {
 				continue

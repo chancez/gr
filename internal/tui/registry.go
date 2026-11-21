@@ -274,6 +274,26 @@ var (
 	}
 )
 
+// Showing the whole diff with what is uncommitted on top, or without, from it in the sidebar and from
+// its files. Each is offered only where it changes something.
+func uncommittedAction[S viewLike](title string, on bool) *interact.Action[*model, S] {
+	return &interact.Action[*model, S]{
+		Title: title,
+		Help:  title + " in all changes",
+		Applies: func(m *model, s S) bool {
+			return s.shown().view.kind == viewDiff && m.data.opts.withUncommitted != on && len(m.data.uncommitted.Files) > 0
+		},
+		Run: func(m *model, _ S) tea.Cmd { m.toggleUncommitted(); return nil },
+	}
+}
+
+var (
+	actWithUncommitted        = uncommittedAction[diffSubject]("include uncommitted", true)
+	actWithoutUncommitted     = uncommittedAction[diffSubject]("only committed", false)
+	actFileWithUncommitted    = uncommittedAction[fileSubject]("include uncommitted", true)
+	actFileWithoutUncommitted = uncommittedAction[fileSubject]("only committed", false)
+)
+
 // Hiding whitespace changes in a file, or in every file, from the file's menu. Each is offered only
 // where it changes something, so a menu says what a click does.
 var (
@@ -754,7 +774,7 @@ var (
 
 func init() {
 	overviewKind = interact.NewKind(func(overviewSubject) string { return "Overview" }, actFilterThreads)
-	diffKind = interact.NewKind[*model, diffSubject](func(diffSubject) string { return "All changes" })
+	diffKind = interact.NewKind(func(diffSubject) string { return "All changes" }, actWithUncommitted, actWithoutUncommitted)
 	interdiffKind = interact.NewKind[*model, interdiffSubject](func(interdiffSubject) string { return "Changes since" })
 	uncommittedKind = interact.NewKind[*model, uncommittedSubject](func(uncommittedSubject) string { return "Uncommitted" })
 	commitKind = interact.NewKind(func(s commitSubject) string { return "Commit " + shortSHA(s.view.commit.SHA) },
@@ -763,7 +783,7 @@ func init() {
 		actCommentOnChange, actSubmit, actDiscardDraft, actOpenNewWork)
 
 	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor,
-		actHideFileSpace, actShowFileSpace, actHideAllSpace, actShowAllSpace)
+		actHideFileSpace, actShowFileSpace, actHideAllSpace, actShowAllSpace, actFileWithUncommitted, actFileWithoutUncommitted)
 
 	ignoredKind = interact.NewKind[*model, ignoredSubject](func(ignoredSubject) string { return "Ignored files" })
 
@@ -837,6 +857,10 @@ func init() {
 	fileKind.Bind(actOpenFileInEditor, "E", "open in $EDITOR, read-only, as it is here", "E")
 	fileKind.Bind(actHideAllSpace, "W", "hide/show whitespace changes", "W")
 	fileKind.Bind(actShowAllSpace, "", "", "W")
+	fileKind.Bind(actFileWithUncommitted, "U", "include/exclude uncommitted changes", "U")
+	fileKind.Bind(actFileWithoutUncommitted, "", "", "U")
+	diffKind.Bind(actWithUncommitted, "U", "include/exclude uncommitted changes", "U")
+	diffKind.Bind(actWithoutUncommitted, "", "", "U")
 
 	writable(lineKind, actCommentOnLine, "c", "comment on the line or selection", "c")
 	messageLineKind.Bind(actCommentOnLine, "c", "comment on the message's line or selection", "c")

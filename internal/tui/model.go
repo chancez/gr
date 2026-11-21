@@ -815,8 +815,9 @@ func (m *model) setDiffOptions(opts *diffOptions) {
 
 // toggleIgnoreSpace ignores whitespace in every file of the change, or in none.
 func (m *model) toggleIgnoreSpace() {
+	// Every file the same way: none is set apart any more.
 	on := !m.diffOptions().ignoreSpace
-	m.setDiffOptions(&diffOptions{ignoreSpace: on})
+	m.setDiffOptions(&diffOptions{ignoreSpace: on, withUncommitted: m.diffOptions().withUncommitted})
 	if on {
 		m.setStatus("hiding whitespace changes")
 	} else {
@@ -840,11 +841,23 @@ func (m *model) flipFileSpace(f git.FileDiff) {
 		flipped[f.Path()] = true
 	}
 	hide := !m.ignoresSpace(f)
-	m.setDiffOptions(&diffOptions{ignoreSpace: o.ignoreSpace, flipped: flipped})
+	m.setDiffOptions(&diffOptions{ignoreSpace: o.ignoreSpace, flipped: flipped, withUncommitted: o.withUncommitted})
 	if hide {
 		m.setStatus("hiding whitespace changes in %s", f.Path())
 	} else {
 		m.setStatus("showing whitespace changes in %s", f.Path())
+	}
+}
+
+// toggleUncommitted shows the whole diff with what is uncommitted on top, or without.
+func (m *model) toggleUncommitted() {
+	o := *m.diffOptions()
+	o.withUncommitted = !o.withUncommitted
+	m.setDiffOptions(&o)
+	if o.withUncommitted {
+		m.setStatus("all changes include what is uncommitted, read-only")
+	} else {
+		m.setStatus("all changes show only what is committed")
 	}
 }
 

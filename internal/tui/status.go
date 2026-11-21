@@ -89,6 +89,9 @@ func (m *model) renderStatus() string {
 	if d.opts.ignoreSpace {
 		left = append(left, look.Mode(" whitespace hidden"))
 	}
+	if d.showsUncommitted() {
+		left = append(left, look.Mode(" with uncommitted"))
+	}
 	if m.split {
 		left = append(left, look.Text(" split"))
 	}
