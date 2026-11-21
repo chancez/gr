@@ -101,6 +101,9 @@ const (
 	// rowBoxTop is the top border of a commit's header box with no message, whose subject is
 	// otherwise its top.
 	rowBoxTop
+	// rowViewBar heads a file view other than a commit's: what it shows, and whether it is
+	// read-only. It stays pinned, as a commit's subject does.
+	rowViewBar
 )
 
 // row is one selectable or static block of the main pane.
@@ -151,7 +154,9 @@ func (r row) covers(id string) (old, new bool) {
 	return has(r.coverOld), has(r.coverNew)
 }
 
-func (r row) selectable() bool { return r.kind != rowText && r.kind != rowBoxTop }
+func (r row) selectable() bool {
+	return r.kind != rowText && r.kind != rowBoxTop && r.kind != rowViewBar
+}
 
 // key identifies a row across reloads, so the cursor stays put when data refreshes.
 func (r row) key(files []git.FileDiff) string {
@@ -292,6 +297,9 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 	}
 
 	msg := -1
+	if v.kind != viewCommit {
+		rows = append(rows, row{kind: rowViewBar, file: -1})
+	}
 	if v.kind == viewCommit {
 		// The message is the commit header's own: its lines are rows in the header's box, each
 		// followed by its threads, rather than a file of added lines. Its subject is the box's top.

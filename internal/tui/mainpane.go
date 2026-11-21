@@ -70,8 +70,8 @@ func (m *model) rowOptions(v view) rowOptions {
 	}
 }
 
-// stickyRows are the header rows pinned over the top of the diff, top down: a commit's header once
-// its box has scrolled out of view, then the header of the file the top of the diff is in once
+// stickyRows are the header rows pinned over the top of the diff, top down: a commit's header, or
+// another view's bar, once it has scrolled out of view, then the header of the file the top of the diff is in once
 // that header has, as GitHub's file headers do. A change still loading has none.
 func (m *model) stickyRows() []int {
 	if m.main.reader || m.data == nil {
@@ -79,6 +79,9 @@ func (m *model) stickyRows() []int {
 	}
 	var out []int
 	if h, ok := m.stickyCommit(); ok {
+		out = append(out, h)
+	}
+	if h, ok := m.stickyViewBar(); ok {
 		out = append(out, h)
 	}
 	if h, ok := m.stickyFile(len(out)); ok {
@@ -108,6 +111,15 @@ func (m *model) stickyCommit() (int, bool) {
 		return 0, false
 	}
 	return h, p.starts[h] < p.offset
+}
+
+// stickyViewBar is a file view's bar, once it has scrolled out of view.
+func (m *model) stickyViewBar() (int, bool) {
+	p := &m.main
+	if len(p.rows) == 0 || p.rows[0].kind != rowViewBar || len(p.starts) == 0 {
+		return 0, false
+	}
+	return 0, p.starts[0] < p.offset
 }
 
 // isSubject reports whether r is a commit message's first line.

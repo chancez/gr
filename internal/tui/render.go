@@ -153,6 +153,8 @@ func (r *renderer) renderRow(d *changeData, v view, rw row, width int, state row
 		return rw.text(width)
 	case rowBoxTop:
 		return []string{r.boxEdge(width)}
+	case rowViewBar:
+		return []string{r.renderViewBar(d, v, width)}
 	case rowCommit:
 		return r.renderCommit(v, width, state)
 	case rowFile:
@@ -482,6 +484,30 @@ func (r *renderer) renderSubject(v view, l git.Line, covered []cover, width int,
 		margin = r.th.Render(surf, look.OnCommented(look.Default(" ")))
 	}
 	return r.th.Draw(surf, 1) + margin + line + r.th.Draw(surf, 2)
+}
+
+// renderViewBar draws a file view's bar: what it shows, from where to where, its size, and, when
+// it takes no comments or marks, why not.
+func (r *renderer) renderViewBar(d *changeData, v view, width int) string {
+	var spans []look.Span
+	switch {
+	case v.kind == viewInterdiff:
+		spans = []look.Span{look.Heading(interdiffLabel(d))}
+	case v.kind == viewUncommitted:
+		spans = []look.Span{look.Heading("Uncommitted"), look.Muted("  on "), look.SHA(d.uncommitted.Head).Short()}
+	case v.uncommitted:
+		spans = []look.Span{look.Heading("All changes with uncommitted"), look.Muted("  "), look.SHA(d.revision.BaseSHA).Short(),
+			look.Muted("..worktree")}
+	default:
+		spans = []look.Span{look.Heading("All changes"), look.Muted("  "), look.SHA(d.revision.BaseSHA).Short(),
+			look.Muted(".."), look.SHA(d.revision.HeadSHA).Short()}
+	}
+	spans = append(append(spans, look.Default("  ")), filesSize(v.files)...)
+	if reason := v.readOnlyReason(); reason != "" {
+		_, hint, _ := strings.Cut(reason, "; ")
+		spans = append(spans, look.Default("  "), look.Warning("read-only"), look.Muted(": "+hint))
+	}
+	return r.th.DrawCut(look.HeadingBar, width, append([]look.Span{look.Default(" ")}, spans...)...)
 }
 
 // commentHeader is a comment's author and time, and whether it is a draft.

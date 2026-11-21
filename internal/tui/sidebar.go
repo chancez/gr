@@ -291,15 +291,20 @@ func (m *model) viewLabel(v view) string {
 	case viewCommit:
 		return shortSHA(v.commit.SHA) + " " + v.commit.Subject()
 	case viewInterdiff:
-		if to := m.data.interdiffTo; to.ID != m.data.revision.ID {
-			return fmt.Sprintf("Rev %d to %d", m.data.interdiffFrom.Seq, to.Seq)
-		}
-		if m.data.interdiffFromReview {
-			return fmt.Sprintf("Since your review (rev %d)", m.data.interdiffFrom.Seq)
-		}
-		return fmt.Sprintf("Since rev %d", m.data.interdiffFrom.Seq)
+		return interdiffLabel(m.data)
 	}
 	return ""
+}
+
+// interdiffLabel names the revisions the interdiff compares.
+func interdiffLabel(d *changeData) string {
+	if to := d.interdiffTo; to.ID != d.revision.ID {
+		return fmt.Sprintf("Rev %d to %d", d.interdiffFrom.Seq, to.Seq)
+	}
+	if d.interdiffFromReview {
+		return fmt.Sprintf("Since your review (rev %d)", d.interdiffFrom.Seq)
+	}
+	return fmt.Sprintf("Since rev %d", d.interdiffFrom.Seq)
 }
 
 // draftThreads counts the viewer's draft threads in a view, on one path or, if path is empty, on
@@ -549,8 +554,12 @@ func (m *model) mainHeader(width int) string {
 		// Prev and Next, as GitHub's commit view has, greyed where there is no commit that way.
 		controls = m.controls("title", modeNormal, theApp.Target(appSubject{}),
 			prevCommit.disabledIf(at <= 1), nextCommit.disabledIf(at >= of))
-	case v.kind != viewOverview && len(v.files) > 0:
-		size = filesSize(v.files)
+	case len(v.files) > 0:
+		// The view's bar names it, with its size: the title says only where it is, as a commit's.
+		label = fmt.Sprintf(" %d files ", len(v.files))
+		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].file >= 0 {
+			label = fmt.Sprintf(" File %d of %d ", m.main.rows[c].file+1, len(v.files))
+		}
 	}
 	title := ""
 	if m.needsLoad(v) {

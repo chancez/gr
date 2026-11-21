@@ -145,3 +145,44 @@ func TestAllChangesWithUncommitted(t *testing.T) {
 		t.Errorf("all changes again (-want +got):\n%s", diff)
 	}
 }
+
+// Views other than a commit's are headed by a bar saying what they show and whether they take
+// comments, pinned once it scrolls away.
+func TestViewBar(t *testing.T) {
+	e := newTUIEnv(t)
+	e.repo.Write("main.go", gittest.Lines("package main", "", "func main() {", "\tprintln(\"hey\")", "}"),
+		"long.go", gittest.Lines(gittest.Numbered(100)...))
+	e.tick()
+	head := shortSHA(e.m.data.revision.HeadSHA)
+	type seen struct {
+		Bar    string
+		Pinned bool
+	}
+	look := func(label string) seen {
+		t.Helper()
+		e.openNav(label)
+		e.press("l")
+		top := func() string {
+			line := strings.Split(e.screen(), "\n")[1]
+			_, right, _ := strings.Cut(line, "|")
+			return strings.TrimSpace(right)
+		}
+		s := seen{Bar: top()}
+		e.press("G")
+		s.Pinned = top() == s.Bar && e.m.main.offset > 0
+		return s
+	}
+	got := []seen{look("All changes"), look("Uncommitted")}
+	want := []seen{
+		{Bar: "All changes  " + shortSHA(e.m.data.revision.BaseSHA) + ".." + head + "  +1 -1"},
+		{Bar: "Uncommitted  on " + head + "  +101 -1  read-only: commit them to review them", Pinned: true},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("view bars (-want +got):\n%s", diff)
+	}
+	// The bar names the view, so its title says only where the cursor is.
+	_, title, _ := strings.Cut(strings.Split(e.screen(), "\n")[0], "|")
+	if !strings.HasPrefix(title, " File 2 of 2 ") {
+		t.Errorf("title = %q, want it to start with the cursor's file of the view's", title)
+	}
+}

@@ -542,11 +542,11 @@ func TestExpandReviewedFile(t *testing.T) {
 	e.cursorTo(func(r row) bool { return r.kind == rowFile })
 	e.pressRun("m")
 	e.cursorTo(func(r row) bool { return r.kind == rowFile })
-	if len(e.m.main.rows) != 1 {
-		t.Fatalf("collapsed view has %d rows, want only the file header", len(e.m.main.rows))
+	if len(e.m.main.rows) != 2 {
+		t.Fatalf("collapsed view has %d rows, want only the view's bar and the file header", len(e.m.main.rows))
 	}
 	e.press("enter")
-	if len(e.m.main.rows) == 1 {
+	if len(e.m.main.rows) == 2 {
 		t.Error("enter did not expand the reviewed file")
 	}
 }
@@ -580,7 +580,8 @@ func TestIgnoredFile(t *testing.T) {
 			Sel:     e.m.filesNav.items[e.m.filesNav.pos].label,
 		}
 	}
-	want := result{Rows: 1, Ignored: true, Header: true, Files: []string{"> 1 ignored"}, Sel: "1 ignored"}
+	// The view's bar, and the file's header.
+	want := result{Rows: 2, Ignored: true, Header: true, Files: []string{"> 1 ignored"}, Sel: "1 ignored"}
 	if diff := cmp.Diff(want, state()); diff != "" {
 		t.Errorf("ignored file (-want +got):\n%s", diff)
 	}
