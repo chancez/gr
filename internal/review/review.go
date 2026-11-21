@@ -33,7 +33,12 @@ type Service struct {
 	beforeThreadWrite func()
 	// stale is set to read changes as recorded, without asking git whether they moved or landed.
 	stale bool
+	// globalIgnore is the user's ignore file, read before the repository's.
+	globalIgnore string
 }
+
+// SetGlobalIgnore sets the user's ignore file, whose patterns apply to every repository.
+func (s *Service) SetGlobalIgnore(path string) { s.globalIgnore = path }
 
 // ReadRecorded makes the service read changes as the database has them: Sync and MarkLanded look
 // at nothing in git, and record nothing. It is for commands that only read, where git's word is not

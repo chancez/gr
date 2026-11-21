@@ -49,6 +49,8 @@ type app struct {
 	notice string
 	// rename is the change of the branch the one opened was copied from, for the TUI to offer.
 	rename *review.Rename
+	// globalIgnore is the user's ignore file, for every service opened.
+	globalIgnore string
 }
 
 // Execute runs gr with os.Args and returns the exit code.
@@ -114,7 +116,12 @@ commands only find one, and take a change number such as 4 directly.`,
 			if err != nil {
 				return nil, err
 			}
-			return review.Open(ctx, a.store, g, svc.Author())
+			s, err := review.Open(ctx, a.store, g, svc.Author())
+			if err != nil {
+				return nil, err
+			}
+			s.SetGlobalIgnore(a.globalIgnore)
+			return s, nil
 		}
 		return tui.Run(cmd.Context(), svc, change, opts)
 	}
@@ -221,6 +228,10 @@ func (a *app) service(ctx context.Context) (*review.Service, error) {
 	if !a.sync {
 		a.svc.ReadRecorded()
 	}
+	if a.globalIgnore, err = config.IgnorePath(); err != nil {
+		return nil, err
+	}
+	a.svc.SetGlobalIgnore(a.globalIgnore)
 	return a.svc, nil
 }
 

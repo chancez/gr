@@ -64,6 +64,16 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "gr", "config.toml"), nil
 }
 
+// IgnorePath is the global ignore file, ignore beside the config file, whose patterns apply to
+// every repository.
+func IgnorePath() (string, error) {
+	path, err := DefaultPath()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(filepath.Dir(path), "ignore"), nil
+}
+
 // Load reads the config file at path. No file is no settings. A key gr does not know is an error,
 // so a misspelled setting is not silently ignored.
 func Load(path string) (Config, error) {
