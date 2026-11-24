@@ -40,6 +40,9 @@ type app struct {
 	newTab tabLabel
 	// drag is the tab being dragged along the tab bar, or -1.
 	drag int
+	// parked are the ids of tabs not shown whose tick came, which is given them again once shown,
+	// so only the tab shown runs git each second.
+	parked map[int]bool
 }
 
 // tabLabel is where a tab's label is on the tab bar, from x, w wide, and its close button, from
@@ -85,7 +88,7 @@ type moveTabMsg struct {
 func tabCmd(msg tea.Msg) tea.Cmd { return func() tea.Msg { return msg } }
 
 func newApp(ctx context.Context, opts Options, first *model) *app {
-	a := &app{ctx: ctx, opts: opts, drag: -1}
+	a := &app{ctx: ctx, opts: opts, drag: -1, parked: map[int]bool{}}
 	a.add(first)
 	return a
 }
@@ -162,6 +165,21 @@ func (a *app) tabSize() tea.WindowSizeMsg {
 }
 
 func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := a.update(msg)
+	return a, tea.Batch(cmd, a.unpark())
+}
+
+// unpark gives the tab shown the tick it was not given while hidden.
+func (a *app) unpark() tea.Cmd {
+	id := a.ids[a.active]
+	if !a.parked[id] {
+		return nil
+	}
+	delete(a.parked, id)
+	return a.send(a.active, tickMsg{})
+}
+
+func (a *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tabMsg:
 		i := a.tab(msg.id)
@@ -170,6 +188,11 @@ func (a *app) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		switch inner := msg.msg.(type) {
+		case tickMsg:
+			if i != a.active {
+				a.parked[msg.id] = true
+				return a, nil
+			}
 		case newTabMsg:
 			return a, a.open(inner)
 		case closeTabMsg:
@@ -286,6 +309,7 @@ func (a *app) close(i int) tea.Cmd {
 	t := a.tabs[i]
 	t.savePlace()
 	t.close()
+	delete(a.parked, a.ids[i])
 	a.tabs = append(a.tabs[:i], a.tabs[i+1:]...)
 	a.ids = append(a.ids[:i], a.ids[i+1:]...)
 	if a.active >= i && a.active > 0 {

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -122,6 +123,39 @@ func TestTabs(t *testing.T) {
 	}
 	// Bubble Tea draws once more before it quits.
 	e.a.View()
+}
+
+// A hidden tab is not refreshed until it is shown.
+func TestHiddenTabsDoNotRefresh(t *testing.T) {
+	e := newTabsEnv(t)
+	e.repo.Git("branch", "other")
+	target, err := e.svc.ParseTarget(t.Context(), "other", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, _, err := e.svc.EnsureChange(t.Context(), target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.a.Update(tabMsg{id: e.a.ids[0], msg: newTabMsg{svc: e.svc, change: other}})
+	first := e.a.tabs[0]
+
+	type seen struct {
+		Refreshing bool
+		Parked     map[int]bool
+	}
+	var got []seen
+	e.a.Update(tabMsg{id: e.a.ids[0], msg: tickMsg{}})
+	got = append(got, seen{Refreshing: first.polling, Parked: maps.Clone(e.a.parked)})
+	e.press("ctrl+pgup")
+	got = append(got, seen{Refreshing: first.polling, Parked: maps.Clone(e.a.parked)})
+	want := []seen{
+		{Refreshing: false, Parked: map[int]bool{e.a.ids[0]: true}},
+		{Refreshing: true, Parked: map[int]bool{}},
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("hidden tab's tick (-want +got):\n%s", diff)
+	}
 }
 
 // ctrl+t lists the open changes of the other repositories gr has reviewed, by repository, and
