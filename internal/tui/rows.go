@@ -213,6 +213,8 @@ type rowOptions struct {
 	reviewed func(file int) bool
 	// ignored reports whether the ignore files match a file.
 	ignored func(file int) bool
+	// hidden reports whether a file is hidden from the review, which leaves it out.
+	hidden func(file int) bool
 	// gapShown is how much of a fold of unchanged lines is open.
 	gapShown func(file, gap int) gapShown
 	// content returns a file's new-side lines, for open folds.
@@ -323,7 +325,7 @@ func buildRows(d *changeData, v view, opts rowOptions) []row {
 		}
 	}
 	for fi := range v.files {
-		if fi == msg {
+		if fi == msg || opts.hidden != nil && opts.hidden(fi) {
 			continue
 		}
 		f := &v.files[fi]

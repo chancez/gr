@@ -43,8 +43,10 @@ type interdiffSubject struct{ inView }
 type uncommittedSubject struct{ inView }
 type commitSubject struct{ inView }
 
-// ignoredSubject is the file list's entry the ignored files of a view fold into.
+// ignoredSubject and hiddenSubject are the file list's entries the ignored files and the hidden
+// files of a view fold into.
 type ignoredSubject struct{ inView }
+type hiddenSubject struct{ inView }
 
 // changeSubject is the change under review.
 type changeSubject struct{}
@@ -241,6 +243,29 @@ var (
 		Title: "show or fold",
 		Help:  "show or fold the ignored files",
 		Run:   func(m *model, _ ignoredSubject) tea.Cmd { m.toggleIgnored(); return nil },
+	}
+	actToggleHidden = &interact.Action[*model, hiddenSubject]{
+		Title: "show or fold",
+		Help:  "show or fold the hidden files",
+		Run:   func(m *model, _ hiddenSubject) tea.Cmd { m.toggleHidden(); return nil },
+	}
+	actUnhideAll = &interact.Action[*model, hiddenSubject]{
+		Title: "unhide all",
+		Help:  "unhide every file, clearing the filter",
+		Run:   func(m *model, _ hiddenSubject) tea.Cmd { m.unhideAll(); return nil },
+	}
+	// A file is hidden from the review in every view, and shown again from the file list.
+	actHideFile = &interact.Action[*model, fileSubject]{
+		Title:   "hide file",
+		Help:    "hide the file from the review",
+		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && !m.fileHidden(s.view, s.file) },
+		Run:     func(m *model, s fileSubject) tea.Cmd { m.setHidden([]string{s.diff.Path()}, true); return nil },
+	}
+	actUnhideFile = &interact.Action[*model, fileSubject]{
+		Title:   "unhide file",
+		Help:    "show the hidden file again",
+		Applies: func(m *model, s fileSubject) bool { return m.fileHidden(s.view, s.file) },
+		Run:     func(m *model, s fileSubject) tea.Cmd { m.setHidden([]string{s.diff.Path()}, false); return nil },
 	}
 	actOpenFile = &interact.Action[*model, fileSubject]{
 		Title: "open",
@@ -753,6 +778,7 @@ var (
 	changeKind         *interact.Kind[*model, changeSubject]
 	fileKind           *interact.Kind[*model, fileSubject]
 	ignoredKind        *interact.Kind[*model, ignoredSubject]
+	hiddenKind         *interact.Kind[*model, hiddenSubject]
 	lineKind           *interact.Kind[*model, rowSubject]
 	messageLineKind    *interact.Kind[*model, rowSubject]
 	hunkKind           *interact.Kind[*model, rowSubject]
@@ -782,10 +808,11 @@ func init() {
 	changeKind = interact.NewKind(func(changeSubject) string { return "Change" },
 		actCommentOnChange, actSubmit, actDiscardDraft, actOpenNewWork)
 
-	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor,
+	fileKind = interact.NewKind(fileLabel, actMarkFileReviewed, actCommentOnFile, actOpenFileInEditor, actHideFile, actUnhideFile,
 		actHideFileSpace, actShowFileSpace, actHideAllSpace, actShowAllSpace, actFileWithUncommitted, actFileWithoutUncommitted)
 
 	ignoredKind = interact.NewKind[*model, ignoredSubject](func(ignoredSubject) string { return "Ignored files" })
+	hiddenKind = interact.NewKind(func(hiddenSubject) string { return "Hidden files" }, actUnhideAll)
 
 	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor,
 		actCollapseGap)
@@ -855,6 +882,9 @@ func init() {
 	writable(fileKind, actCommentOnFile, "c/C", "comment on the file", "c", "C")
 	writable(fileKind, actMarkFileReviewed, "m", "mark the file reviewed", "m")
 	fileKind.Bind(actOpenFileInEditor, "E", "open in $EDITOR, read-only, as it is here", "E")
+	fileKind.Bind(actHideFile, "-", "hide/unhide the file", "-")
+	fileKind.Bind(actUnhideFile, "", "", "-")
+	hiddenKind.Bind(actUnhideAll, "-", "unhide all", "-")
 	fileKind.Bind(actHideAllSpace, "W", "hide/show whitespace changes", "W")
 	fileKind.Bind(actShowAllSpace, "", "", "W")
 	fileKind.Bind(actFileWithUncommitted, "U", "include/exclude uncommitted changes", "U")
@@ -1030,6 +1060,7 @@ var (
 	sidebarCommits     *interact.Place[*model, commitSubject]
 	sidebarFileList    *interact.Place[*model, fileSubject]
 	sidebarIgnored     *interact.Place[*model, ignoredSubject]
+	sidebarHidden      *interact.Place[*model, hiddenSubject]
 	commitHeader       *interact.Place[*model, commitSubject]
 	fileHeaderList     *interact.Place[*model, fileSubject]
 	lines              *interact.Place[*model, rowSubject]
@@ -1062,6 +1093,8 @@ func init() {
 	sidebarFileList = sidebarFiles(fileKind)
 	sidebarIgnored = interact.List(ignoredKind)
 	sidebarIgnored.Bind(actToggleIgnored, "enter/l", "show or fold ignored files", "enter", "l", "right")
+	sidebarHidden = interact.List(hiddenKind)
+	sidebarHidden.Bind(actToggleHidden, "enter/l", "show or fold hidden files", "enter", "l", "right")
 
 	commitHeader = interact.List(commitKind)
 	fileHeaderList = fileHeaders(fileKind)
@@ -1221,6 +1254,9 @@ func (m *model) sidebarEntry(list focus, i int) (interact.Target[*model], bool) 
 	it := l.items[i]
 	if list == focusFiles && it.file == ignoredEntry {
 		return sidebarIgnored.Target(ignoredSubject{m.inView(it.view)}), true
+	}
+	if list == focusFiles && it.file == hiddenEntry {
+		return sidebarHidden.Target(hiddenSubject{m.inView(it.view)}), true
 	}
 	if list == focusFiles {
 		f, ok := m.fileOf(m.inView(it.view), it.file)

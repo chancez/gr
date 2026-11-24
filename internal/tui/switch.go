@@ -12,6 +12,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/ignore"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 )
@@ -388,6 +389,7 @@ func (m *model) switchChange(c store.Change) tea.Cmd {
 	m.jumps, m.jumpAt, m.returns = nil, 0, map[viewKind]jumpPoint{}
 	m.threadFolds, m.openGaps, m.expanded = map[string]bool{}, map[string]gapShown{}, map[string]bool{}
 	m.showIgnored = false
+	m.hidden, m.fileFilter, m.showHidden = map[string]bool{}, ignore.Filter{}, false
 	m.contents, m.segments = map[string][]string{}, map[int][]int{}
 	scrolloff, height := m.main.scrolloff, m.main.height
 	m.main = pane{anchor: -1, side: m.main.side, scrolloff: scrolloff, height: height}

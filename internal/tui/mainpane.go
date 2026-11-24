@@ -65,6 +65,7 @@ func (m *model) rowOptions(v view) rowOptions {
 		collapsed: func(f int) bool { return m.collapsed(v, f) },
 		reviewed:  func(f int) bool { return m.fileReviewed(v, f) },
 		ignored:   func(f int) bool { return m.fileIgnored(v, f) },
+		hidden:    func(f int) bool { return m.fileHidden(v, f) },
 		gapShown:  func(f, g int) gapShown { return m.openGaps[gapKey(v, v.files[f].Path(), g)] },
 		content:   func(f int) []string { return m.fileContent(v, f) },
 	}
@@ -432,13 +433,20 @@ func (m *model) openThread(t review.ThreadView, inDiff bool) {
 			return
 		}
 	}
-	// Collapsed files hide their threads: open the file and look again.
+	// Hidden and collapsed files hide their threads: show the file and look again.
 	for f, file := range v.files {
-		if file.Path() == t.Location.Path && m.collapsed(v, f) {
+		switch {
+		case file.Path() != t.Location.Path:
+			continue
+		case m.fileHidden(v, f):
+			m.setHidden([]string{file.Path()}, false)
+		case m.collapsed(v, f):
 			m.toggleCollapsed(v, f)
-			m.openThread(t, inDiff)
-			return
+		default:
+			continue
 		}
+		m.openThread(t, inDiff)
+		return
 	}
 	m.setError(fmt.Errorf("thread %s is not shown in %s", t.Label(), m.viewLabel(v)))
 }
@@ -487,6 +495,9 @@ func (m *model) openWhereItWas(t review.ThreadView, inDiff bool) {
 	if file < 0 {
 		m.setError(fmt.Errorf("thread %s is outdated, and %s is no longer in %s", t.Label(), loc.Path, m.viewLabel(v)))
 		return
+	}
+	if m.fileHidden(v, file) {
+		m.setHidden([]string{v.files[file].Path()}, false)
 	}
 	if m.collapsed(v, file) {
 		m.toggleCollapsed(v, file)

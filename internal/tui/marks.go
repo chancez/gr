@@ -186,14 +186,14 @@ func (m *model) advance(move func()) string {
 func (m *model) nextUnreviewedFile(f int) {
 	v := m.views[m.current]
 	for next := f + 1; next < len(v.files); next++ {
-		if !isMessage(v.files[next]) && !m.fileReviewed(v, next) {
+		if m.unreviewedShown(v, next) {
 			m.focusFile(next)
 			return
 		}
 	}
 	left := 0
 	for i := range f {
-		if !isMessage(v.files[i]) && !m.fileReviewed(v, i) {
+		if m.unreviewedShown(v, i) {
 			left++
 		}
 	}
@@ -207,6 +207,12 @@ func (m *model) nextUnreviewedFile(f int) {
 	}
 }
 
+// unreviewedShown reports whether file f of view v is one to review next: shown, and not yet
+// reviewed. The commit message is not a file to go to.
+func (m *model) unreviewedShown(v view, f int) bool {
+	return !isMessage(v.files[f]) && !m.fileReviewed(v, f) && !m.fileHidden(v, f)
+}
+
 // nextUnreviewedCommit opens the next commit after this one not yet reviewed, at its first
 // unreviewed file. It does not wrap back to earlier commits.
 func (m *model) nextUnreviewedCommit() {
@@ -218,7 +224,7 @@ func (m *model) nextUnreviewedCommit() {
 		m.viewsNav.show(vi, -1)
 		m.openView()
 		for f := range v.files {
-			if !isMessage(v.files[f]) && !m.fileReviewed(v, f) {
+			if m.unreviewedShown(v, f) {
 				m.focusFile(f)
 				break
 			}

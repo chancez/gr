@@ -212,6 +212,7 @@ var lineMenu = []pickerItem{
 	{value: "mark reviewed", full: "File main.go: mark reviewed", note: "m"},
 	{value: "comment", full: "File main.go: comment", note: "C"},
 	{value: "open in $EDITOR", full: "File main.go: open in $EDITOR"},
+	{value: "hide file", full: "File main.go: hide file", note: "-"},
 	{value: "hide whitespace", full: "File main.go: hide whitespace"},
 	{value: "hide whitespace in all files", full: "File main.go: hide whitespace in all files", note: "W"},
 	{value: "Commit b194130", heading: true},

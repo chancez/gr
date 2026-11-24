@@ -16,6 +16,7 @@ import (
 
 	"github.com/chancez/gr/internal/anchor"
 	"github.com/chancez/gr/internal/git"
+	"github.com/chancez/gr/internal/ignore"
 	"github.com/chancez/gr/internal/review"
 	"github.com/chancez/gr/internal/store"
 	"github.com/chancez/gr/internal/termtext"
@@ -249,11 +250,17 @@ type model struct {
 	expanded map[string]bool
 	// showIgnored lists the ignored files in the sidebar, under the entry they fold into.
 	showIgnored bool
-	main        pane
-	split       bool
-	focus       focus
-	mode        mode
-	compose     composer
+	// hidden overrides whether a file is hidden from the review, by path: true hides it, and false
+	// shows one fileFilter hides.
+	hidden     map[string]bool
+	fileFilter ignore.Filter
+	// showHidden lists the hidden files in the sidebar, under the entry they fold into.
+	showHidden bool
+	main       pane
+	split      bool
+	focus      focus
+	mode       mode
+	compose    composer
 
 	status    string
 	statusErr bool
@@ -320,6 +327,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 			scrolloff: defaultScrolloff,
 		},
 		expanded:    map[string]bool{},
+		hidden:      map[string]bool{},
 		openGaps:    map[string]gapShown{},
 		threadFolds: map[string]bool{},
 		contents:    map[string][]string{},

@@ -19,7 +19,7 @@ type navItem struct {
 	sha   string
 	label string
 	view  int
-	// file is the file index in the view, -1 for the view itself, or ignoredEntry.
+	// file is the file index in the view, -1 for the view itself, or ignoredEntry or hiddenEntry.
 	file int
 	// prefix is shown before label and kept when label is truncated. File labels are truncated at
 	// the front, so the file name stays visible.
@@ -33,8 +33,12 @@ type navItem struct {
 	done bool
 }
 
-// ignoredEntry is the file list's entry that the ignored files are listed under.
-const ignoredEntry = -2
+// ignoredEntry and hiddenEntry are the file list's entries that the ignored files and the hidden
+// files are listed under.
+const (
+	ignoredEntry = -2
+	hiddenEntry  = -3
+)
 
 // truncateLeft keeps the end of s, marking the cut with "...".
 func truncateLeft(s string, width int) string {
@@ -358,26 +362,21 @@ func (m *model) buildNav() {
 	v := m.views[m.current]
 	counts := m.openThreads(v)
 	m.filesNav.items = nil
-	var ignored []int
+	var ignored, hidden []int
 	for fi, f := range v.files {
-		// The message is the commit's header, not a file to list.
-		if isMessage(f) {
-			continue
-		}
-		if m.fileIgnored(v, fi) {
+		switch {
+		case isMessage(f):
+			// The message is the commit's header, not a file to list.
+		case m.fileHidden(v, fi):
+			hidden = append(hidden, fi)
+		case m.fileIgnored(v, fi):
 			ignored = append(ignored, fi)
-			continue
-		}
-		m.filesNav.items = append(m.filesNav.items, m.fileItem(v, fi, counts))
-	}
-	if len(ignored) > 0 {
-		m.filesNav.items = append(m.filesNav.items, m.ignoredItem(v, ignored, counts))
-		if m.showIgnored {
-			for _, fi := range ignored {
-				m.filesNav.items = append(m.filesNav.items, m.fileItem(v, fi, counts))
-			}
+		default:
+			m.filesNav.items = append(m.filesNav.items, m.fileItem(v, fi, counts))
 		}
 	}
+	m.filesNav.items = append(m.filesNav.items, m.foldItems(v, ignored, counts, "ignored", m.showIgnored, ignoredEntry)...)
+	m.filesNav.items = append(m.filesNav.items, m.foldItems(v, hidden, counts, "hidden", m.showHidden, hiddenEntry)...)
 	if keep >= 0 && keep < len(m.filesNav.items) {
 		m.filesNav.pos = keep
 	} else {
@@ -402,9 +401,13 @@ func (m *model) fileItem(v view, fi int, counts map[string]int) navItem {
 	}
 }
 
-// ignoredItem is the entry the ignored files of view v are listed under, folded unless shown. Its
-// badge counts their open threads, so none goes unseen while they are folded.
-func (m *model) ignoredItem(v view, files []int, counts map[string]int) navItem {
+// foldItems are entry, which files of view v are listed under, labeled with how many there are and
+// what, then the files when it is open. Its badge counts their open threads, so none goes unseen
+// while they are folded. Without files there is no entry.
+func (m *model) foldItems(v view, files []int, counts map[string]int, what string, open bool, entry int) []navItem {
+	if len(files) == 0 {
+		return nil
+	}
 	threads, drafts, reviewed := 0, false, true
 	for _, fi := range files {
 		path := v.files[fi].Path()
@@ -413,17 +416,23 @@ func (m *model) ignoredItem(v view, files []int, counts map[string]int) navItem 
 		reviewed = reviewed && m.fileReviewed(v, fi)
 	}
 	glyph := look.GlyphFolded
-	if m.showIgnored {
+	if open {
 		glyph = look.GlyphOpen
 	}
-	return navItem{
+	items := []navItem{{
 		prefix: m.r.th.Glyph(glyph) + " ",
-		label:  fmt.Sprintf("%d ignored", len(files)),
+		label:  fmt.Sprintf("%d %s", len(files), what),
 		badge:  look.Badge(threads, drafts, reviewed),
 		view:   m.current,
-		file:   ignoredEntry,
+		file:   entry,
 		done:   true,
+	}}
+	if open {
+		for _, fi := range files {
+			items = append(items, m.fileItem(v, fi, counts))
+		}
 	}
+	return items
 }
 
 // toggleIgnored shows or folds the ignored files in the file list, keeping their entry selected.
@@ -433,12 +442,24 @@ func (m *model) toggleIgnored() {
 	m.filesNav.show(m.current, ignoredEntry)
 }
 
+// toggleHidden shows or folds the hidden files in the file list, keeping their entry selected.
+func (m *model) toggleHidden() {
+	m.showHidden = !m.showHidden
+	m.buildNav()
+	m.filesNav.show(m.current, hiddenEntry)
+}
+
 // selectFile selects file f of the current view in the file list, or the entry it is folded
 // under.
 func (m *model) selectFile(f int) {
-	if !m.filesNav.show(m.current, f) {
-		m.filesNav.show(m.current, ignoredEntry)
+	if m.filesNav.show(m.current, f) {
+		return
 	}
+	if v := m.views[m.current]; f >= 0 && f < len(v.files) && m.fileHidden(v, f) {
+		m.filesNav.show(m.current, hiddenEntry)
+		return
+	}
+	m.filesNav.show(m.current, ignoredEntry)
 }
 
 // openView shows the view selected in the sidebar.
