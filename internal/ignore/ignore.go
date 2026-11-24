@@ -1,5 +1,5 @@
 // Package ignore matches paths against patterns in gitignore's syntax, for the files a review
-// leaves collapsed.
+// leaves collapsed and the files a filter hides.
 package ignore
 
 import (
