@@ -89,11 +89,12 @@ every review, its summary, and its threads with the code they are on. `?` lists 
 | `zo` `zc` `za` `zR` `zM` | open, close, toggle folds; open or close all |
 | `enter` on unchanged lines | show 20 more, above the hunk below; their buttons go up or down, and the menu shows all |
 | `c` | comment on the line, selection, file, or change |
-| `v` | start or end a line selection |
+| `v` | start or end a line selection; in the sidebar, select files |
+| `-` | hide or unhide the file, or the selected files |
 | `C` | comment on the whole file or commit |
 | `r` `x` `a` | reply, resolve or reopen, mark addressed or reopen; replying to an addressed thread reopens it |
 | `m` `M`, `+` | mark the file or commit reviewed; toggle moving on to the next unreviewed |
-| `F` | filter the overview's threads by state |
+| `F` | filter the overview's threads by state; elsewhere, filter the files by glob |
 | `S` | submit your review: approve, request changes, or comment |
 | `s` | toggle split diff |
 | `W` | hide/show whitespace changes; a file's menu hides them in that file alone |
@@ -157,6 +158,23 @@ overriding an earlier one, so `!` can re-include a path:
 vendor/
 *.pb.go
 ```
+
+## Hiding files
+
+`-` hides a file from the review, in every view of the tab: it leaves the diff, and the file list
+folds it under `N hidden`, where `-` on it unhides it and `-` on the entry unhides all. Hidden files
+do not count as reviewed. Going to a thread in one unhides it.
+
+`v`, the file list's Select, or an alt or ctrl click on a file shows a checkbox on each file: `x`
+or a click checks one, dragging over boxes checks or unchecks them as the first, `a` checks all,
+and `-` or the status line's Hide hides the checked files. Hidden files under their open entry
+have boxes too: `-` or Unhide shows those checked again. `esc` unchecks them.
+
+`F` filters the files by gitignore patterns, separated by spaces: plain ones pick the files to show,
+`!` ones the files to hide. `*.md` shows only Markdown; `*.go !*_test.go` shows Go but not its
+tests. The filter hides what it matches as `-` would, and an empty one clears it. The Filter link
+under the file list's header opens it too, labeled with the filter in use, beside how many files
+show of how many. Hiding lasts as long as the tab.
 
 ## For agents
 
