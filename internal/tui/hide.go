@@ -1,6 +1,9 @@
 package tui
 
 import (
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/chancez/gr/internal/ignore"
 )
 
@@ -38,4 +41,56 @@ func (m *model) unhideAll() {
 	m.rebuildMain()
 	m.buildNav()
 	m.setStatus("showing every file")
+}
+
+// openFileFilter asks for the patterns that pick the files to review, starting from those in use.
+// The status line's input is the search's, as the two never show at once.
+func (m *model) openFileFilter() tea.Cmd {
+	in := textinput.New()
+	in.Prompt = "filter files: "
+	in.Placeholder = "*.md !*_test.go"
+	in.SetWidth(max(m.width-len(in.Prompt)-1, 10))
+	in.SetValue(m.fileFilter.String())
+	m.searchInput = in
+	m.mode = modeFilter
+	return m.searchInput.Focus()
+}
+
+func (m *model) fileFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case pressed(m, msg, actCancel, theApp.Target(appSubject{})):
+		m.mode = modeNormal
+		return m, nil
+	case msg.String() == "enter":
+		m.mode = modeNormal
+		m.setFileFilter(ignore.ParseFilter(m.searchInput.Value()))
+		return m, nil
+	}
+	var cmd tea.Cmd
+	m.searchInput, cmd = m.searchInput.Update(msg)
+	return m, cmd
+}
+
+// setFileFilter hides the files f hides, as hiding each would: the files shown by hand are hidden
+// again if f hides them, and those hidden by hand stay hidden.
+func (m *model) setFileFilter(f ignore.Filter) {
+	m.fileFilter = f
+	for path, hidden := range m.hidden {
+		if !hidden {
+			delete(m.hidden, path)
+		}
+	}
+	m.rebuildMain()
+	m.buildNav()
+	if f.String() == "" {
+		m.setStatus("file filter cleared")
+		return
+	}
+	v, n := m.views[m.current], 0
+	for i := range v.files {
+		if m.fileHidden(v, i) {
+			n++
+		}
+	}
+	m.setStatus("filter %s hides %d of %d files here", f, n, len(v.files))
 }

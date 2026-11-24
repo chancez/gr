@@ -113,6 +113,7 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphDraft:     "*",
 		GlyphClose:     "x",
 		GlyphNew:       "+",
+		GlyphFilter:    "Y", // a funnel
 	},
 	GlyphsUnicode: {
 		GlyphOpen:           "\u25bc", // black down-pointing triangle
@@ -138,6 +139,7 @@ var glyphSets = map[Glyphs][numGlyphs]string{
 		GlyphEditor:         "\u270e",
 		GlyphPrev:           "\u2039", // single left angle quote
 		GlyphNext:           "\u203a", // single right angle quote
+		GlyphFilter:         "\u25bd", // white down-pointing triangle, a funnel
 		GlyphApprove:        "\u2713",
 		GlyphRequestChanges: "\u2717",
 		GlyphYes:            "\u2713",

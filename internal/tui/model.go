@@ -134,6 +134,8 @@ const (
 	modeHelp
 	modeSearch
 	modePicker
+	// modeFilter is the file filter's prompt.
+	modeFilter
 )
 
 type model struct {
@@ -521,6 +523,8 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case modeSearch:
 			return m.searchKey(msg)
+		case modeFilter:
+			return m.fileFilterKey(msg)
 		case modePicker:
 			return m.pickerKey(msg)
 		}
@@ -539,7 +543,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.compose.area, cmd = m.compose.area.Update(msg)
 		return m, cmd
-	case modeSearch:
+	case modeSearch, modeFilter:
 		var cmd tea.Cmd
 		m.searchInput, cmd = m.searchInput.Update(msg)
 		return m, cmd

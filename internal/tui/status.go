@@ -39,7 +39,7 @@ func (m *model) expireStatus(now time.Time) {
 func (m *model) renderStatus() string {
 	th := m.r.th
 	switch m.mode {
-	case modeSearch:
+	case modeSearch, modeFilter:
 		return m.searchInput.View()
 	case modeVerdict:
 		t := theVerdict.Target(verdictSubject{})

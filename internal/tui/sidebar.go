@@ -577,9 +577,19 @@ func (m *model) mainHeader(width int) string {
 			prevCommit.disabledIf(at <= 1), nextCommit.disabledIf(at >= of))
 	case len(v.files) > 0:
 		// The view's bar names it, with its size: the title says only where it is, as a commit's.
-		label = fmt.Sprintf(" %d files ", len(v.files))
-		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].file >= 0 {
-			label = fmt.Sprintf(" File %d of %d ", m.main.rows[c].file+1, len(v.files))
+		// Hidden files are not in it, so neither are they counted.
+		at, of := 0, 0
+		for i, r := range m.main.rows {
+			if r.kind == rowFile {
+				of++
+				if i <= m.main.cursor {
+					at++
+				}
+			}
+		}
+		label = fmt.Sprintf(" %d files ", of)
+		if c := m.main.cursor; c < len(m.main.rows) && m.main.rows[c].file >= 0 && at > 0 {
+			label = fmt.Sprintf(" File %d of %d ", at, of)
 		}
 	}
 	title := ""
@@ -673,30 +683,54 @@ func paneTitle(th *look.Theme, title string, width int, focused bool) string {
 }
 
 // filesSummary is the line under the files list's header: how many files the view shown has, and
-// their size in all, as the overview gives the change's, at the right as the entries' sizes are.
+// their size in all, as the overview gives the change's, at the right as the entries' sizes are,
+// with a link to filter them. With files hidden, it counts and sizes those shown, of how many.
 // Without files there is none.
 func (m *model) filesSummary(width int) []look.Span {
 	// Every file counts, the ignored ones folded out of the list too.
-	var files []git.FileDiff
-	for _, f := range m.views[m.current].files {
-		if !isMessage(f) {
-			files = append(files, f)
+	v := m.views[m.current]
+	var shown []git.FileDiff
+	all := 0
+	for i, f := range v.files {
+		if isMessage(f) {
+			continue
+		}
+		all++
+		if !m.fileHidden(v, i) {
+			shown = append(shown, f)
 		}
 	}
-	n := len(files)
-	if n == 0 {
+	if all == 0 {
 		return nil
 	}
-	count := fmt.Sprintf(" %d files", n)
-	if n == 1 {
+	count := fmt.Sprintf(" %d files", all)
+	switch {
+	case len(shown) < all:
+		count = fmt.Sprintf(" %d of %d", len(shown), all)
+	case all == 1:
 		count = " 1 file"
 	}
-	size := filesSize(files)
-	gap := width - ansi.StringWidth(count) - ansi.StringWidth(m.r.th.TextOf(size...))
-	if gap < 1 {
-		return []look.Span{look.Muted(count)}
+	// The filter's link is labeled with the filter in use, to change it, cut to fit.
+	label := "Filter"
+	if f := m.fileFilter.String(); f != "" {
+		label = f
 	}
-	return append([]look.Span{look.Muted(count), look.Default(strings.Repeat(" ", gap))}, size...)
+	widthOf := func(spans []look.Span) int { return ansi.StringWidth(m.r.th.TextOf(spans...)) }
+	lead := func(label string) []look.Span {
+		filter := m.controls("files", modeNormal, theSidebarPane.Target(paneSubject{}),
+			link(actFilterFiles, look.GlyphFilter, label).lighted(m.focus == focusFiles))
+		return append([]look.Span{look.Muted(count), look.Default(" ")}, filter...)
+	}
+	spans := lead(label)
+	if over := widthOf(spans) - width; over > 0 {
+		spans = lead(ansi.Truncate(label, max(ansi.StringWidth(label)-over, 4), "..."))
+	}
+	// The size goes when there is no room for it.
+	size := filesSize(shown)
+	if gap := width - widthOf(spans) - widthOf(size); gap >= 1 {
+		spans = append(append(spans, look.Default(strings.Repeat(" ", gap))), size...)
+	}
+	return spans
 }
 
 // paneSurface is a pane's title bar, focused or not.

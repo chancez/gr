@@ -2494,7 +2494,7 @@ func TestFilesSummary(t *testing.T) {
 	got = append(got, fmt.Sprintf("summary click: pos %d", e.m.filesNav.pos))
 	e.m.Update(tea.MouseClickMsg{X: 2, Y: summary + 2, Button: tea.MouseLeft})
 	got = append(got, fmt.Sprintf("second file click: focus files %v, pos %d", e.m.focus == focusFiles, e.m.filesNav.pos))
-	want := []string{"2 files       +7 -1", "summary click: pos 0", "second file click: focus files true, pos 1"}
+	want := []string{"2 files Y Filter", "summary click: pos 0", "second file click: focus files true, pos 1"}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("summary and clicks (-want +got):\n%s", diff)
 	}

@@ -600,9 +600,10 @@ var (
 	diffMovesOf   = movesOf(diffMoves)
 	readerMovesOf = movesOf(readerMoves)
 
-	actToSidebar = paneAction("sidebar", func(m *model) tea.Cmd { m.focusSidebar(); return nil })
-	actMoveLeft  = paneAction("sidebar, or the old side in split", func(m *model) tea.Cmd { m.moveLeft(); return nil })
-	actMoveRight = paneAction("the new side in split", func(m *model) tea.Cmd { m.main.side = anchor.SideNew; return nil })
+	actFilterFiles = paneAction("filter files", func(m *model) tea.Cmd { return m.openFileFilter() })
+	actToSidebar   = paneAction("sidebar", func(m *model) tea.Cmd { m.focusSidebar(); return nil })
+	actMoveLeft    = paneAction("sidebar, or the old side in split", func(m *model) tea.Cmd { m.moveLeft(); return nil })
+	actMoveRight   = paneAction("the new side in split", func(m *model) tea.Cmd { m.main.side = anchor.SideNew; return nil })
 
 	actNextFile   = jumpTo("next file", 1, func(r row) bool { return r.kind == rowFile })
 	actPrevFile   = jumpTo("previous file", -1, func(r row) bool { return r.kind == rowFile })
@@ -827,10 +828,10 @@ func init() {
 	reviewKind = interact.NewKind(func(s reviewSubject) string { return "Review #" + strconv.Itoa(s.review.Seq) },
 		actDeleteReview)
 
-	sidebarPaneKind = interact.NewKind(func(paneSubject) string { return "Sidebar" }, sidebarMoves.actions()...)
+	sidebarPaneKind = interact.NewKind(func(paneSubject) string { return "Sidebar" }, append(sidebarMoves.actions(), actFilterFiles)...)
 	diffPaneKind = interact.NewKind(func(paneSubject) string { return "Diff" }, append(diffMovesOf.actions(),
 		actMoveLeft, actMoveRight, actNextFile, actPrevFile, actNextHunk, actPrevHunk, actNextChange, actPrevChange,
-		actNextThreadInDiff, actPrevThreadInDiff, actNextUnresolved, actPrevUnresolved, actSelectLines, actFoldPrefix)...)
+		actNextThreadInDiff, actPrevThreadInDiff, actNextUnresolved, actPrevUnresolved, actSelectLines, actFoldPrefix, actFilterFiles)...)
 	overviewPaneKind = interact.NewKind(func(paneSubject) string { return "Overview" }, append(readerMovesOf.actions(),
 		actToSidebar, actNextThreadInOverview, actPrevThreadInOverview, actNextUnresolved, actPrevUnresolved, actFoldPrefix)...)
 	appKind = interact.NewKind(func(appSubject) string { return "gr" }, append([]*interact.Action[*model, appSubject]{
@@ -911,6 +912,7 @@ func init() {
 	reviewKind.Bind(actDeleteReview, "D", "delete your review", "D")
 
 	bindMoves(sidebarPaneKind, sidebarMoves)
+	sidebarPaneKind.Bind(actFilterFiles, "F", "filter files, as *.md !*_test.go", "F")
 	bindMoves(diffPaneKind, diffMovesOf)
 	bindMoves(overviewPaneKind, readerMovesOf)
 	for _, b := range []struct {
@@ -932,6 +934,7 @@ func init() {
 		{actPrevUnresolved, "", "", []string{"I"}},
 		{actSelectLines, "v", "select lines", []string{"v", "V"}},
 		{actFoldPrefix, "z", "folds, then o c a O C R M", []string{"z"}},
+		{actFilterFiles, "F", "filter files, as *.md !*_test.go", []string{"F"}},
 	} {
 		diffPaneKind.Bind(b.action, b.help, b.desc, b.keys...)
 	}

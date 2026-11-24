@@ -67,8 +67,9 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			return m, c.run.Run(m)
 		}
 	}
-	// The search bar, on the status line, places its cursor where it is clicked.
-	if _, _, bh := m.layoutSizes(); m.mode == modeSearch && msg.Button == tea.MouseLeft && msg.Y == bh {
+	// The search bar, on the status line, places its cursor where it is clicked, as the file
+	// filter's does.
+	if _, _, bh := m.layoutSizes(); (m.mode == modeSearch || m.mode == modeFilter) && msg.Button == tea.MouseLeft && msg.Y == bh {
 		placeCursor(&m.searchInput, msg.X)
 		return m, nil
 	}

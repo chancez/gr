@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/chancez/gr/internal/gittest"
@@ -121,5 +123,79 @@ func TestOpenThreadInHiddenFile(t *testing.T) {
 	}{false, tv.ID}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("after opening the thread (-want +got):\n%s", diff)
+	}
+}
+
+// F filters the files: the patterns typed pick the files to show, ! ones hide files, and a new
+// filter hides again the files shown by hand. An empty filter shows every file.
+func TestFilterFiles(t *testing.T) {
+	e := hideEnv(t)
+	e.m.setFocus(focusFiles)
+	e.press("F")
+	e.typeText("*.go !*_test.go")
+	e.press("enter")
+	want := hideState{
+		Files: []string{"M main.go", "> 2 hidden"},
+		Diff:  []string{"main.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after filtering (-want +got):\n%s", diff)
+	}
+	if !strings.Contains(e.screen(), " 1 of 3 Y *.go...") {
+		t.Errorf("the file list does not show the filter:\n%s", e.screen())
+	}
+
+	e.selectEntry("2 hidden")
+	e.press("enter")
+	e.selectEntry("README.md")
+	e.press("-")
+	want = hideState{
+		Files: []string{"A README.md", "M main.go", "v 1 hidden", "A main_test.go"},
+		Diff:  []string{"README.md", "main.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after unhiding README.md (-want +got):\n%s", diff)
+	}
+
+	// The prompt starts from the filter in use.
+	e.press("F")
+	e.typeText(" !main.go")
+	e.press("enter")
+	want = hideState{Files: []string{"v 3 hidden", "A README.md", "M main.go", "A main_test.go"}}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after a new filter (-want +got):\n%s", diff)
+	}
+
+	e.press("F")
+	for range len("*.go !*_test.go !main.go") {
+		e.m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	}
+	e.press("enter")
+	want = hideState{
+		Files: []string{"A README.md", "M main.go", "A main_test.go"},
+		Diff:  []string{"README.md", "main.go", "main_test.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after clearing the filter (-want +got):\n%s", diff)
+	}
+}
+
+// The file list's Filter button opens the filter's prompt, and once there is a filter it is
+// labeled with it.
+func TestFilterFilesByButton(t *testing.T) {
+	e := hideEnv(t)
+	e.click("files", "filter files")
+	e.typeText("*.md")
+	e.press("enter")
+	want := hideState{Files: []string{"A README.md", "> 2 hidden"}, Diff: []string{"README.md"}}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after filtering (-want +got):\n%s", diff)
+	}
+	if got := e.screen(); !strings.Contains(got, " 1 of 3 Y *.md ") {
+		t.Errorf("the filter's button is not labeled with it:\n%s", got)
+	}
+	e.click("files", "filter files")
+	if e.m.mode != modeFilter {
+		t.Error("a click on the labeled button does not open the prompt")
 	}
 }
