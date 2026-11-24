@@ -1,6 +1,10 @@
 package tui
 
 import (
+	"errors"
+	"maps"
+	"slices"
+
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
@@ -13,7 +17,11 @@ func (m *model) fileHidden(v view, f int) bool {
 	if m.data == nil || isMessage(v.files[f]) {
 		return false
 	}
-	path := v.files[f].Path()
+	return m.pathHidden(v.files[f].Path())
+}
+
+// pathHidden reports whether the file at path is hidden from the review, as fileHidden does.
+func (m *model) pathHidden(path string) bool {
 	if hidden, ok := m.hidden[path]; ok {
 		return hidden
 	}
@@ -93,4 +101,120 @@ func (m *model) setFileFilter(f ignore.Filter) {
 		}
 	}
 	m.setStatus("filter %s hides %d of %d files here", f, n, len(v.files))
+}
+
+// startPicking shows the file list's checkboxes, to check files to act on together.
+func (m *model) startPicking() {
+	m.picking = true
+	m.setFocus(focusFiles)
+	m.buildNav()
+}
+
+// stopPicking unchecks every file, and puts the checkboxes away.
+func (m *model) stopPicking() {
+	m.picking, m.picked = false, map[string]bool{}
+	m.buildNav()
+}
+
+// togglePicked checks or unchecks the file at path, showing the checkboxes if they are not.
+func (m *model) togglePicked(path string) {
+	m.setPicked(path, !m.picked[path])
+}
+
+// setPicked checks the file at path, or unchecks it, showing the checkboxes if they are not.
+func (m *model) setPicked(path string, on bool) {
+	m.picking = true
+	if on {
+		m.picked[path] = true
+	} else {
+		delete(m.picked, path)
+	}
+	m.buildNav()
+}
+
+// pickDrag is a drag over the file list's checkboxes: what it makes the boxes it passes over,
+// checked or unchecked as the press made the first, and the entry it is at.
+type pickDrag struct {
+	on bool
+	at int
+}
+
+// dragPick carries a drag over the file list's checkboxes to entry i, setting every box from the
+// entry it was at, as the mouse can pass over some between two reports.
+func (m *model) dragPick(i int) {
+	d := m.pickDrag
+	if i < 0 || i >= len(m.filesNav.items) || i == d.at {
+		return
+	}
+	step := 1
+	if i < d.at {
+		step = -1
+	}
+	for j := d.at + step; ; j += step {
+		if path, ok := m.pickable(focusFiles, j); ok {
+			m.setPicked(path, d.on)
+		}
+		if j == i {
+			break
+		}
+	}
+	d.at, m.filesNav.pos = i, i
+}
+
+// pickable is the path of the file at entry i of sidebar list f, if it has a checkbox now: while
+// files are being selected, every file listed has one, the hidden ones too, to unhide them.
+func (m *model) pickable(f focus, i int) (string, bool) {
+	if f != focusFiles || !m.picking || i < 0 || i >= len(m.filesNav.items) {
+		return "", false
+	}
+	it := m.filesNav.items[i]
+	if it.file < 0 {
+		return "", false
+	}
+	return m.views[it.view].files[it.file].Path(), true
+}
+
+// pickAll checks every file the shown view lists with a checkbox: all but the hidden ones.
+func (m *model) pickAll() {
+	v := m.views[m.current]
+	for i, f := range v.files {
+		if !isMessage(f) && !m.fileHidden(v, i) {
+			m.picked[f.Path()] = true
+		}
+	}
+	m.buildNav()
+}
+
+// hidePicked hides the checked files, and puts the checkboxes away.
+func (m *model) hidePicked() {
+	shown, _ := m.pickedFiles()
+	if len(shown) == 0 {
+		m.setError(errors.New("no shown files selected; x selects one"))
+		return
+	}
+	m.picking, m.picked = false, map[string]bool{}
+	m.setHidden(shown, true)
+}
+
+// unhidePicked shows the checked files that are hidden, and puts the checkboxes away.
+func (m *model) unhidePicked() {
+	_, hidden := m.pickedFiles()
+	if len(hidden) == 0 {
+		m.setError(errors.New("no hidden files selected; x selects one under the hidden entry"))
+		return
+	}
+	m.picking, m.picked = false, map[string]bool{}
+	m.setHidden(hidden, false)
+}
+
+// pickedFiles are the paths of the checked files, those shown and those hidden.
+func (m *model) pickedFiles() (shown, hidden []string) {
+	for _, p := range slices.Sorted(maps.Keys(m.picked)) {
+		if m.pathHidden(p) {
+			hidden = append(hidden, p)
+		} else {
+			shown = append(shown, p)
+		}
+	}
+	return shown, hidden
 }

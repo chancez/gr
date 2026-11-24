@@ -216,6 +216,8 @@ type model struct {
 	viewsHeight int
 	// draggingSplit is set while the divider between the sidebar lists is dragged.
 	draggingSplit bool
+	// pickDrag is a drag from a file list checkbox, while the button is down.
+	pickDrag *pickDrag
 	// selecting is set while the mouse drags a line selection from the + that comments.
 	selecting *selecting
 	// pendingLoads are views whose diffs to load once the current message is handled, and
@@ -258,11 +260,15 @@ type model struct {
 	fileFilter ignore.Filter
 	// showHidden lists the hidden files in the sidebar, under the entry they fold into.
 	showHidden bool
-	main       pane
-	split      bool
-	focus      focus
-	mode       mode
-	compose    composer
+	// picking shows checkboxes in the file list, to check files to act on together, and picked
+	// holds the checked ones by path.
+	picking bool
+	picked  map[string]bool
+	main    pane
+	split   bool
+	focus   focus
+	mode    mode
+	compose composer
 
 	status    string
 	statusErr bool
@@ -330,6 +336,7 @@ func newModel(ctx context.Context, svc *review.Service, change store.Change) (*m
 		},
 		expanded:    map[string]bool{},
 		hidden:      map[string]bool{},
+		picked:      map[string]bool{},
 		openGaps:    map[string]gapShown{},
 		threadFolds: map[string]bool{},
 		contents:    map[string][]string{},
@@ -498,7 +505,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.MouseMotionMsg:
 		return m.mouseMotion(msg)
 	case tea.MouseReleaseMsg:
-		m.dragging, m.draggingSplit = false, false
+		m.dragging, m.draggingSplit, m.pickDrag = false, false, nil
 		if m.mode == modeCompose && m.compose.dragging {
 			m.composeRelease()
 			return m, nil
@@ -813,6 +820,9 @@ func (m *model) peek(screen, lines []string, x, y int) []string {
 
 // clearTransient clears the selection, the status message, and the search.
 func (m *model) clearTransient() {
+	if m.picking {
+		m.stopPicking()
+	}
 	m.main.anchor, m.text = -1, nil
 	m.status = ""
 	m.search, m.searchPos, m.searchHits = "", 0, 0

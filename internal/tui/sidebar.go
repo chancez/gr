@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/chancez/gr/internal/tui/look"
@@ -74,6 +75,8 @@ type navList struct {
 	top   int
 	// summary, when set, is a line under the header, as the files' count and size.
 	summary []look.Span
+	// controls, when set, are drawn at the right of the header.
+	controls []look.Span
 	// shift is how many columns the labels cut at the front are scrolled back toward their start.
 	shift int
 	// wheeled is set when the wheel has scrolled the list, which may leave the selection out of
@@ -186,7 +189,7 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 		}
 	}
 	l.shift = min(l.shift, most)
-	out := []string{paneTitle(th, " "+title, width, focused)}
+	out := []string{l.header(th, title, width, focused)}
 	if len(l.summary) > 0 && height > 1 {
 		out = append(out, th.DrawCut(look.HeadingBar, width, l.summary...))
 	}
@@ -208,6 +211,17 @@ func (l *navList) render(th *look.Theme, title string, width, height int, focuse
 		out = append(out, "")
 	}
 	return out
+}
+
+// header is the list's title bar, its controls at the right when they fit.
+func (l *navList) header(th *look.Theme, title string, width int, focused bool) string {
+	if len(l.controls) > 0 {
+		chip := th.Render(paneSurface(focused), append(slices.Clone(l.controls), look.Default(" "))...)
+		if w := ansi.StringWidth(chip); w < width {
+			return paneTitle(th, " "+title, width-w, focused) + chip
+		}
+	}
+	return paneTitle(th, " "+title, width, focused)
 }
 
 // width is the entry's width with nothing truncated.
@@ -395,8 +409,16 @@ func (m *model) fileItem(v view, fi int, counts map[string]int) navItem {
 		}
 		badge = append(size, badge...)
 	}
+	prefix := look.StatusLetter(f.Status) + " "
+	if m.picking {
+		box := look.GlyphUnchecked
+		if m.picked[f.Path()] {
+			box = look.GlyphChecked
+		}
+		prefix = m.r.th.Glyph(box) + " " + prefix
+	}
 	return navItem{
-		prefix: look.StatusLetter(f.Status) + " ", label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
+		prefix: prefix, label: look.FileLabel(f), badge: badge, view: m.current, file: fi,
 		done: m.fileReviewed(v, fi),
 	}
 }
@@ -543,6 +565,8 @@ func (m *model) renderSidebar(width, height int) []string {
 	if fh > 0 {
 		out = append(out, th.Render(look.Plain, look.Border(strings.Repeat("-", width), false)))
 		m.filesNav.summary = m.filesSummary(width)
+		m.filesNav.controls = m.controls("files", modeNormal, theSidebarPane.Target(paneSubject{}),
+			button(actStartPicking, look.GlyphNone, "Select"), button(actStopPicking, look.GlyphNone, "Done"))
 		files := m.filesNav.render(th, "Files", width, fh, m.focus == focusFiles)
 		if len(m.filesNav.items) == 0 && len(files) > 1 {
 			files[1] = th.DrawCut(look.Plain, width, look.Muted(" No files here"))

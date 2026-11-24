@@ -180,6 +180,121 @@ func TestFilterFiles(t *testing.T) {
 	}
 }
 
+// v shows the file list's checkboxes, x or a click checks a file, a checks them all, and - hides
+// those checked. esc puts the checkboxes away, unchecking them.
+func TestPickFiles(t *testing.T) {
+	e := hideEnv(t)
+	e.m.setFocus(focusFiles)
+	e.press("v")
+	want := hideState{
+		Files: []string{"[ ] A README.md", "[ ] M main.go", "[ ] A main_test.go"},
+		Diff:  []string{"README.md", "main.go", "main_test.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after v (-want +got):\n%s", diff)
+	}
+
+	e.selectEntry("README.md")
+	e.press("x")
+	for y, line := range strings.Split(e.screen(), "\n") {
+		// Cut at the front to the sidebar's width.
+		if strings.Contains(line, "[ ] A ...st.go") {
+			e.m.Update(tea.MouseClickMsg{X: 2, Y: y, Button: tea.MouseLeft})
+		}
+	}
+	want.Files = []string{"[x] A README.md", "[ ] M main.go", "[x] A main_test.go"}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after x and a click (-want +got):\n%s", diff)
+	}
+	if got := e.screen(); !strings.Contains(got, "2 selected") {
+		t.Errorf("the status line does not count the selected files:\n%s", got)
+	}
+
+	e.press("-")
+	want = hideState{
+		Files: []string{"M main.go", "> 2 hidden"},
+		Diff:  []string{"main.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after - (-want +got):\n%s", diff)
+	}
+
+	e.press("v", "a")
+	want.Files = []string{"[x] M main.go", "> 2 hidden"}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after a (-want +got):\n%s", diff)
+	}
+	e.press("esc")
+	want.Files = []string{"M main.go", "> 2 hidden"}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after esc (-want +got):\n%s", diff)
+	}
+	if len(e.m.picked) != 0 {
+		t.Errorf("picked = %v after esc, want none", e.m.picked)
+	}
+}
+
+// The file list's Select starts selecting, and the status line's buttons act on the selection.
+func TestPickFilesByButton(t *testing.T) {
+	e := hideEnv(t)
+	e.click("files", "select files")
+	// Hide is greyed until a file is selected.
+	if got, want := e.shownControls("picking"), []string{"select all", "done selecting"}; !cmp.Equal(got, want) {
+		t.Errorf("status line's controls = %q, want %q", got, want)
+	}
+	e.click("picking", "select all")
+	e.click("picking", "hide selected")
+	want := hideState{Files: []string{"> 3 hidden"}}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after hiding all (-want +got):\n%s", diff)
+	}
+	if e.m.picking {
+		t.Error("still selecting after hiding the selected files")
+	}
+}
+
+// fileLine is the screen line the file list shows the entry labeled label on.
+func (e *tuiEnv) fileLine(label string) int {
+	e.t.Helper()
+	e.m.render()
+	_, _, bh := e.m.layoutSizes()
+	vh, _ := e.m.sidebarHeights(bh)
+	for i, it := range e.m.filesNav.items {
+		if it.label == label {
+			return vh + sidebarGap + e.m.filesNav.head() + i - e.m.filesNav.top
+		}
+	}
+	e.t.Fatalf("no file list entry %q", label)
+	return 0
+}
+
+// An alt click on a file starts selecting with it checked, and dragging from a box checks or
+// unchecks the boxes passed over as the press did the first.
+func TestPickFilesByDrag(t *testing.T) {
+	e := hideEnv(t)
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: e.fileLine("README.md"), Button: tea.MouseLeft, Mod: tea.ModAlt})
+	e.m.Update(tea.MouseMotionMsg{X: 2, Y: e.fileLine("main_test.go"), Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: 2, Y: e.fileLine("main_test.go"), Button: tea.MouseLeft})
+	want := hideState{
+		Files: []string{"[x] A README.md", "[x] M main.go", "[x] A main_test.go"},
+		Diff:  []string{"README.md", "main.go", "main_test.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after an alt click and a drag (-want +got):\n%s", diff)
+	}
+
+	// From a checked box, the drag unchecks.
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: e.fileLine("main_test.go"), Button: tea.MouseLeft})
+	e.m.Update(tea.MouseMotionMsg{X: 2, Y: e.fileLine("main.go"), Button: tea.MouseLeft})
+	e.m.Update(tea.MouseReleaseMsg{X: 2, Y: e.fileLine("main.go"), Button: tea.MouseLeft})
+	// Moving after the release checks nothing.
+	e.m.Update(tea.MouseMotionMsg{X: 2, Y: e.fileLine("README.md")})
+	want.Files = []string{"[x] A README.md", "[ ] M main.go", "[ ] A main_test.go"}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after a drag from a checked box (-want +got):\n%s", diff)
+	}
+}
+
 // The file list's Filter button opens the filter's prompt, and once there is a filter it is
 // labeled with it.
 func TestFilterFilesByButton(t *testing.T) {
@@ -199,3 +314,44 @@ func TestFilterFilesByButton(t *testing.T) {
 		t.Error("a click on the labeled button does not open the prompt")
 	}
 }
+
+// A click off the filter's prompt closes it without filtering, and does what it does there; a
+// click on it leaves it open.
+// The filter's prompt takes shift with the editing keys as it takes them alone, and shift+enter
+// as enter.
+// Hidden files have checkboxes too, under their open entry: - unhides those checked when every
+// checked one is hidden.
+func TestPickHiddenFiles(t *testing.T) {
+	e := hideEnv(t)
+	e.m.setFocus(focusFiles)
+	e.press("F")
+	e.typeText("main.go")
+	e.press("enter")
+	e.selectEntry("2 hidden")
+	e.press("enter", "v")
+	e.selectEntry("README.md")
+	e.press("x")
+	e.selectEntry("main_test.go")
+	e.press("x")
+	want := hideState{
+		Files: []string{"[ ] M main.go", "v 2 hidden", "[x] A README.md", "[x] A main_test.go"},
+		Diff:  []string{"main.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after checking hidden files (-want +got):\n%s", diff)
+	}
+	if got, want := e.shownControls("picking"), []string{"unhide selected", "select all", "done selecting"}; !cmp.Equal(got, want) {
+		t.Errorf("status line's controls = %q, want %q", got, want)
+	}
+	e.press("-")
+	want = hideState{
+		Files: []string{"A README.md", "M main.go", "A main_test.go"},
+		Diff:  []string{"README.md", "main.go", "main_test.go"},
+	}
+	if diff := cmp.Diff(want, e.hideState()); diff != "" {
+		t.Errorf("after - (-want +got):\n%s", diff)
+	}
+}
+
+// With vim, the filter's prompt edits as the comment box does: esc leaves insert mode, normal
+// mode's keys edit, enter runs it in any mode, and esc in normal mode closes it.

@@ -48,6 +48,9 @@ type commitSubject struct{ inView }
 type ignoredSubject struct{ inView }
 type hiddenSubject struct{ inView }
 
+// pickedSubject is the files checked in the file list, to act on together.
+type pickedSubject struct{}
+
 // changeSubject is the change under review.
 type changeSubject struct{}
 
@@ -256,16 +259,57 @@ var (
 	}
 	// A file is hidden from the review in every view, and shown again from the file list.
 	actHideFile = &interact.Action[*model, fileSubject]{
-		Title:   "hide file",
-		Help:    "hide the file from the review",
-		Applies: func(m *model, s fileSubject) bool { return !isMessage(s.diff) && !m.fileHidden(s.view, s.file) },
-		Run:     func(m *model, s fileSubject) tea.Cmd { m.setHidden([]string{s.diff.Path()}, true); return nil },
+		Title: "hide file",
+		Help:  "hide the file from the review",
+		// With files selected, - hides them instead.
+		Applies: func(m *model, s fileSubject) bool {
+			return !isMessage(s.diff) && !m.fileHidden(s.view, s.file) && len(m.picked) == 0
+		},
+		Run: func(m *model, s fileSubject) tea.Cmd { m.setHidden([]string{s.diff.Path()}, true); return nil },
 	}
 	actUnhideFile = &interact.Action[*model, fileSubject]{
 		Title:   "unhide file",
 		Help:    "show the hidden file again",
-		Applies: func(m *model, s fileSubject) bool { return m.fileHidden(s.view, s.file) },
+		Applies: func(m *model, s fileSubject) bool { return m.fileHidden(s.view, s.file) && len(m.picked) == 0 },
 		Run:     func(m *model, s fileSubject) tea.Cmd { m.setHidden([]string{s.diff.Path()}, false); return nil },
+	}
+	// Files are checked in the file list to act on together, as hiding them all at once.
+	actPickFile = &interact.Action[*model, fileSubject]{
+		Title: "select",
+		Help:  "check the file, to act on with others",
+		Applies: func(m *model, s fileSubject) bool {
+			return !isMessage(s.diff) && !m.picked[s.diff.Path()]
+		},
+		Run: func(m *model, s fileSubject) tea.Cmd { m.togglePicked(s.diff.Path()); return nil },
+	}
+	actUnpickFile = &interact.Action[*model, fileSubject]{
+		Title:   "unselect",
+		Applies: func(m *model, s fileSubject) bool { return m.picked[s.diff.Path()] },
+		Run:     func(m *model, s fileSubject) tea.Cmd { m.togglePicked(s.diff.Path()); return nil },
+	}
+	// - hides the selected files that show, or unhides them when every one is hidden.
+	actHidePicked = &interact.Action[*model, pickedSubject]{
+		Title: "hide selected",
+		Help:  "hide the selected files from the review",
+		Applies: func(m *model, _ pickedSubject) bool {
+			shown, hidden := m.pickedFiles()
+			return m.picking && (len(shown) > 0 || len(hidden) == 0)
+		},
+		Run: func(m *model, _ pickedSubject) tea.Cmd { m.hidePicked(); return nil },
+	}
+	actUnhidePicked = &interact.Action[*model, pickedSubject]{
+		Title: "unhide selected",
+		Help:  "show the selected hidden files again",
+		Applies: func(m *model, _ pickedSubject) bool {
+			_, hidden := m.pickedFiles()
+			return m.picking && len(hidden) > 0
+		},
+		Run: func(m *model, _ pickedSubject) tea.Cmd { m.unhidePicked(); return nil },
+	}
+	actPickAll = &interact.Action[*model, pickedSubject]{
+		Title:   "select all",
+		Applies: func(m *model, _ pickedSubject) bool { return m.picking },
+		Run:     func(m *model, _ pickedSubject) tea.Cmd { m.pickAll(); return nil },
 	}
 	actOpenFile = &interact.Action[*model, fileSubject]{
 		Title: "open",
@@ -600,10 +644,21 @@ var (
 	diffMovesOf   = movesOf(diffMoves)
 	readerMovesOf = movesOf(readerMoves)
 
-	actFilterFiles = paneAction("filter files", func(m *model) tea.Cmd { return m.openFileFilter() })
-	actToSidebar   = paneAction("sidebar", func(m *model) tea.Cmd { m.focusSidebar(); return nil })
-	actMoveLeft    = paneAction("sidebar, or the old side in split", func(m *model) tea.Cmd { m.moveLeft(); return nil })
-	actMoveRight   = paneAction("the new side in split", func(m *model) tea.Cmd { m.main.side = anchor.SideNew; return nil })
+	actFilterFiles  = paneAction("filter files", func(m *model) tea.Cmd { return m.openFileFilter() })
+	actStartPicking = &interact.Action[*model, paneSubject]{
+		Title:   "select files",
+		Help:    "check files, to act on together",
+		Applies: func(m *model, _ paneSubject) bool { return !m.picking && m.data != nil },
+		Run:     func(m *model, _ paneSubject) tea.Cmd { m.startPicking(); return nil },
+	}
+	actStopPicking = &interact.Action[*model, paneSubject]{
+		Title:   "done selecting",
+		Applies: func(m *model, _ paneSubject) bool { return m.picking },
+		Run:     func(m *model, _ paneSubject) tea.Cmd { m.stopPicking(); return nil },
+	}
+	actToSidebar = paneAction("sidebar", func(m *model) tea.Cmd { m.focusSidebar(); return nil })
+	actMoveLeft  = paneAction("sidebar, or the old side in split", func(m *model) tea.Cmd { m.moveLeft(); return nil })
+	actMoveRight = paneAction("the new side in split", func(m *model) tea.Cmd { m.main.side = anchor.SideNew; return nil })
 
 	actNextFile   = jumpTo("next file", 1, func(r row) bool { return r.kind == rowFile })
 	actPrevFile   = jumpTo("previous file", -1, func(r row) bool { return r.kind == rowFile })
@@ -780,6 +835,7 @@ var (
 	fileKind           *interact.Kind[*model, fileSubject]
 	ignoredKind        *interact.Kind[*model, ignoredSubject]
 	hiddenKind         *interact.Kind[*model, hiddenSubject]
+	pickedKind         *interact.Kind[*model, pickedSubject]
 	lineKind           *interact.Kind[*model, rowSubject]
 	messageLineKind    *interact.Kind[*model, rowSubject]
 	hunkKind           *interact.Kind[*model, rowSubject]
@@ -814,6 +870,7 @@ func init() {
 
 	ignoredKind = interact.NewKind[*model, ignoredSubject](func(ignoredSubject) string { return "Ignored files" })
 	hiddenKind = interact.NewKind(func(hiddenSubject) string { return "Hidden files" }, actUnhideAll)
+	pickedKind = interact.NewKind(func(pickedSubject) string { return "Selected files" }, actHidePicked, actUnhidePicked, actPickAll)
 
 	lineKind = interact.NewKind(func(rowSubject) string { return "Line" }, actCommentOnLine, actSelectLine, actSearchText, actOpenRowInEditor,
 		actCollapseGap)
@@ -828,7 +885,8 @@ func init() {
 	reviewKind = interact.NewKind(func(s reviewSubject) string { return "Review #" + strconv.Itoa(s.review.Seq) },
 		actDeleteReview)
 
-	sidebarPaneKind = interact.NewKind(func(paneSubject) string { return "Sidebar" }, append(sidebarMoves.actions(), actFilterFiles)...)
+	sidebarPaneKind = interact.NewKind(func(paneSubject) string { return "Sidebar" },
+		append(sidebarMoves.actions(), actFilterFiles, actStartPicking, actStopPicking)...)
 	diffPaneKind = interact.NewKind(func(paneSubject) string { return "Diff" }, append(diffMovesOf.actions(),
 		actMoveLeft, actMoveRight, actNextFile, actPrevFile, actNextHunk, actPrevHunk, actNextChange, actPrevChange,
 		actNextThreadInDiff, actPrevThreadInDiff, actNextUnresolved, actPrevUnresolved, actSelectLines, actFoldPrefix, actFilterFiles)...)
@@ -886,6 +944,9 @@ func init() {
 	fileKind.Bind(actHideFile, "-", "hide/unhide the file", "-")
 	fileKind.Bind(actUnhideFile, "", "", "-")
 	hiddenKind.Bind(actUnhideAll, "-", "unhide all", "-")
+	pickedKind.Bind(actHidePicked, "-", "hide/unhide the selected files", "-")
+	pickedKind.Bind(actUnhidePicked, "", "", "-")
+	pickedKind.Bind(actPickAll, "a", "select all files", "a")
 	fileKind.Bind(actHideAllSpace, "W", "hide/show whitespace changes", "W")
 	fileKind.Bind(actShowAllSpace, "", "", "W")
 	fileKind.Bind(actFileWithUncommitted, "U", "include/exclude uncommitted changes", "U")
@@ -913,6 +974,8 @@ func init() {
 
 	bindMoves(sidebarPaneKind, sidebarMoves)
 	sidebarPaneKind.Bind(actFilterFiles, "F", "filter files, as *.md !*_test.go", "F")
+	sidebarPaneKind.Bind(actStartPicking, "v", "select files, then x - a", "v")
+	sidebarPaneKind.Bind(actStopPicking, "", "", "v")
 	bindMoves(diffPaneKind, diffMovesOf)
 	bindMoves(overviewPaneKind, readerMovesOf)
 	for _, b := range []struct {
@@ -1027,6 +1090,8 @@ func init() {
 // as the chain's, after the pane.
 func init() {
 	interact.Via(overviewKind, func(overviewSubject) (changeSubject, bool) { return changeSubject{}, true }, changeKind)
+	// A file carries the files selected with it, whose actions apply while they are being selected.
+	interact.Via(fileKind, func(fileSubject) (pickedSubject, bool) { return pickedSubject{}, true }, pickedKind)
 	// A file of a commit carries its commit; one of the whole diff or the interdiff has none.
 	interact.Via(fileKind, func(s fileSubject) (commitSubject, bool) {
 		return commitSubject{s.inView}, s.view.kind == viewCommit
@@ -1064,6 +1129,7 @@ var (
 	sidebarFileList    *interact.Place[*model, fileSubject]
 	sidebarIgnored     *interact.Place[*model, ignoredSubject]
 	sidebarHidden      *interact.Place[*model, hiddenSubject]
+	thePicked          *interact.Place[*model, pickedSubject]
 	commitHeader       *interact.Place[*model, commitSubject]
 	fileHeaderList     *interact.Place[*model, fileSubject]
 	lines              *interact.Place[*model, rowSubject]
@@ -1097,6 +1163,7 @@ func init() {
 	sidebarIgnored = interact.List(ignoredKind)
 	sidebarIgnored.Bind(actToggleIgnored, "enter/l", "show or fold ignored files", "enter", "l", "right")
 	sidebarHidden = interact.List(hiddenKind)
+	thePicked = interact.List(pickedKind)
 	sidebarHidden.Bind(actToggleHidden, "enter/l", "show or fold hidden files", "enter", "l", "right")
 
 	commitHeader = interact.List(commitKind)
@@ -1134,6 +1201,8 @@ func sidebarView[S any](k *interact.Kind[*model, S], show, open *interact.Action
 func sidebarFiles(k *interact.Kind[*model, fileSubject]) *interact.Place[*model, fileSubject] {
 	p := interact.List(k, interact.OnCursor(actShowFile))
 	p.Bind(actOpenFile, "enter/l", "open", "enter", "l", "right")
+	p.Bind(actPickFile, "x", "select/unselect the file", "x")
+	p.Bind(actUnpickFile, "", "", "x")
 	p.Bind(actScrollNamesBack, "shift+left/right", "scroll long names", "shift+left")
 	p.Bind(actScrollNamesOn, "", "", "shift+right")
 	return p

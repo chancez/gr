@@ -390,6 +390,7 @@ func (m *model) switchChange(c store.Change) tea.Cmd {
 	m.threadFolds, m.openGaps, m.expanded = map[string]bool{}, map[string]gapShown{}, map[string]bool{}
 	m.showIgnored = false
 	m.hidden, m.fileFilter, m.showHidden = map[string]bool{}, ignore.Filter{}, false
+	m.picking, m.picked = false, map[string]bool{}
 	m.contents, m.segments = map[string][]string{}, map[int][]int{}
 	scrolloff, height := m.main.scrolloff, m.main.height
 	m.main = pane{anchor: -1, side: m.main.side, scrolloff: scrolloff, height: height}

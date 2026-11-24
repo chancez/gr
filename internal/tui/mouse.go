@@ -151,6 +151,20 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 			m.toggleHidden()
 			return m, nil
 		}
+		// While files are being selected, a click checks one, as x does, and a drag from it checks
+		// or unchecks the files it passes over alike, hidden ones too. An alt or ctrl click starts
+		// selecting, as terminals pass on one or the other.
+		if msg.Mod&(tea.ModAlt|tea.ModCtrl) != 0 && f == focusFiles && !m.picking {
+			m.picking = true
+			if _, ok := m.pickable(f, i); !ok {
+				m.picking = false
+			}
+		}
+		if path, ok := m.pickable(f, i); ok {
+			m.togglePicked(path)
+			m.pickDrag = &pickDrag{on: m.picked[path], at: i}
+			return m, nil
+		}
 		return m, m.landed(true)
 	}
 	i := m.main.rowAt(msg.Y - m.mainTop())
@@ -274,6 +288,14 @@ func (m *model) mouseMotion(msg tea.MouseMotionMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.draggingSplit {
 		m.viewsHeight = max(msg.Y, 2)
+		return m, nil
+	}
+	if m.pickDrag != nil {
+		if nw, _, _ := m.layoutSizes(); msg.X < nw {
+			if l, f, y, rows := m.sidebarLine(msg.Y); f == focusFiles && l.indicatorAt(y, rows) == 0 {
+				m.dragPick(l.at(y))
+			}
+		}
 		return m, nil
 	}
 	if !m.dragging {

@@ -73,6 +73,9 @@ func (m *model) renderStatus() string {
 			return th.DrawCut(look.Plain, m.width, spans...)
 		}
 	}
+	if m.picking && m.mode == modeNormal {
+		return m.renderPicking()
+	}
 	d := m.data
 	text := fmt.Sprintf("#%d rev %d", d.change.Seq, d.revision.Seq)
 	if d.change.State != store.ChangeOpen {
@@ -112,4 +115,20 @@ func (m *model) renderStatus() string {
 	right := m.renderHints(m.shortHelp(), max(m.width-ansi.StringWidth(l)-2, 10), 3)
 	gap := max(m.width-ansi.StringWidth(l)-ansi.StringWidth(right)-1, 1)
 	return look.Fit(l+strings.Repeat(" ", gap)+right, m.width)
+}
+
+// renderPicking is the status line while files are selected in the file list: how many, and what
+// to do with them.
+func (m *model) renderPicking() string {
+	n := len(m.picked)
+	shown, _ := m.pickedFiles()
+	spans := []look.Span{look.Heading(fmt.Sprintf("%d selected  ", n))}
+	spans = append(spans, m.controls("picking", modeNormal, thePicked.Target(pickedSubject{}),
+		button(actHidePicked, look.GlyphNone, "Hide").disabledIf(len(shown) == 0), button(actUnhidePicked, look.GlyphNone, "Unhide"),
+		button(actPickAll, look.GlyphNone, "Select all"))...)
+	spans = append(spans, look.Default(" "))
+	spans = append(spans, m.controls("picking", modeNormal, theSidebarPane.Target(paneSubject{}),
+		button(actStopPicking, look.GlyphCancel, "Done"))...)
+	spans = append(append(spans, look.Default("  ")), look.Hint("x", "selects")...)
+	return m.r.th.DrawCut(look.Plain, m.width, spans...)
 }
