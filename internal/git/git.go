@@ -63,6 +63,10 @@ var baseArgs = []string{
 	"-c", "color.ui=false",
 }
 
+// waitDelay is how long a command's output is waited for once git exits or is killed, as a
+// process git started, a hook or a helper, may hold it open long after.
+const waitDelay = time.Second
+
 func run(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte, error) {
 	return runEnv(ctx, dir, nil, stdin, args...)
 }
@@ -71,6 +75,7 @@ func run(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte,
 func runEnv(ctx context.Context, dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, "git", slices.Concat(baseArgs, args)...)
 	cmd.Dir = dir
+	cmd.WaitDelay = waitDelay
 	if env != nil {
 		cmd.Env = append(os.Environ(), env...)
 	}
@@ -82,6 +87,10 @@ func runEnv(ctx context.Context, dir string, env []string, stdin []byte, args ..
 	cmd.Stderr = &stderr
 	start := time.Now()
 	err := cmd.Run()
+	if errors.Is(err, exec.ErrWaitDelay) {
+		// git itself succeeded, and wrote all it had to.
+		err = nil
+	}
 	slog.Debug("git", "args", args, "duration", time.Since(start), "bytes", stdout.Len(), "err", err)
 	if err != nil {
 		// What git wrote is kept, for a command whose exit code is an answer, as merge-tree's 1 for
