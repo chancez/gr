@@ -14,6 +14,15 @@ func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(time.Time) tea.Msg { return tickMsg{} })
 }
 
+// polled marks the load cmd makes as a refresh's.
+func polled(cmd tea.Cmd) tea.Cmd {
+	return func() tea.Msg {
+		msg := cmd().(dataMsg)
+		msg.polled = true
+		return msg
+	}
+}
+
 // reloadCmd re-reads the database, keeping git's data and the loaded diffs.
 func (m *model) reloadCmd() tea.Cmd {
 	if m.data == nil {

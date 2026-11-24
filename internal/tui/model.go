@@ -263,11 +263,15 @@ type model struct {
 
 	watcher *store.Watcher
 	version int64
+	// polling is set while a refresh, or the load it started, runs, so a tick starts no other.
+	polling bool
 }
 
 type dataMsg struct {
 	data *changeData
 	err  error
+	// polled is set on a load a refresh started.
+	polled bool
 }
 
 type opMsg struct {
@@ -396,6 +400,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case dataMsg:
+		if msg.polled {
+			m.polling = false
+		}
 		if msg.err == nil && msg.data.change.ID != m.changeID {
 			// Loaded for the change shown before a switch.
 			return m, nil
@@ -449,6 +456,11 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.reloadCmd()
 	case tickMsg:
 		m.expireStatus(time.Now())
+		// Git slowed down, as by a virus scanner, would otherwise have refreshes pile up.
+		if m.polling {
+			return m, tick()
+		}
+		m.polling = true
 		return m, tea.Batch(m.refreshCmd(), tick())
 	case refreshMsg:
 		m.version = msg.version
@@ -456,10 +468,11 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.askAboutLanding()
 		switch {
 		case msg.headMoved, msg.uncommittedMoved:
-			return m, m.loadCmd()
+			return m, polled(m.loadCmd())
 		case msg.changed:
-			return m, m.reloadCmd()
+			return m, polled(m.reloadCmd())
 		}
+		m.polling = false
 		return m, nil
 	case editorMsg:
 		if msg.err != nil {

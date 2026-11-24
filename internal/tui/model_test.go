@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -306,6 +307,44 @@ func TestLiveRefresh(t *testing.T) {
 	if e.m.data.revision.Seq != 2 {
 		t.Errorf("revision after the branch moved = %d, want 2", e.m.data.revision.Seq)
 	}
+}
+
+// A tick while a refresh, or the load it started, still runs starts no other refresh.
+func TestRefreshesDoNotOverlap(t *testing.T) {
+	e := newTUIEnv(t)
+	synctest.Test(t, func(t *testing.T) {
+		// tick gives the model a tick, and reports whether it started a refresh, and the refresh.
+		tick := func() (bool, tea.Cmd) {
+			_, cmd := e.m.Update(tickMsg{})
+			batch, ok := cmd().(tea.BatchMsg)
+			if !ok {
+				return false, nil
+			}
+			return true, batch[0]
+		}
+		var started []bool
+		ok, refresh := tick()
+		started = append(started, ok)
+		ok, _ = tick()
+		started = append(started, ok)
+		e.m.Update(refresh())
+		ok, refresh = tick()
+		started = append(started, ok)
+
+		// The branch moves, so the refresh starts a load.
+		e.repo.Write("new.go", "package main\n")
+		e.repo.Commit("add file")
+		_, load := e.m.Update(refresh())
+		ok, _ = tick()
+		started = append(started, ok)
+		e.m.Update(load())
+		ok, _ = tick()
+		started = append(started, ok)
+
+		if diff := cmp.Diff([]bool{true, false, true, false, true}, started); diff != "" {
+			t.Errorf("refreshes started by each tick (-want +got):\n%s", diff)
+		}
+	})
 }
 
 func TestPairLines(t *testing.T) {
