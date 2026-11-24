@@ -40,7 +40,7 @@ func (m *model) renderStatus() string {
 	th := m.r.th
 	switch m.mode {
 	case modeSearch, modeFilter:
-		return m.searchInput.View()
+		return m.renderPrompt(m.width)
 	case modeVerdict:
 		t := theVerdict.Target(verdictSubject{})
 		spans := append([]look.Span{look.Heading("Submit review: ")}, m.controls("verdict", modeVerdict, t,

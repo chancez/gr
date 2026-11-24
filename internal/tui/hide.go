@@ -5,7 +5,6 @@ import (
 	"maps"
 	"slices"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/chancez/gr/internal/ignore"
@@ -52,31 +51,12 @@ func (m *model) unhideAll() {
 }
 
 // openFileFilter asks for the patterns that pick the files to review, starting from those in use.
-// The status line's input is the search's, as the two never show at once.
 func (m *model) openFileFilter() tea.Cmd {
-	in := textinput.New()
-	in.Prompt = "filter files: "
-	in.Placeholder = "*.md !*_test.go"
-	in.SetWidth(max(m.width-len(in.Prompt)-1, 10))
-	in.SetValue(m.fileFilter.String())
-	m.searchInput = in
-	m.mode = modeFilter
-	return m.searchInput.Focus()
+	return m.openPrompt(modeFilter, "filter files: ", "*.md !*_test.go", m.fileFilter.String())
 }
 
 func (m *model) fileFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case pressed(m, msg, actCancel, theApp.Target(appSubject{})):
-		m.mode = modeNormal
-		return m, nil
-	case msg.String() == "enter":
-		m.mode = modeNormal
-		m.setFileFilter(ignore.ParseFilter(m.searchInput.Value()))
-		return m, nil
-	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	return m, cmd
+	return m.promptKey(msg, func(s string) { m.setFileFilter(ignore.ParseFilter(s)) })
 }
 
 // setFileFilter hides the files f hides, as hiding each would: the files shown by hand are hidden

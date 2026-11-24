@@ -317,8 +317,51 @@ func TestFilterFilesByButton(t *testing.T) {
 
 // A click off the filter's prompt closes it without filtering, and does what it does there; a
 // click on it leaves it open.
+func TestFilterPromptClickOff(t *testing.T) {
+	e := hideEnv(t)
+	e.press("F")
+	e.typeText("*.md")
+	_, _, bh := e.m.layoutSizes()
+	e.m.Update(tea.MouseClickMsg{X: 3, Y: bh, Button: tea.MouseLeft})
+	if e.m.mode != modeFilter {
+		t.Fatalf("mode = %d after a click on the prompt, want it open", e.m.mode)
+	}
+	e.m.Update(tea.MouseClickMsg{X: 2, Y: e.fileLine("main.go"), Button: tea.MouseLeft})
+	got := struct {
+		Mode   mode
+		Filter string
+		Sel    string
+	}{e.m.mode, e.m.fileFilter.String(), e.m.filesNav.items[e.m.filesNav.pos].label}
+	want := struct {
+		Mode   mode
+		Filter string
+		Sel    string
+	}{modeNormal, "", "main.go"}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("after a click off the prompt (-want +got):\n%s", diff)
+	}
+}
+
 // The filter's prompt takes shift with the editing keys as it takes them alone, and shift+enter
 // as enter.
+func TestFilterPromptShiftKeys(t *testing.T) {
+	e := hideEnv(t)
+	e.press("F")
+	e.typeText("*.mdx")
+	e.m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace, Mod: tea.ModShift})
+	e.m.Update(tea.KeyPressMsg{Code: tea.KeyHome, Mod: tea.ModShift})
+	e.m.Update(tea.KeyPressMsg{Code: tea.KeyDelete, Mod: tea.ModShift})
+	e.typeText("*")
+	e.m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
+	type result struct {
+		Mode   mode
+		Filter string
+	}
+	if diff := cmp.Diff(result{modeNormal, "*.md"}, result{e.m.mode, e.m.fileFilter.String()}); diff != "" {
+		t.Errorf("after shift keys (-want +got):\n%s", diff)
+	}
+}
+
 // Hidden files have checkboxes too, under their open entry: - unhides those checked when every
 // checked one is hidden.
 func TestPickHiddenFiles(t *testing.T) {
@@ -355,3 +398,26 @@ func TestPickHiddenFiles(t *testing.T) {
 
 // With vim, the filter's prompt edits as the comment box does: esc leaves insert mode, normal
 // mode's keys edit, enter runs it in any mode, and esc in normal mode closes it.
+func TestFilterPromptVim(t *testing.T) {
+	e := hideEnv(t)
+	e.m.vim = true
+	e.press("F")
+	e.typeText("x*.md")
+	e.press("esc")
+	if !strings.Contains(e.screen(), "NORMAL") {
+		t.Errorf("the prompt does not show vim's mode:\n%s", e.screen())
+	}
+	e.press("0", "x", "enter")
+	type result struct {
+		Mode   mode
+		Filter string
+	}
+	if diff := cmp.Diff(result{modeNormal, "*.md"}, result{e.m.mode, e.m.fileFilter.String()}); diff != "" {
+		t.Errorf("after editing in normal mode (-want +got):\n%s", diff)
+	}
+
+	e.press("F", "esc", "esc")
+	if diff := cmp.Diff(result{modeNormal, "*.md"}, result{e.m.mode, e.m.fileFilter.String()}); diff != "" {
+		t.Errorf("after esc twice (-want +got):\n%s", diff)
+	}
+}

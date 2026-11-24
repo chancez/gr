@@ -501,7 +501,7 @@ func TestClickInTextInputs(t *testing.T) {
 	x = col(e, bh, "hello")
 	for _, at := range []int{x + 2, x - 1, x + 20} {
 		click(e, at, bh)
-		got = append(got, e.m.searchInput.Position())
+		got = append(got, e.m.prompt.area.Column())
 	}
 	if diff := cmp.Diff([]int{2, 0, 6, 2, 0, 5}, got); diff != "" {
 		t.Errorf("cursor positions, filter then search (-want +got):\n%s", diff)

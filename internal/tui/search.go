@@ -9,7 +9,6 @@ import (
 	"github.com/chancez/gr/internal/tui/look"
 	"github.com/charmbracelet/x/ansi"
 
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 )
 
@@ -24,32 +23,18 @@ func matcher(pattern string) func(string) bool {
 }
 
 func (m *model) openSearch() tea.Cmd {
-	in := textinput.New()
-	in.Prompt = "/"
-	in.SetWidth(max(m.width-2, 10))
-	m.searchInput = in
-	m.mode = modeSearch
 	m.setFocus(focusMain)
-	return m.searchInput.Focus()
+	return m.openPrompt(modeSearch, "/", "", "")
 }
 
 func (m *model) searchKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	switch {
-	case pressed(m, msg, actCancel, theApp.Target(appSubject{})):
-		m.mode = modeNormal
-		return m, nil
-	case msg.String() == "enter":
-		m.mode = modeNormal
-		if pattern := m.searchInput.Value(); pattern != "" {
+	return m.promptKey(msg, func(pattern string) {
+		if pattern != "" {
 			m.search = pattern
 			m.searchPos, m.searchHits = 0, 0
 		}
 		m.searchStep(1)
-		return m, nil
-	}
-	var cmd tea.Cmd
-	m.searchInput, cmd = m.searchInput.Update(msg)
-	return m, cmd
+	})
 }
 
 // searchText searches for the text selected with the mouse, and lets it go, as moving on from it

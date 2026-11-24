@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/help"
-	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
@@ -161,15 +160,16 @@ type model struct {
 	navHover    int
 	// subjectHover is set while the mouse is over a commit's subject on its bar.
 	subjectHover bool
-	// search is the last search pattern, and searchInput the prompt while typing one. searchPos
-	// and searchHits are the current match's position among the matches.
-	search      string
-	searchPos   int
-	searchHits  int
-	searchInput textinput.Model
+	// search is the last search pattern, and prompt the status line's input while typing one, or
+	// the file filter. searchPos and searchHits are the current match's position among the
+	// matches.
+	search     string
+	searchPos  int
+	searchHits int
+	prompt     prompt
 	// picker is the popup open in modePicker.
 	picker *picker
-	// vim edits comments with vim's modes.
+	// vim edits comments, and the prompt, with vim's modes.
 	vim bool
 	// repoNames are the names of repositories by directory, as git gives them.
 	repoNames map[string]string
@@ -552,7 +552,7 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	case modeSearch, modeFilter:
 		var cmd tea.Cmd
-		m.searchInput, cmd = m.searchInput.Update(msg)
+		m.prompt.area, cmd = m.prompt.area.Update(msg)
 		return m, cmd
 	case modePicker:
 		return m, m.picker.edit(msg)

@@ -57,6 +57,11 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	if m.mode == modePicker && msg.Button == tea.MouseRight {
 		m.closePicker()
 	}
+	// A click off the search or file filter prompt closes it, as esc does, and goes on to what it
+	// lands on.
+	if _, _, bh := m.layoutSizes(); (m.mode == modeSearch || m.mode == modeFilter) && msg.Y != bh {
+		m.mode = modeNormal
+	}
 	// A control runs on a left click, in any mode it is drawn in.
 	if msg.Button == tea.MouseLeft {
 		if c, ok := m.controlAt(msg.X, msg.Y); ok && c.run.Applies(m) {
@@ -70,7 +75,7 @@ func (m *model) mouseClick(msg tea.MouseClickMsg) (tea.Model, tea.Cmd) {
 	// The search bar, on the status line, places its cursor where it is clicked, as the file
 	// filter's does.
 	if _, _, bh := m.layoutSizes(); (m.mode == modeSearch || m.mode == modeFilter) && msg.Button == tea.MouseLeft && msg.Y == bh {
-		placeCursor(&m.searchInput, msg.X)
+		m.placePromptCursor(msg.X)
 		return m, nil
 	}
 	// In the comment box's text, a press places the cursor, and a drag from it selects.

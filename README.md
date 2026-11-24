@@ -136,7 +136,7 @@ auto_advance = true    # move on to the next unreviewed file after marking one r
 ignore_whitespace = true  # hide whitespace-only changes, as git diff -w; W toggles it
 
 [editor]
-vim = true             # vim's modes in the comment box: esc to normal mode, esc again to close
+vim = true             # vim's modes in the comment box and the search and filter prompts: esc to normal mode, esc again to close
 
 [git]
 timeout = "2m"         # how long one git command may run before it is killed; "0s" for no limit; default 1m
