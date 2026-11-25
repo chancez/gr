@@ -126,7 +126,7 @@ func TestMergeSeenWhileOpen(t *testing.T) {
 	e.repo.Git("checkout", "-q", "main")
 	e.repo.Git("merge", "-q", "--ff-only", "feature")
 	e.repo.Git("checkout", "-q", "feature")
-	_, cmd := e.m.Update(e.m.refreshCmd()())
+	_, cmd := e.m.Update(e.m.refreshCmd(true)())
 	if cmd == nil {
 		t.Fatal("moving the base read nothing again")
 	}
@@ -146,7 +146,7 @@ func TestMergeSeenWhileOpen(t *testing.T) {
 // tick runs one refresh, as the TUI's timer does, and what it starts.
 func (e *tuiEnv) tick() {
 	e.t.Helper()
-	_, cmd := e.m.Update(e.m.refreshCmd()())
+	_, cmd := e.m.Update(e.m.refreshCmd(true)())
 	e.drain(cmd)
 }
 

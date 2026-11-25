@@ -123,9 +123,9 @@ func (m *model) loadCmd() tea.Cmd {
 	}
 }
 
-// refreshCmd checks whether another process wrote to the database, the branch moved, or what is
-// uncommitted in its worktree changed.
-func (m *model) refreshCmd() tea.Cmd {
+// refreshCmd checks whether another process wrote to the database and, with withGit, whether the
+// branch moved or what is uncommitted in its worktree changed.
+func (m *model) refreshCmd(withGit bool) tea.Cmd {
 	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
 	var change store.Change
 	var tip, baseTip string
@@ -141,7 +141,7 @@ func (m *model) refreshCmd() tea.Cmd {
 			return refreshMsg{version: last}
 		}
 		msg := refreshMsg{version: v, changed: v != last}
-		if change.Kind == store.KindBranch {
+		if withGit && change.Kind == store.KindBranch {
 			// Closed changes too: new work on a merged change's branch is a new change's to offer.
 			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != tip {
 				msg.headMoved = true

@@ -219,6 +219,8 @@ func (a *app) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.TerminalVersionMsg:
 		a.terminal = &msg
 		return a, a.all(msg)
+	case tea.FocusMsg, tea.BlurMsg:
+		return a, a.all(msg)
 	case tea.MouseClickMsg:
 		if msg.Y == 0 {
 			return a, a.clickBar(msg)
@@ -354,6 +356,7 @@ func (a *app) View() tea.View {
 	}
 	v := a.tabs[a.active].View()
 	v.Content = a.tabBar() + "\n" + v.Content
+	v.ReportFocus = true
 	if v.Cursor != nil {
 		v.Cursor.Y++
 	}

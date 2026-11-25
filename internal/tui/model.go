@@ -280,7 +280,15 @@ type model struct {
 	version int64
 	// polling is set while a refresh, or the load it started, runs, so a tick starts no other.
 	polling bool
+	// blurred is set while the terminal is not focused, when git is looked at only every
+	// blurredPoll, and gitAt is when it was last.
+	blurred bool
+	gitAt   time.Time
 }
+
+// blurredPoll is how often a tab looks at git while the terminal is not focused. With many gr
+// running, each looking every second adds up, as for a virus scanner checking every process.
+const blurredPoll = 30 * time.Second
 
 type dataMsg struct {
 	data *changeData
@@ -478,7 +486,19 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tick()
 		}
 		m.polling = true
-		return m, tea.Batch(m.refreshCmd(), tick())
+		now := time.Now()
+		withGit := !m.blurred || now.Sub(m.gitAt) >= blurredPoll
+		if withGit {
+			m.gitAt = now
+		}
+		return m, tea.Batch(m.refreshCmd(withGit), tick())
+	case tea.FocusMsg:
+		// What changed while away is looked at on the next tick.
+		m.blurred, m.gitAt = false, time.Time{}
+		return m, nil
+	case tea.BlurMsg:
+		m.blurred = true
+		return m, nil
 	case refreshMsg:
 		m.version = msg.version
 		// A question about the change that waited on something else open, as each tick looks.

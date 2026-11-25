@@ -285,7 +285,7 @@ func TestLiveRefresh(t *testing.T) {
 	if _, err := other.Submit(t.Context(), e.chg, store.VerdictComment, ""); err != nil {
 		t.Fatal(err)
 	}
-	msg := e.m.refreshCmd()().(refreshMsg)
+	msg := e.m.refreshCmd(true)().(refreshMsg)
 	if !msg.changed {
 		t.Fatal("refresh did not notice another connection's write")
 	}
@@ -298,7 +298,7 @@ func TestLiveRefresh(t *testing.T) {
 	// A new commit on the branch is noticed too.
 	e.repo.Write("new.go", "package main\n")
 	e.repo.Commit("add file")
-	msg = e.m.refreshCmd()().(refreshMsg)
+	msg = e.m.refreshCmd(true)().(refreshMsg)
 	if !msg.headMoved {
 		t.Fatal("refresh did not notice the branch moving")
 	}
@@ -343,6 +343,37 @@ func TestRefreshesDoNotOverlap(t *testing.T) {
 
 		if diff := cmp.Diff([]bool{true, false, true, false, true}, started); diff != "" {
 			t.Errorf("refreshes started by each tick (-want +got):\n%s", diff)
+		}
+	})
+}
+
+// While the terminal is not focused, a tick looks at git only every blurredPoll, and focus brings
+// the next tick to look again.
+func TestBlurredRefreshesSkipGit(t *testing.T) {
+	e := newTUIEnv(t)
+	synctest.Test(t, func(t *testing.T) {
+		// tick gives the model a tick, and reports whether its refresh saw the branch move.
+		tick := func() bool {
+			_, cmd := e.m.Update(tickMsg{})
+			msg := cmd().(tea.BatchMsg)[0]().(refreshMsg)
+			// Not applied, so the branch moving is seen again on the next look.
+			e.m.polling = false
+			return msg.headMoved
+		}
+		e.m.Update(tea.BlurMsg{})
+		var moved []bool
+		moved = append(moved, tick())
+		e.repo.Write("new.go", "package main\n")
+		e.repo.Commit("add file")
+		moved = append(moved, tick())
+		time.Sleep(blurredPoll)
+		moved = append(moved, tick())
+		moved = append(moved, tick())
+		e.m.Update(tea.FocusMsg{})
+		moved = append(moved, tick())
+
+		if diff := cmp.Diff([]bool{false, false, true, false, true}, moved); diff != "" {
+			t.Errorf("branch moving seen by each tick (-want +got):\n%s", diff)
 		}
 	})
 }
@@ -1964,7 +1995,7 @@ func TestBranchMovingKeepsTheDiff(t *testing.T) {
 
 	e.repo.Write("fix.go", "package main\n")
 	e.repo.Commit("fix")
-	msg := e.m.refreshCmd()().(refreshMsg)
+	msg := e.m.refreshCmd(true)().(refreshMsg)
 	if !msg.headMoved {
 		t.Fatal("the branch moving went unnoticed")
 	}
