@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,6 +22,19 @@ var ErrShallow = errors.New("shallow clones are not supported")
 
 // ErrNoCommits is returned by RootCommit for a repository with no commits.
 var ErrNoCommits = errors.New("repository has no commits")
+
+// ErrTimeout is a git command killed for running longer than the timeout.
+var ErrTimeout = errors.New("timed out")
+
+// DefaultTimeout is how long one git command may run unless SetTimeout says otherwise.
+const DefaultTimeout = time.Minute
+
+var timeout atomic.Int64
+
+func init() { timeout.Store(int64(DefaultTimeout)) }
+
+// SetTimeout sets how long one git command may run before it is killed. Zero is no limit.
+func SetTimeout(d time.Duration) { timeout.Store(int64(d)) }
 
 // Repo is a git repository, addressed through one of its worktrees.
 type Repo struct {
@@ -37,7 +51,7 @@ type Error struct {
 
 func (e *Error) Error() string {
 	msg := strings.TrimSpace(e.Stderr)
-	if msg == "" {
+	if msg == "" || errors.Is(e.Err, ErrTimeout) {
 		msg = e.Err.Error()
 	}
 	return fmt.Sprintf("git %s: %s", strings.Join(e.Args, " "), msg)
@@ -73,6 +87,11 @@ func run(ctx context.Context, dir string, stdin []byte, args ...string) ([]byte,
 
 // runEnv runs git with env added to the environment.
 func runEnv(ctx context.Context, dir string, env []string, stdin []byte, args ...string) ([]byte, error) {
+	if t := time.Duration(timeout.Load()); t > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeoutCause(ctx, t, fmt.Errorf("%w after %s, git.timeout in the config file", ErrTimeout, t))
+		defer cancel()
+	}
 	cmd := exec.CommandContext(ctx, "git", slices.Concat(baseArgs, args)...)
 	cmd.Dir = dir
 	cmd.WaitDelay = waitDelay
@@ -90,6 +109,10 @@ func runEnv(ctx context.Context, dir string, env []string, stdin []byte, args ..
 	if errors.Is(err, exec.ErrWaitDelay) {
 		// git itself succeeded, and wrote all it had to.
 		err = nil
+	}
+	if err != nil && ctx.Err() != nil {
+		// Killed: why says more than the signal.
+		err = context.Cause(ctx)
 	}
 	slog.Debug("git", "args", args, "duration", time.Since(start), "bytes", stdout.Len(), "err", err)
 	if err != nil {
