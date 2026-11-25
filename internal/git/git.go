@@ -212,6 +212,30 @@ func (r *Repo) ResolveCommit(ctx context.Context, rev string) (string, error) {
 	return r.line(ctx, "rev-parse", "--verify", "--end-of-options", rev+"^{commit}")
 }
 
+// ResolveCommits resolves each of revs to a full commit sha, or "" for one naming no commit, in
+// one process.
+func (r *Repo) ResolveCommits(ctx context.Context, revs []string) ([]string, error) {
+	var in strings.Builder
+	for _, rev := range revs {
+		in.WriteString(rev + "^{commit}\n")
+	}
+	out, err := run(ctx, r.Dir, []byte(in.String()), "cat-file", "--batch-check=%(objectname)")
+	if err != nil {
+		return nil, err
+	}
+	shas := strings.Split(strings.TrimSuffix(string(out), "\n"), "\n")
+	if len(shas) != len(revs) {
+		return nil, fmt.Errorf("git cat-file: %d lines for %d revisions", len(shas), len(revs))
+	}
+	for i, sha := range shas {
+		// "<rev> missing" or "<rev> ambiguous".
+		if strings.Contains(sha, " ") {
+			shas[i] = ""
+		}
+	}
+	return shas, nil
+}
+
 // Branches lists local branches, then remote branches as remote/name, without remotes' HEADs.
 func (r *Repo) Branches(ctx context.Context) ([]string, error) {
 	out, err := r.run(ctx, "for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")

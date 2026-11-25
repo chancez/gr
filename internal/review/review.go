@@ -248,14 +248,29 @@ func (s *Service) cutRefs(ctx context.Context, baseBranch string) []cutRef {
 	return refs
 }
 
-// BaseTips are the commits the refs a change can be cut at point to, to tell when any moves.
-func (s *Service) BaseTips(ctx context.Context, change store.Change) string {
-	var tips []string
-	for _, r := range s.cutRefs(ctx, change.BaseBranch) {
-		sha, _ := s.git.ResolveCommit(ctx, r.ref)
-		tips = append(tips, sha)
+// Tips are where a branch change's branch, and the refs an open one can be cut at, point, to tell
+// when any moves: the branch with new work, the base as the branch is merged into it.
+type Tips struct {
+	Head string
+	Base string
+}
+
+// Tips reads change's tips, resolving them all in one process.
+func (s *Service) Tips(ctx context.Context, change store.Change) Tips {
+	revs := []string{"refs/heads/" + change.Branch}
+	if change.State == store.ChangeOpen {
+		for _, r := range s.cutRefs(ctx, change.BaseBranch) {
+			revs = append(revs, r.ref)
+		}
 	}
-	return strings.Join(tips, " ")
+	shas, err := s.git.ResolveCommits(ctx, revs)
+	if err != nil {
+		return Tips{}
+	}
+	return Tips{
+		Head: shas[0],
+		Base: strings.Join(shas[1:], " "),
+	}
 }
 
 // EnsureChange finds the open change for a target or creates it, then syncs it. A branch's open

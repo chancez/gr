@@ -128,10 +128,10 @@ func (m *model) loadCmd() tea.Cmd {
 func (m *model) refreshCmd(withGit bool) tea.Cmd {
 	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
 	var change store.Change
-	var tip, baseTip string
+	var tips review.Tips
 	var uncommitted review.Uncommitted
 	if m.data != nil {
-		change, tip, baseTip, uncommitted = m.data.change, m.data.tip, m.data.baseTip, m.data.uncommitted
+		change, tips, uncommitted = m.data.change, m.data.tips, m.data.uncommitted
 	}
 	// Shown, a file changed again is seen, which git's status does not tell.
 	watching := m.current < len(m.views) && (m.views[m.current].kind == viewUncommitted || m.views[m.current].uncommitted)
@@ -143,14 +143,9 @@ func (m *model) refreshCmd(withGit bool) tea.Cmd {
 		msg := refreshMsg{version: v, changed: v != last}
 		if withGit && change.Kind == store.KindBranch {
 			// Closed changes too: new work on a merged change's branch is a new change's to offer.
-			if sha, err := svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch); err == nil && sha != tip {
+			// The base moving can merge an open change, as fast-forwarding main onto the branch does.
+			if now := svc.Tips(ctx, change); now.Head != "" && now != tips {
 				msg.headMoved = true
-			}
-			// The base moving can merge the change, as fast-forwarding main onto the branch does.
-			if change.State == store.ChangeOpen {
-				if svc.BaseTips(ctx, change) != baseTip {
-					msg.headMoved = true
-				}
 			}
 			msg.uncommittedMoved = uncommittedMoved(ctx, svc, change, uncommitted, watching)
 		}

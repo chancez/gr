@@ -22,11 +22,8 @@ type changeData struct {
 	change    store.Change
 	revision  store.Revision
 	revisions []store.Revision
-	// tip and baseTip are the branch's commit and its base's and the base's upstream's when the
-	// change was loaded, to see them move: the branch with new work, the base as the branch is
-	// merged into it.
-	tip     string
-	baseTip string
+	// tips are the branch's and its base's when the change was loaded, to see them move.
+	tips review.Tips
 	// emptied is set on an open change whose branch has no commits of its own left, though its
 	// own are not on the base: whether it merged is the viewer's to say.
 	emptied bool
@@ -125,10 +122,9 @@ func load(ctx context.Context, svc *review.Service, changeID string, opts *diffO
 	}
 	// The branch's and base's tips, read before syncing: should one move meanwhile, the next look
 	// sees it did.
-	var tip, baseTip string
+	var tips review.Tips
 	if change.Kind == store.KindBranch {
-		tip, _ = svc.Git().ResolveCommit(ctx, "refs/heads/"+change.Branch)
-		baseTip = svc.BaseTips(ctx, change)
+		tips = svc.Tips(ctx, change)
 	}
 	change, rev, err := svc.Sync(ctx, change)
 	if err != nil {
@@ -137,8 +133,7 @@ func load(ctx context.Context, svc *review.Service, changeID string, opts *diffO
 	d := &changeData{
 		change:         change,
 		revision:       rev,
-		tip:            tip,
-		baseTip:        baseTip,
+		tips:           tips,
 		loaded:         map[string]bool{},
 		diffPlacements: map[string]store.Location{},
 		opts:           opts,

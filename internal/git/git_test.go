@@ -496,6 +496,23 @@ func TestCommitsSinceChangingPaths(t *testing.T) {
 }
 
 // A repository is named for its main worktree, so a linked worktree takes the repository's name.
+func TestResolveCommits(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "a\n")
+	root := r.Commit("root")
+	r.Git("tag", "-a", "-m", "tagged", "v1")
+	r.Write("a.txt", "b\n")
+	head := r.Commit("second")
+	tree := strings.TrimSpace(r.Git("rev-parse", "HEAD^{tree}"))
+	got, err := open(t, r.Dir).ResolveCommits(t.Context(), []string{"main", "refs/heads/main", "v1", "gone", tree})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]string{head, head, root, "", ""}, got); diff != "" {
+		t.Errorf("ResolveCommits (-want +got):\n%s", diff)
+	}
+}
+
 func TestRepoName(t *testing.T) {
 	r := gittest.New(t)
 	r.Write("a.txt", "a\n")
