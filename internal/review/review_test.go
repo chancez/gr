@@ -3,11 +3,13 @@ package review_test
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
@@ -1447,5 +1449,36 @@ func TestDiffFirstLine(t *testing.T) {
 	}
 	if diff := cmp.Diff(want, files); diff != "" {
 		t.Errorf("RevisionFiles mismatch (-want +got):\n%s", diff)
+	}
+}
+
+// A change's tips are unchanged, by stat alone, until its branch or base moves.
+func TestTipsUnchanged(t *testing.T) {
+	e := newEnv(t)
+	e.repo.Commit("root")
+	e.repo.Git("checkout", "-q", "-b", "feature")
+	e.repo.Commit("feature")
+	s := e.service(human)
+	change, _ := e.ensure(s, "feature")
+	read := func() review.Tips {
+		// Dated back, as refs written in the last moment cannot be told unchanged.
+		old := time.Now().Add(-time.Hour)
+		for _, path := range s.Tips(t.Context(), change).Files() {
+			if err := os.Chtimes(path, old, old); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
+		}
+		return s.Tips(t.Context(), change)
+	}
+	var got []bool
+	tips := read()
+	got = append(got, tips.Unchanged())
+	e.repo.Commit("more")
+	got = append(got, tips.Unchanged())
+	tips = read()
+	e.repo.Git("update-ref", "refs/heads/main", "feature")
+	got = append(got, tips.Unchanged())
+	if diff := cmp.Diff([]bool{true, false, false}, got); diff != "" {
+		t.Errorf("Unchanged after each step (-want +got):\n%s", diff)
 	}
 }

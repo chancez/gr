@@ -253,7 +253,16 @@ func (s *Service) cutRefs(ctx context.Context, baseBranch string) []cutRef {
 type Tips struct {
 	Head string
 	Base string
+	// files are where git keeps the refs read, and stamp is theirs from before they were read.
+	files []string
+	stamp string
 }
+
+// Same reports whether t and o point at the same commits.
+func (t Tips) Same(o Tips) bool { return t.Head == o.Head && t.Base == o.Base }
+
+// Unchanged reports whether no ref read for t can have moved since, by stat alone.
+func (t Tips) Unchanged() bool { return t.stamp != "" && git.Stamp(t.files) == t.stamp }
 
 // Tips reads change's tips, resolving them all in one process.
 func (s *Service) Tips(ctx context.Context, change store.Change) Tips {
@@ -263,14 +272,16 @@ func (s *Service) Tips(ctx context.Context, change store.Change) Tips {
 			revs = append(revs, r.ref)
 		}
 	}
+	var t Tips
+	if files, err := s.git.RefFiles(ctx, revs); err == nil {
+		t.files, t.stamp = files, git.Stamp(files)
+	}
 	shas, err := s.git.ResolveCommits(ctx, revs)
 	if err != nil {
 		return Tips{}
 	}
-	return Tips{
-		Head: shas[0],
-		Base: strings.Join(shas[1:], " "),
-	}
+	t.Head, t.Base = shas[0], strings.Join(shas[1:], " ")
+	return t
 }
 
 // EnsureChange finds the open change for a target or creates it, then syncs it. A branch's open

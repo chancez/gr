@@ -284,6 +284,9 @@ type model struct {
 	// blurredPoll, and gitAt is when it was last.
 	blurred bool
 	gitAt   time.Time
+	// tips are the branch's and its base's as last read, to see them move. They start as the
+	// loaded data's, and a refresh finding them unmoved updates when that was.
+	tips review.Tips
 }
 
 // blurredPoll is how often a tab looks at git while the terminal is not focused. With many gr
@@ -314,6 +317,8 @@ type refreshMsg struct {
 	headMoved bool
 	// uncommittedMoved is set when what is uncommitted in the branch's worktree changed.
 	uncommittedMoved bool
+	// tips are the branch's and its base's as read again, when unmoved.
+	tips *review.Tips
 }
 
 type editorMsg struct {
@@ -501,6 +506,9 @@ func (m *model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case refreshMsg:
 		m.version = msg.version
+		if msg.tips != nil {
+			m.tips = *msg.tips
+		}
 		// A question about the change that waited on something else open, as each tick looks.
 		m.askAboutLanding()
 		switch {

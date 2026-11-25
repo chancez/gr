@@ -126,12 +126,11 @@ func (m *model) loadCmd() tea.Cmd {
 // refreshCmd checks whether another process wrote to the database and, with withGit, whether the
 // branch moved or what is uncommitted in its worktree changed.
 func (m *model) refreshCmd(withGit bool) tea.Cmd {
-	ctx, svc, w, last := m.ctx, m.svc, m.watcher, m.version
+	ctx, svc, w, last, tips := m.ctx, m.svc, m.watcher, m.version, m.tips
 	var change store.Change
-	var tips review.Tips
 	var uncommitted review.Uncommitted
 	if m.data != nil {
-		change, tips, uncommitted = m.data.change, m.data.tips, m.data.uncommitted
+		change, uncommitted = m.data.change, m.data.uncommitted
 	}
 	// Shown, a file changed again is seen, which git's status does not tell.
 	watching := m.current < len(m.views) && (m.views[m.current].kind == viewUncommitted || m.views[m.current].uncommitted)
@@ -144,8 +143,15 @@ func (m *model) refreshCmd(withGit bool) tea.Cmd {
 		if withGit && change.Kind == store.KindBranch {
 			// Closed changes too: new work on a merged change's branch is a new change's to offer.
 			// The base moving can merge an open change, as fast-forwarding main onto the branch does.
-			if now := svc.Tips(ctx, change); now.Head != "" && now != tips {
-				msg.headMoved = true
+			// Git runs only when a file a ref is kept in changed.
+			if !tips.Unchanged() {
+				now := svc.Tips(ctx, change)
+				switch {
+				case now.Head != "" && !now.Same(tips):
+					msg.headMoved = true
+				case now.Head != "":
+					msg.tips = &now
+				}
 			}
 			msg.uncommittedMoved = uncommittedMoved(ctx, svc, change, uncommitted, watching)
 		}
@@ -156,6 +162,7 @@ func (m *model) refreshCmd(withGit bool) tea.Cmd {
 // applyData swaps in freshly loaded data, keeping the view and cursor where they were.
 func (m *model) applyData(d *changeData) {
 	first := m.data == nil
+	m.tips = d.tips
 	prevView := ""
 	prevRow := ""
 	if m.data != nil && m.current < len(m.views) {
