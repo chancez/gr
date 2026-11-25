@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/chancez/gr/internal/git"
 	"github.com/chancez/gr/internal/store"
@@ -35,6 +36,13 @@ type Service struct {
 	stale bool
 	// globalIgnore is the user's ignore file, read before the repository's.
 	globalIgnore string
+	// trees is the worktrees as last listed, with the stamp of the files they were listed from.
+	trees struct {
+		sync.Mutex
+		files []string
+		stamp string
+		list  []git.Worktree
+	}
 }
 
 // SetGlobalIgnore sets the user's ignore file, whose patterns apply to every repository.

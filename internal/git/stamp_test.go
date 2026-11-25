@@ -2,6 +2,7 @@ package git_test
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -69,6 +70,43 @@ func TestRefFilesStamp(t *testing.T) {
 		"remote branch":  true,
 		"config":         true,
 		"packed":         true,
+	}
+	if diff := cmp.Diff(want, got); diff != "" {
+		t.Errorf("stamp changed by (-want +got):\n%s", diff)
+	}
+}
+
+// The worktrees' stamp changes as one is added, or checks out another branch.
+func TestWorktreeFilesStamp(t *testing.T) {
+	r := gittest.New(t)
+	r.Write("a.txt", "a\n")
+	r.Commit("root")
+	r.Git("branch", "other")
+	wt := filepath.Join(t.TempDir(), "wt")
+	steps := []struct {
+		name string
+		do   func()
+	}{
+		{"add", func() { r.Git("worktree", "add", "-q", "-b", "side", wt) }},
+		{"checkout", func() { r.Git("-C", wt, "checkout", "-q", "other") }},
+		{"commit elsewhere", func() { r.Commit("more") }},
+	}
+	repo := open(t, r.Dir)
+	got := map[string]bool{}
+	for _, step := range steps {
+		files, err := repo.WorktreeFiles(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		age(t, files)
+		before := git.Stamp(files)
+		step.do()
+		got[step.name] = git.Stamp(files) != before
+	}
+	want := map[string]bool{
+		"add":              true,
+		"checkout":         true,
+		"commit elsewhere": false,
 	}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("stamp changed by (-want +got):\n%s", diff)

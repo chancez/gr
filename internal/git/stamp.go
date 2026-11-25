@@ -66,3 +66,21 @@ func (r *Repo) RefFiles(ctx context.Context, refs []string) ([]string, error) {
 	}
 	return files, nil
 }
+
+// WorktreeFiles are the files Worktrees reads: the main worktree's HEAD, and the directory of the
+// others and each one's HEAD.
+func (r *Repo) WorktreeFiles(ctx context.Context) ([]string, error) {
+	common, err := commonDir(ctx, r.Dir)
+	if err != nil {
+		return nil, err
+	}
+	files := []string{
+		filepath.Join(common, "HEAD"),
+		filepath.Join(common, "worktrees"),
+	}
+	trees, _ := os.ReadDir(filepath.Join(common, "worktrees"))
+	for _, e := range trees {
+		files = append(files, filepath.Join(common, "worktrees", e.Name(), "HEAD"))
+	}
+	return files, nil
+}

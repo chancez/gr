@@ -22,11 +22,31 @@ type Uncommitted struct {
 }
 
 // worktree is the worktree a branch change's branch is checked out in, if any.
+// worktrees are git's worktrees, listed again only once their files changed.
+func (s *Service) worktrees(ctx context.Context) ([]git.Worktree, error) {
+	s.trees.Lock()
+	defer s.trees.Unlock()
+	if s.trees.stamp != "" && git.Stamp(s.trees.files) == s.trees.stamp {
+		return s.trees.list, nil
+	}
+	files, err := s.git.WorktreeFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stamp := git.Stamp(files)
+	list, err := s.git.Worktrees(ctx)
+	if err != nil {
+		return nil, err
+	}
+	s.trees.files, s.trees.stamp, s.trees.list = files, stamp, list
+	return list, nil
+}
+
 func (s *Service) worktree(ctx context.Context, change store.Change) (*git.Repo, bool, error) {
 	if change.Kind != store.KindBranch {
 		return nil, false, nil
 	}
-	trees, err := s.git.Worktrees(ctx)
+	trees, err := s.worktrees(ctx)
 	if err != nil {
 		return nil, false, err
 	}
