@@ -11,6 +11,7 @@ import (
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -136,6 +137,9 @@ commands only find one, and take a change number such as 4 directly.`,
 	flags.BoolVar(&a.debug, "debug", false, "log at debug level, as GR_LOG=debug does")
 	root.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if err := a.setupLogging(); err != nil {
+			return err
+		}
+		if err := setGitTimeout(); err != nil {
 			return err
 		}
 		return a.checkAgentAuthor(cmd)
@@ -465,6 +469,22 @@ func plural(n int, one, many string) string {
 		return "1 " + one
 	}
 	return fmt.Sprintf("%d %s", n, many)
+}
+
+// setGitTimeout bounds each git command by the config file's git.timeout, when it sets one.
+func setGitTimeout() error {
+	path, err := config.DefaultPath()
+	if err != nil {
+		return err
+	}
+	c, err := config.Load(path)
+	if err != nil {
+		return err
+	}
+	if c.Git.Timeout != nil {
+		git.SetTimeout(time.Duration(*c.Git.Timeout))
+	}
+	return nil
 }
 
 // tuiOptions are the TUI's settings: the config file's, under GR_THEME and GR_GLYPHS.

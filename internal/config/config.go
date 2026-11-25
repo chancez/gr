@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
@@ -17,6 +18,26 @@ type Config struct {
 	UI     UI     `toml:"ui"`
 	Diff   Diff   `toml:"diff"`
 	Editor Editor `toml:"editor"`
+	Git    Git    `toml:"git"`
+}
+
+// Git is how gr runs git.
+type Git struct {
+	// Timeout is how long one git command may run before it is killed, as "30s". Zero is no limit,
+	// and unset is gr's default.
+	Timeout *Duration `toml:"timeout"`
+}
+
+// Duration is a time.Duration written as time.ParseDuration reads it, as "1m30s".
+type Duration time.Duration
+
+func (d *Duration) UnmarshalText(text []byte) error {
+	v, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+	*d = Duration(v)
+	return nil
 }
 
 // Diff is how the TUI's diffs start out; each tab can change them for the session.
@@ -97,6 +118,9 @@ func Load(path string) (Config, error) {
 	}
 	if c.UI.SidebarWidth < 0 {
 		return Config{}, fmt.Errorf("config %s: ui.sidebar_width is %d, want 0 or more", path, c.UI.SidebarWidth)
+	}
+	if c.Git.Timeout != nil && *c.Git.Timeout < 0 {
+		return Config{}, fmt.Errorf("config %s: git.timeout is %s, want 0 or more", path, time.Duration(*c.Git.Timeout))
 	}
 	return c, nil
 }

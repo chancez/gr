@@ -137,6 +137,9 @@ ignore_whitespace = true  # hide whitespace-only changes, as git diff -w; W togg
 
 [editor]
 vim = true             # vim's modes in the comment box: esc to normal mode, esc again to close
+
+[git]
+timeout = "2m"         # how long one git command may run before it is killed; "0s" for no limit; default 1m
 ```
 
 ## Ignore files

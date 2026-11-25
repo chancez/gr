@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func write(t *testing.T, body string) string {
@@ -31,6 +32,9 @@ ignore_whitespace = true
 
 [editor]
 vim = true
+
+[git]
+timeout = "30s"
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -39,6 +43,7 @@ vim = true
 		UI:     UI{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(0), SidebarWidth: 30, AutoAdvance: true},
 		Diff:   Diff{IgnoreWhitespace: true},
 		Editor: Editor{Vim: true},
+		Git:    Git{Timeout: new(Duration(30 * time.Second))},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Load = %+v, want %+v", got, want)
@@ -57,10 +62,12 @@ func TestLoadNothing(t *testing.T) {
 
 func TestLoadErrors(t *testing.T) {
 	for body, want := range map[string]string{
-		"[ui]\nthme = \"x\"\n":       "unknown settings ui.thme",
-		"[ui]\nscrolloff = -1\n":     "ui.scrolloff is -1",
-		"[ui]\nsidebar_width = -2\n": "ui.sidebar_width is -2",
-		"[ui\n":                      "config ",
+		"[ui]\nthme = \"x\"\n":        "unknown settings ui.thme",
+		"[ui]\nscrolloff = -1\n":      "ui.scrolloff is -1",
+		"[ui]\nsidebar_width = -2\n":  "ui.sidebar_width is -2",
+		"[git]\ntimeout = \"-1s\"\n":  "git.timeout is -1s",
+		"[git]\ntimeout = \"soon\"\n": "invalid duration",
+		"[ui\n":                       "config ",
 	} {
 		_, err := Load(write(t, body))
 		if err == nil || !strings.Contains(err.Error(), want) {

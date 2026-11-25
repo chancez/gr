@@ -25,6 +25,8 @@ type cliEnv struct {
 
 func newCLIEnv(t *testing.T) *cliEnv {
 	dir := t.TempDir()
+	// Not the user's config file.
+	t.Setenv("GR_CONFIG", filepath.Join(dir, "config.toml"))
 	return &cliEnv{t: t, repo: gittest.New(t), db: filepath.Join(dir, "gr.db"), log: filepath.Join(dir, "gr.log")}
 }
 
@@ -415,6 +417,19 @@ func TestTUIOptions(t *testing.T) {
 	want := tui.Options{Theme: "colorblind", Glyphs: "nerd", Scrolloff: new(2), SidebarWidth: 28, AutoAdvance: true, Vim: true}
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Errorf("tuiOptions (-want +got):\n%s", diff)
+	}
+}
+
+// Every command reads the config file, for git.timeout.
+func TestCommandsReadConfig(t *testing.T) {
+	e := newCLIEnv(t)
+	e.repo.Write("f.txt", "one\n")
+	e.repo.Commit("root")
+	if err := os.WriteFile(os.Getenv("GR_CONFIG"), []byte("[git]\ntimeout = \"soon\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.runErr("me", "threads"); !strings.Contains(err.Error(), "invalid duration") {
+		t.Errorf("gr threads with a bad git.timeout: %v", err)
 	}
 }
 
