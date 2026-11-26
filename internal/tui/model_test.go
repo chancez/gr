@@ -2749,6 +2749,9 @@ func TestHideWhitespaceInAFile(t *testing.T) {
 // pinned at the top as it scrolls, drawn the same. The message line under it starts with "..." for
 // the lines it hides, and a click on it is on the subject.
 func TestStickyCommitHeader(t *testing.T) {
+	local := time.Local
+	time.Local = time.UTC
+	t.Cleanup(func() { time.Local = local })
 	e := newTUIEnv(t)
 	e.repo.Write("long.txt", gittest.Lines(gittest.Numbered(40)...))
 	e.repo.Commit("Add a long file with a subject that is quite long indeed, long enough to cut\n\nFirst body line.\nSecond body line.")
@@ -2773,10 +2776,10 @@ func TestStickyCommitHeader(t *testing.T) {
 		offset int
 		want   []string
 	}{
-		{0, []string{subject, box(""), box("First body line."), box("Second body line."), box(""), box("Test committed 2025-12-31 16:00"), edge}},
-		{2, []string{subject, box("... Second body line."), box(""), box("Test committed 2025-12-31 16:00"), edge}},
+		{0, []string{subject, box(""), box("First body line."), box("Second body line."), box(""), box("Test committed 2026-01-01 00:00"), edge}},
+		{2, []string{subject, box("... Second body line."), box(""), box("Test committed 2026-01-01 00:00"), edge}},
 		// The author is not a message line, and is not marked.
-		{4, []string{subject, box("Test committed 2025-12-31 16:00"), edge}},
+		{4, []string{subject, box("Test committed 2026-01-01 00:00"), edge}},
 	} {
 		e.m.main.offset = tc.offset
 		if got := lines(len(tc.want)); !slices.Equal(got, tc.want) {
